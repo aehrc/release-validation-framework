@@ -14,7 +14,6 @@
     <name>api</name>
 
     <properties>
-        <execFinalName>validation-${project.build.finalName}.jar</execFinalName>
         <packageName>rvf-${project.artifactId}</packageName>
     </properties>
 
@@ -148,21 +147,24 @@
         <finalName>${project.artifactId}</finalName>
         <plugins>
             <plugin>
-                <groupId>org.apache.tomcat.maven</groupId>
-                <artifactId>tomcat7-maven-plugin</artifactId>
-                <version>2.1</version>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>2.3</version>
                 <executions>
                     <execution>
-                        <id>tomcat-run</id>
+                        <phase>prepare-package</phase>
                         <goals>
-                            <goal>exec-war-only</goal>
+                            <goal>copy</goal>
                         </goals>
-                        <phase>package</phase>
                         <configuration>
-                            <path>/api</path>
-                            <port>8083</port>
-                            <finalName>${execFinalName}</finalName>
-                            <enableNaming>true</enableNaming>
+                            <artifactItems>
+                                <artifactItem>
+                                    <groupId>com.github.jsimone</groupId>
+                                    <artifactId>webapp-runner-main</artifactId>
+                                    <version>8.5.11.3</version>
+                                    <destFileName>webapp-runner.jar</destFileName>
+                                </artifactItem>
+                            </artifactItems>
                         </configuration>
                     </execution>
                 </executions>
@@ -187,8 +189,17 @@
                             <signPackage>false</signPackage>
                             <dataSet>
                                 <data>
-                                    <src>${project.build.directory}/${execFinalName}</src>
-                                    <dst>app.jar</dst>
+                                    <src>${project.build.directory}/${project.artifactId}.${project.packaging}</src>
+                                    <dst>app.war</dst>
+                                    <type>file</type>
+                                    <mapper>
+                                        <type>perm</type>
+                                        <prefix>/opt/${packageName}/lib/</prefix>
+                                    </mapper>
+                                </data>
+                                <data>
+                                    <src>${project.build.directory}/dependency/webapp-runner.jar</src>
+                                    <dst>webapp-runner.jar</dst>
                                     <type>file</type>
                                     <mapper>
                                         <type>perm</type>
