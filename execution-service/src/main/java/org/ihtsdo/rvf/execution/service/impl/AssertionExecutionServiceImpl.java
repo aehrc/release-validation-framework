@@ -61,16 +61,7 @@ public class AssertionExecutionServiceImpl implements AssertionExecutionService,
 
 	@Override
 	public void afterPropertiesSet() throws Exception {
-//		final String createSQLString = "CREATE TABLE IF NOT EXISTS " + qaResulTableName + "(run_id BIGINT, assertion_id BIGINT, concept_id BIGINT, " + 
-//				"details VARCHAR(500)) engine=innodb default charset=utf8";
-//		try (Connection connection = dataSource.getConnection()) {
-//			try (Statement statement = connection.createStatement()) {
-//				statement.execute(createSQLString);
-//			}
-//		}
-//		catch (final SQLException e) {
-//			logger.error("Error initialising Results table. Nested exception is : " + e.fillInStackTrace());
-//		}
+		
 	}
 
 	@Override
@@ -180,6 +171,7 @@ public List<TestRunItem> executeAssertionsConcurrently(List<Assertion> assertion
 		runItem.setTestCategory(assertion.getKeywords());
 		runItem.setAssertionText(assertion.getAssertionText());
 		runItem.setAssertionUuid(assertion.getUuid());
+		runItem.setSeverity(assertion.getSeverity());
 
 		// get command from test and validate the included command object
 		final ExecutionCommand command = test.getCommand();
@@ -344,7 +336,7 @@ public List<TestRunItem> executeAssertionsConcurrently(List<Assertion> assertion
 					{
 						// only get first N failed results
 						if (config.getFailureExportMax() < 0 || counter < config.getFailureExportMax()) {
-							FailureDetail detail = new FailureDetail(resultSet.getString(1), resultSet.getString(2));
+							FailureDetail detail = new FailureDetail(resultSet.getString(1), resultSet.getString(2), null);
 							runItem.addFirstNInstance(detail);
 						}
 						counter++;

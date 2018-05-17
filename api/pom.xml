@@ -5,7 +5,7 @@
 	<parent>
 		<groupId>org.ihtsdo.snomed.rvf</groupId>
 		<artifactId>release-validation-framework</artifactId>
-		<version>1.1.20-SNAPSHOT</version>
+		<version>1.4.0-SNAPSHOT</version>
 	</parent>
 
 	<artifactId>api</artifactId>
@@ -44,6 +44,11 @@
 		<dependency>
 			<groupId>${project.groupId}</groupId>
 			<artifactId>importer</artifactId>
+			<version>${project.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>${project.groupId}</groupId>
+			<artifactId>jira-service</artifactId>
 			<version>${project.version}</version>
 		</dependency>
 		<!-- Spring -->
@@ -142,6 +147,31 @@
 			<artifactId>javax.servlet-api</artifactId>
 			<version>3.0.1</version>
 			<scope>provided</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.ihtsdo.otf</groupId>
+			<artifactId>ihtsdo-spring-sso</artifactId>
+			<version>2.0.0</version>
+			<exclusions>
+				<exclusion>
+					<groupId>org.springframework.boot</groupId>
+					<artifactId>spring-boot-starter-logging</artifactId>
+				</exclusion>
+				<exclusion>
+					<groupId>org.springframework.boot</groupId>
+					<artifactId>spring-boot-starter-security</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-config</artifactId>
+			<version>3.2.5.RELEASE</version>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-web</artifactId>
+			<version>3.2.5.RELEASE</version>
 		</dependency>
 	</dependencies>
 

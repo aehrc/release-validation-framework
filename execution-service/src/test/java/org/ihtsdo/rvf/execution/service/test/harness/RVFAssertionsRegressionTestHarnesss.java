@@ -123,7 +123,6 @@ public class RVFAssertionsRegressionTestHarnesss {
 	@Test
 	public void testReleaseTypeAssertions() throws Exception {
 		runAssertionsTest(RELEASE_TYPE_VALIDATION, releaseTypeExpectedResults.getFile());
-		
 	}
 	
 	@Test
@@ -144,6 +143,7 @@ public class RVFAssertionsRegressionTestHarnesss {
 			
 			long timeEnd = System.currentTimeMillis();
 			System.out.println("Time taken:" +(timeEnd-timeStart));
+			releaseDataManager.clearQAResult(config.getExecutionId());
 			assertTestResult(groupName, expectedJsonFile, runItems);
 	 }
 	
@@ -159,7 +159,7 @@ public class RVFAssertionsRegressionTestHarnesss {
 				releaseTypeAssertions.add(assertion);
 			}
 		}
-		assertEquals(265, assertions.size());
+		assertEquals(259, assertions.size());
 		assertEquals(103, releaseTypeAssertions.size());
 	}
 	
@@ -168,7 +168,7 @@ public class RVFAssertionsRegressionTestHarnesss {
 		AssertionGroup group = assertionService.getAssertionGroupByName("int-authoring");
 		
 		List<Assertion> assertions = assertionService.getAssertionsForGroup(group);
-		assertEquals(21, assertions.size());
+		assertEquals(23, assertions.size());
 	}
 	
 	
@@ -177,7 +177,7 @@ public class RVFAssertionsRegressionTestHarnesss {
 		AssertionGroup group = assertionService.getAssertionGroupByName("common-authoring");
 		
 		List<Assertion> assertions = assertionService.getAssertionsForGroup(group);
-		assertEquals(129, assertions.size());
+		assertEquals(121, assertions.size());
 	}
 	
 	@Test
@@ -196,6 +196,7 @@ public class RVFAssertionsRegressionTestHarnesss {
 			System.out.println (item.getAssertionUuid() + " failures: " + item.getFailureCount());
 		}
 		long timeEnd = System.currentTimeMillis();
+		releaseDataManager.clearQAResult(config.getExecutionId());
 		System.out.println("Time taken:" +(timeEnd-timeStart));
 	 }
 	
@@ -210,7 +211,12 @@ public class RVFAssertionsRegressionTestHarnesss {
 //			assertNull("No failure should have occured for assertion uuid." + item.getAssertionUuid(), item.getFailureMessage());
 			result.setTotalFailed(item.getFailureCount() != null ? item.getFailureCount() : -1L);
 			results.add(result);
-			if(result.getTotalFailed() > 0) {
+		
+			if (result.getTotalFailed() < 0) {
+				throw new RuntimeException("Assetion didn't complete sucessfully!" + item.toString());
+			}
+			
+			if (result.getTotalFailed() > 0) {
 				failureCounter ++;
 			}
 		}
@@ -254,14 +260,15 @@ public class RVFAssertionsRegressionTestHarnesss {
 			final RVFTestResult actualResult = actualResultByNameMap.get(uuid);
 			assertEquals("Assertion name is not the same" + " for assertion uuid:" + uuid, expectedResult.getAssertionName(),actualResult.getAssertionName());
 			assertEquals("Total failures count doesn't match"  + " for assertion uuid:" + uuid, expectedResult.getTotalFailed(), actualResult.getTotalFailed());
-			if (expectedResult.getTotalFailed() >0) {
+			if (expectedResult.getTotalFailed() > 0 ) {
 				explainDifference(uuid, expectedResult, actualResult);
 				assertTrue("First N instances not matching" + " for assertion uuid:" + uuid, expectedResult.getFirstNInstances().containsAll(actualResult.getFirstNInstances()));
 			}
 		}
 		Collections.sort(expected);
 		Collections.sort(actual);
-		for(int i=0;i < expected.size();i++) {
+		assertEquals(expected.size(), actual.size());
+		for (int i = 0; i < expected.size();i++) {
 			if (!expected.get(i).equals(actual.get(i))) {
 				explainDifference(actual.get(i).getAssertionUuid(), expected.get(i),actual.get(i));
 			}

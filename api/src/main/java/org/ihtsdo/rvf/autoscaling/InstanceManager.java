@@ -35,7 +35,7 @@ public class InstanceManager {
 	private static final String PENDING = "pending";
 	private static final String RVF_WORKER = "RVF_Worker_";
 	private static final String NAME = "Name";
-	private static final long TIME_TO_DELTE = 56 * 60 * 1000;
+	private static final long TIME_TO_DELETE = 56 * 60 * 1000;
 	private Logger logger = LoggerFactory.getLogger(InstanceManager.class);
 	private AmazonEC2Client amazonEC2Client;
 	private static int counter;
@@ -60,15 +60,10 @@ public class InstanceManager {
 	public InstanceManager(AWSCredentials credentials, String ec2Endpoint) {
 		amazonEC2Client = new AmazonEC2Client(credentials);
 		amazonEC2Client.setEndpoint(ec2Endpoint);
-	}
-	
-	public void init() {
 		ec2InstanceStartupScript = Base64.encodeBase64String(constructStartUpScript().getBytes());
 	}
 
 	public List<String> createInstance(int totalToCreate) {
-		ec2InstanceStartupScript = Base64
-				.encodeBase64String(constructStartUpScript().getBytes());
 		RunInstancesRequest runInstancesRequest = new RunInstancesRequest();
 		runInstancesRequest.withImageId(imageId).withInstanceType(instanceType)
 				.withMinCount(1).withMaxCount(totalToCreate)
@@ -79,30 +74,20 @@ public class InstanceManager {
 				.withSubnetId(ec2SubnetId);
 		List<String> ids = new ArrayList<>();
 		try {
-			RunInstancesResult runInstancesResult = amazonEC2Client
-					.runInstances(runInstancesRequest);
-
-			List<Instance> instances = runInstancesResult.getReservation()
-					.getInstances();
-		
+			RunInstancesResult runInstancesResult = amazonEC2Client.runInstances(runInstancesRequest);
+			List<Instance> instances = runInstancesResult.getReservation().getInstances();
 			for (Instance instance : instances) {
 				String instanceId = instance.getInstanceId();
-				logger.info(
-						"RVF worker new instance created with id {} and launched at {}",
-						instanceId, instance.getLaunchTime());
+				logger.info("RVF worker new instance created with id {} and launched at {}", instanceId, instance.getLaunchTime());
 				CreateTagsRequest createTagsRequest = new CreateTagsRequest();
 				createTagsRequest.withResources(instanceId);
 				if (instanceTagName != null) {
 					Tag typeTag = new Tag(WORKER_TYPE, instanceTagName);
-					Tag nameTag = new Tag(NAME, RVF_WORKER + instanceTagName + "_"
-							+ counter++);
+					Tag nameTag = new Tag(NAME, RVF_WORKER + instanceTagName + "_" + counter++);
 					createTagsRequest.withTags(typeTag, nameTag);
-					getNewInstanceIpAddress(instance);
-					logger.info("Name tag {} is created for instance id {}",
-							nameTag, instanceId);
+					logger.info("Name tag {} is created for instance id {}", nameTag, instanceId);
 				} else {
-					createTagsRequest.withTags(new Tag(NAME, RVF_WORKER + imageId
-							+ "_" + counter++));
+					createTagsRequest.withTags(new Tag(NAME, RVF_WORKER + imageId + "_" + counter++));
 				}
 				amazonEC2Client.createTags(createTagsRequest);
 				ids.add(instanceId);
@@ -112,28 +97,26 @@ public class InstanceManager {
 		}
 		return ids;
 	}
-	
-	//See https://medium.com/@mertcal/getting-ips-of-newly-created-ec2-instances-6a7164392014#.siinju4g9
-	private void getNewInstanceIpAddress(final Instance instance) {
-		Thread t = new Thread(new Runnable() {
-			public void run()
-			{
-				try {
-					Thread.sleep(30 * 1000);
-				} catch (InterruptedException e) {
-					logger.error("Failed to sleep for 30 seconds",e);
-				}
-				DescribeInstancesRequest request = new DescribeInstancesRequest();
-				String instanceId = instance.getInstanceId();
-				request.setInstanceIds(new ArrayList<String>(Arrays.asList(instanceId)));
 
-				DescribeInstancesResult result = amazonEC2Client.describeInstances(request);
-				List<Reservation> reservations = result.getReservations();
-				String publicIp = reservations.get(0).getInstances().get(0).getPublicIpAddress();
-				logger.info("Instance {} created with public IP address {}", instance.getInstanceId(), publicIp);
+	public Map<String,String> getPublicIpAddress(List<String> instanceIds) {
+		Map<String, String> instacneIpAddressMap = new HashMap<>();
+		try {
+			//wait for the instance to be created otherwise the public address will be null
+			Thread.sleep(30 * 1000);
+		} catch (InterruptedException e) {
+			logger.error("Failed to sleep for 30 seconds",e);
+		}
+		DescribeInstancesRequest request = new DescribeInstancesRequest();
+		request.setInstanceIds(instanceIds);
+
+		DescribeInstancesResult result = amazonEC2Client.describeInstances(request);
+		List<Reservation> reservations = result.getReservations();
+		for (Reservation reservation : reservations) {
+			for (Instance instance : reservation.getInstances()) {
+				instacneIpAddressMap.put(instance.getInstanceId(), instance.getPublicIpAddress());
 			}
-		});
-		t.start();
+		}
+		return instacneIpAddressMap;
 	}
 
 	public String getImageId() {
@@ -173,26 +156,20 @@ public class InstanceManager {
 		if (instanceIds != null && !instanceIds.isEmpty()) {
 			DescribeInstancesRequest request = new DescribeInstancesRequest();
 			request.withInstanceIds(instanceIds);
-			DescribeInstancesResult result = amazonEC2Client
-					.describeInstances(request);
+			DescribeInstancesResult result = amazonEC2Client.describeInstances(request);
 			List<Reservation> reservations = result.getReservations();
-			List<Instance> instances = new ArrayList<>();
 			for (Reservation reserv : reservations) {
-				instances.addAll(reserv.getInstances());
-			}
-			for (Instance instance : instances) {
-				InstanceState state = instance.getState();
-				if (PENDING.equalsIgnoreCase(state.getName())
-						|| RUNNING.equalsIgnoreCase(state.getName())) {
-					activeInstances.add(instance.getInstanceId());
-					logger.info("Active instance {} with public ip address {}",
-							instance.getInstanceId(),
-							instance.getPublicIpAddress());
+				for (Instance instance : reserv.getInstances()) {
+					InstanceState state = instance.getState();
+					if (PENDING.equalsIgnoreCase(state.getName())
+							|| RUNNING.equalsIgnoreCase(state.getName())) {
+						activeInstances.add(instance.getInstanceId());
+						logger.info("Active instance {} with public ip address {}", instance.getInstanceId(), instance.getPublicIpAddress());
+					}
 				}
 			}
-			logger.info("Current total active instances:"
-					+ activeInstances.size());
 		}
+		logger.debug("Current total active instances:" + activeInstances.size());
 		return activeInstances;
 	}
 
@@ -206,34 +183,31 @@ public class InstanceManager {
 			for (Reservation reserv : reservations) {
 				instances.addAll(reserv.getInstances());
 			}
-			logger.info("Total instances {} found with filter {}", instances.size(), TAG + WORKER_TYPE + "=" + instanceTagName);
+			logger.debug("Total instances {} found with filter {}", instances.size(), TAG + WORKER_TYPE + "=" + instanceTagName);
 		} catch (Exception e) {
-			String msg = "Unexpected error encountered.";
+			String msg = "Unexpected error encountered when checking active instances.";
 			logger.error(msg, e);
 			throw new RuntimeException(msg, e);
 		}
-	
+
 		List<String> activeInstances = new ArrayList<>();
 		for (Instance instance : instances) {
 			InstanceState state = instance.getState();
 			if (PENDING.equalsIgnoreCase(state.getName())
 					|| RUNNING.equalsIgnoreCase(state.getName())) {
 				activeInstances.add(instance.getInstanceId());
-				logger.info("Active instance {} with public address {}",
-						instance.getInstanceId(), instance.getPublicIpAddress());
+				logger.info("Active instance {} with public ip address {}", instance.getInstanceId(), instance.getPublicIpAddress());
 			}
 		}
-		logger.info("Total active instances found:" + activeInstances.size());
+		logger.info("Total active instances:" + activeInstances.size());
 		return activeInstances;
 	}
 
 	public void checkAndTerminateInstances(List<Instance> instancesToCheck) {
 		List<Instance> instancesToTerminate = new ArrayList<>();
 		for (Instance instance : instancesToCheck) {
-			if (System.currentTimeMillis() >= (instance.getLaunchTime()
-					.getTime() + TIME_TO_DELTE)) {
-				logger.info(
-						"Instance id {} was lanched at {} and will be terminated",
+			if (System.currentTimeMillis() >= (instance.getLaunchTime().getTime() + TIME_TO_DELETE)) {
+				logger.info("Instance id {} was lanched at {} and will be terminated",
 						instance.getInstanceId(), instance.getLaunchTime());
 				instancesToTerminate.add(instance);
 			}
@@ -316,26 +290,19 @@ public class InstanceManager {
 		return propertiesByFileName;
 	}
 
-	 /** use curl http://169.254.169.254/latest/user-data
-	  *  to check the user-data in the ec2 instance.
-	 * @return
-	 */
-	String constructStartUpScript() {
+	private String constructStartUpScript() {
 		String appVersion = getAppVersion();
 		StringBuilder builder = new StringBuilder();
-		builder.append("#!/bin/sh\n");		
+		builder.append("#!/bin/sh\n");
 		builder.append("sudo apt-get update -o Dir::Etc::sourcelist=\"sources.list.d/maven_ihtsdotools_org_content_repositories_*\""
 				+ "\n");
 		if (appVersion != null && !appVersion.isEmpty()) {
 			builder.append("sudo apt-get install --force-yes -y rvf-api="
 					+ appVersion + "\n");
-			builder.append("if [ $? != 0 ]\n");
-			builder.append(" then\n" );
-			builder.append("sudo apt-get install --force-yes -y rvf-api \n");
-			builder.append("fi\n");
 		} else {
 			builder.append("sudo apt-get install --force-yes -y rvf-api \n");
 		}
+		builder.append("sudo dpkg -s rvf-api\n");
 		String rvfConfig = System.getProperty(RVF_CONFIG_LOCATION);
 		Map<String, String> propertyStrByFilename = getProperties(rvfConfig);
 		for (String filename : propertyStrByFilename.keySet()) {
@@ -343,12 +310,12 @@ public class InstanceManager {
 					+ "\" > " + rvfConfig + "/" + filename + "\n");
 		}
 		// checkout drools version
-		builder.append("git clone");
+		builder.append("sudo git clone");
 		if (droolsRulesVersion != null && !droolsRulesVersion.isEmpty()) {
 			//git clone -b 'v1.9'
-			builder.append(" -b " +"'v" + droolsRulesVersion + "'");		
+			builder.append(" -b " +"'v" + droolsRulesVersion + "'");
 			builder.append(" --single-branch");
-		} 
+		}
 		//"--single-branch https://github.com/IHTSDO/snomed-drools-rules.git /opt/snomed-drools-rules/)
 		builder.append(" https://github.com/IHTSDO/snomed-drools-rules.git ");
 		if (droolsRuelsModuleName == null || droolsRuelsModuleName.isEmpty() || !droolsRuelsModuleName.startsWith("/")) {
@@ -357,12 +324,7 @@ public class InstanceManager {
 		builder.append(droolsRuelsModuleName + "\n");
 		builder.append("sudo chown -R rvf-api:rvf-api " + droolsRuelsModuleName + "\n");
 		builder.append("sudo supervisorctl start rvf-api" + "\n");
-		builder.append("if [ $? = 0 ]\n");
-		builder.append(" then\n" );
-		builder.append("exit 0\n");
-		builder.append("else\n");
-		builder.append("sudo halt\n");
-		builder.append("fi\n");
+		builder.append("exit 0");
 		return builder.toString();
 	}
 
