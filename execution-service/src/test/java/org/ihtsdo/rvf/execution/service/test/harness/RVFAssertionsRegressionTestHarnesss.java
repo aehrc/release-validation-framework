@@ -168,7 +168,7 @@ public class RVFAssertionsRegressionTestHarnesss {
 		AssertionGroup group = assertionService.getAssertionGroupByName("int-authoring");
 		
 		List<Assertion> assertions = assertionService.getAssertionsForGroup(group);
-		assertEquals(23, assertions.size());
+		assertEquals(24, assertions.size());
 	}
 	
 	
@@ -177,12 +177,12 @@ public class RVFAssertionsRegressionTestHarnesss {
 		AssertionGroup group = assertionService.getAssertionGroupByName("common-authoring");
 		
 		List<Assertion> assertions = assertionService.getAssertionsForGroup(group);
-		assertEquals(121, assertions.size());
+		assertEquals(120, assertions.size());
 	}
 	
 	@Test
 	public void testSpecificAssertion() throws Exception {
-		runAssertionsTest("c3249e80-84f0-11e1-b0c4-0800200c9a66");
+		runAssertionsTest("30947783-78F5-4FFC-A22B-B03D83C5909D");
 	}
 	
 	private void runAssertionsTest(String assertionUUID) throws Exception {
