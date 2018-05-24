@@ -22,7 +22,7 @@
             <bean class="org.springframework.http.converter.xml.Jaxb2RootElementHttpMessageConverter"/>
         </mvc:message-converters>
     </mvc:annotation-driven>
-
+	<import resource="executionServiceContext.xml"/>
     <!--<bean id="multipartResolver" class="org.springframework.web.multipart.support.StandardServletMultipartResolver"/>-->
     <bean id="multipartResolver" class="org.springframework.web.multipart.commons.CommonsMultipartResolver"/>
 
@@ -54,9 +54,6 @@
 		<constructor-arg value="${rvf.autoscaling.ec2Endpoint}"/>
 	</bean>
 	
-	<bean class="java.lang.String" id="droolsRulesVersion">
-		<constructor-arg value="${rvf.drools.rule.version}"/>
-	</bean>
 	<bean class="java.lang.String" id="keyName">
 		<constructor-arg value="${rvf.autoscaling.keyPairName}"/>
 	</bean>
@@ -82,11 +79,6 @@
 	</bean>
     <bean class="org.ihtsdo.rvf.helper.JsonEntityGenerator"/>
     <bean id="resourceProviderFactory" class="org.ihtsdo.rvf.validation.log.impl.ValidationLogFactoryImpl"/>
-
-	<import resource="validationContext.xml"/>
-	<import resource="executionServiceContext.xml"/>
-	<import resource="importerServiceContext.xml"/>
-	<import resource="jiraServiceContext.xml"/>
 	<mvc:resources mapping="/webjars/**" location="classpath:/META-INF/resources/webjars/"/>
 	<mvc:resources mapping="/api-doc.html" location="/" />
 	<bean class="org.ihtsdo.rvf.config.SwaggerConfig" />
