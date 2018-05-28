@@ -315,7 +315,8 @@ public class InstanceManager {
 		builder.append("sudo git clone");
 		if (droolsRulesVersion != null && !droolsRulesVersion.isEmpty()) {
 			//git clone -b 'v1.9'
-			builder.append(" -b " +"'v" + droolsRulesVersion + "'");
+			String tag = droolsRulesVersion.startsWith("v") ? droolsRulesVersion : "v" + droolsRulesVersion;
+			builder.append(" -b " +"'" + tag + "'");
 			builder.append(" --single-branch");
 		}
 		//"--single-branch https://github.com/IHTSDO/snomed-drools-rules.git /opt/snomed-drools-rules/)
