@@ -1,37 +1,14 @@
 <listing xmlns="http://release.ihtsdo.org/manifest/1.0.0">
-   <folder Name="SnomedCT_InternationalRF2_MEMBER_20180731T120000Z">
-      <file Name="Readme_en_20180731.txt"/>
+   <folder Name="SnomedCT_Release_INT_20140131.zip">
+      <file Name="Readme_en_20140131.txt"/>
       <folder Name="Delta">
          <folder Name="Terminology">
-            <file Name="sct2_Concept_Delta_INT_20180731.txt">
+            <file Name="sct2_Concept_Delta_INT_20140131.txt">
                <sources>
                   <source>terminology-server</source>
                </sources>
             </file>
-            <file Name="sct2_Description_Delta-en_INT_20180731.txt">
-               <sources>
-                  <source>terminology-server</source>
-               </sources>
-               <contains-language-codes>
-                  <code>en</code>
-               </contains-language-codes>
-            </file>
-            <file Name="sct2_StatedRelationship_Delta_INT_20180731.txt">
-               <sources>
-                  <source>terminology-server</source>
-               </sources>
-            </file>
-            <file Name="sct2_Relationship_Delta_INT_20180731.txt">
-               <sources>
-                  <source>terminology-server</source>
-               </sources>
-            </file>
-            <file Name="sct2_Identifier_Delta_INT_20180731.txt">
-               <sources>
-                  <source>externally-maintained</source>
-               </sources>
-            </file>
-            <file Name="sct2_TextDefinition_Delta-en_INT_20180731.txt">
+            <file Name="sct2_Description_Delta-en_INT_20140131.txt">
                <sources>
                   <source>terminology-server</source>
                </sources>
@@ -39,32 +16,33 @@
                   <code>en</code>
                </contains-language-codes>
             </file>
-            <file Name="sct2_sRefset_OWLOntologyDelta_INT_20180731.txt">
-               <sources>
-                  <source>externally-maintained</source>
-               </sources>
-               <contains-reference-sets>
-                  <refset id="762103008" label="OWL ontology reference set">	</refset>
-               </contains-reference-sets>
-               <contains-additional-fields>
-                  <field name ="owlExpression"/>
-               </contains-additional-fields>
-            </file>
-            <file Name="sct2_sRefset_OWLAxiomDelta_INT_20180731.txt">
+            <file Name="sct2_StatedRelationship_Delta_INT_20140131.txt">
                <sources>
                   <source>terminology-server</source>
                </sources>
-               <contains-reference-sets>
-                  <refset id="733073007" label="OWL axiom reference set">	</refset>
-               </contains-reference-sets>
-               <contains-additional-fields>
-                  <field name ="owlExpression"/>
-               </contains-additional-fields>
+            </file>
+            <file Name="sct2_Relationship_Delta_INT_20140131.txt">
+               <sources>
+                  <source>terminology-server</source>
+               </sources>
+            </file>
+            <file Name="sct2_Identifier_Delta_INT_20140131.txt">
+               <sources>
+                  <source>externally-maintained</source>
+               </sources>
+            </file>
+            <file Name="sct2_TextDefinition_Delta-en_INT_20140131.txt">
+               <sources>
+                  <source>terminology-server</source>
+               </sources>
+               <contains-language-codes>
+                  <code>en</code>
+               </contains-language-codes>
             </file>
          </folder>
          <folder Name="Refset">
             <folder Name="Content">
-               <file Name="der2_cRefset_AssociationDelta_INT_20180731.txt">
+               <file Name="der2_cRefset_AssociationDelta_INT_20140131.txt">
                   <sources>
                      <source>terminology-server</source>
                   </sources>
@@ -92,7 +70,7 @@
                      <field name ="targetComponentId"/>
                   </contains-additional-fields>
                </file>
-               <file Name="der2_cRefset_AttributeValueDelta_INT_20180731.txt">
+               <file Name="der2_cRefset_AttributeValueDelta_INT_20140131.txt">
                   <sources>
                      <source>terminology-server</source>
                   </sources>
@@ -104,7 +82,7 @@
                      <field name ="valueId"/>
                   </contains-additional-fields>
                </file>
-               <file Name="der2_Refset_SimpleDelta_INT_20180731.txt">
+               <file Name="der2_Refset_SimpleDelta_INT_20140131.txt">
                   <sources>
                      <source>externally-maintained</source>
                   </sources>
@@ -114,7 +92,7 @@
                </file>
             </folder>
             <folder Name="Map">
-               <file Name="der2_sRefset_SimpleMapDelta_INT_20180731.txt">
+               <file Name="der2_sRefset_SimpleMapDelta_INT_20140131.txt">
                   <contains-reference-sets>
                      <refset id="446608001" label="ICD-O">
                         <sources>
@@ -131,14 +109,14 @@
                      <field name ="mapTarget"/>
                   </contains-additional-fields>
                </file>
-               <file Name="der2_iisssccRefset_ExtendedMapDelta_INT_20180731.txt">
+               <file Name="der2_iisssccRefset_ExtendedMapDelta_INT_20140131.txt">
                   <sources>
                      <source>externally-maintained</source>
                   </sources>
                </file>
             </folder>
             <folder Name="Language">
-               <file Name="der2_cRefset_LanguageDelta-en_INT_20180731.txt">
+               <file Name="der2_cRefset_LanguageDelta-en_INT_20140131.txt">
                   <sources>
                      <source>terminology-server</source>
                   </sources>
@@ -152,7 +130,7 @@
                </file>
             </folder>
             <folder Name="Metadata">
-               <file Name="der2_cciRefset_RefsetDescriptorDelta_INT_20180731.txt">
+               <file Name="der2_cciRefset_RefsetDescriptorDelta_INT_20140131.txt">
                   <contains-reference-sets>
                      <refset id="900000000000456007" label="Refset descriptor"/>
                   </contains-reference-sets>
@@ -165,7 +143,7 @@
                      <source>externally-maintained</source>
                   </sources>
                </file>
-               <file Name="der2_ssRefset_ModuleDependencyDelta_INT_20180731.txt">
+               <file Name="der2_ssRefset_ModuleDependencyDelta_INT_20140131.txt">
                   <contains-reference-sets>
                      <refset id="900000000000534007" label="Module dependency refset"/>
                   </contains-reference-sets>
@@ -177,7 +155,7 @@
                      <source>externally-maintained</source>
                   </sources>
                </file>
-               <file Name="der2_ciRefset_DescriptionTypeDelta_INT_20180731.txt">
+               <file Name="der2_ciRefset_DescriptionTypeDelta_INT_20140131.txt">
                   <contains-reference-sets>
                      <refset id="900000000000538005" label="Description Type"/>
                   </contains-reference-sets>
@@ -190,22 +168,22 @@
                   </sources>
                </file>
                <!-- needs to define the MRCM -->
-               <file Name="der2_sssssssRefset_MRCMDomainDelta_INT_20180731.txt">
+               <file Name="der2_sssssssRefset_MRCMDomainDelta_INT_20140131.txt">
                   <sources>
                      <source>externally-maintained</source>
                   </sources>
                </file>
-               <file Name="der2_cissccRefset_MRCMAttributeDomainDelta_INT_20180731.txt">
+               <file Name="der2_cissccRefset_MRCMAttributeDomainDelta_INT_20140131.txt">
                   <sources>
                      <source>externally-maintained</source>
                   </sources>
                </file>
-               <file Name="der2_ssccRefset_MRCMAttributeRangeDelta_INT_20180731.txt">
+               <file Name="der2_ssccRefset_MRCMAttributeRangeDelta_INT_20140131.txt">
                   <sources>
                      <source>externally-maintained</source>
                   </sources>
                </file>
-               <file Name="der2_cRefset_MRCMModuleScopeDelta_INT_20180731.txt">
+               <file Name="der2_cRefset_MRCMModuleScopeDelta_INT_20140131.txt">
                   <sources>
                      <source>externally-maintained</source>
                   </sources>
@@ -216,76 +194,76 @@
 
       <folder Name="Full">
          <folder Name="Terminology">
-            <file Name="sct2_Concept_Full_INT_20180731.txt"/>
-            <file Name="sct2_Description_Full-en_INT_20180731.txt"/>
-            <file Name="sct2_StatedRelationship_Full_INT_20180731.txt"/>
-            <file Name="sct2_Relationship_Full_INT_20180731.txt"/>
-            <file Name="sct2_Identifier_Full_INT_20180731.txt"/>
-            <file Name="sct2_TextDefinition_Full-en_INT_20180731.txt"/>
-            <file Name="sct2_sRefset_OWLOntologyFull_INT_20180731.txt"/>
-            <file Name="sct2_sRefset_OWLAxiomFull_INT_20180731.txt"/>
+            <file Name="sct2_Concept_Full_INT_20140131.txt"/>
+            <file Name="sct2_Description_Full-en_INT_20140131.txt"/>
+            <file Name="sct2_StatedRelationship_Full_INT_20140131.txt"/>
+            <file Name="sct2_Relationship_Full_INT_20140131.txt"/>
+            <file Name="sct2_Identifier_Full_INT_20140131.txt"/>
+            <file Name="sct2_TextDefinition_Full-en_INT_20140131.txt"/>
+            <file Name="sct2_sRefset_OWLOntologyFull_INT_20140131.txt"/>
+            <file Name="sct2_sRefset_OWLAxiomFull_INT_20140131.txt"/>
          </folder>
          <folder Name="Refset">
             <folder Name="Content">
-               <file Name="der2_cRefset_AssociationFull_INT_20180731.txt"/>
-               <file Name="der2_cRefset_AttributeValueFull_INT_20180731.txt"/>
-               <file Name="der2_Refset_SimpleFull_INT_20180731.txt"/>
+               <file Name="der2_cRefset_AssociationFull_INT_20140131.txt"/>
+               <file Name="der2_cRefset_AttributeValueFull_INT_20140131.txt"/>
+               <file Name="der2_Refset_SimpleFull_INT_20140131.txt"/>
             </folder>
             <folder Name="Map">
-               <file Name="der2_sRefset_SimpleMapFull_INT_20180731.txt"/>
-               <file Name="der2_iisssccRefset_ExtendedMapFull_INT_20180731.txt"/>
+               <file Name="der2_sRefset_SimpleMapFull_INT_20140131.txt"/>
+               <file Name="der2_iisssccRefset_ExtendedMapFull_INT_20140131.txt"/>
             </folder>
             <folder Name="Language">
-               <file Name="der2_cRefset_LanguageFull-en_INT_20180731.txt"/>
+               <file Name="der2_cRefset_LanguageFull-en_INT_20140131.txt"/>
             </folder>
             <folder Name="Metadata">
-               <file Name="der2_cciRefset_RefsetDescriptorFull_INT_20180731.txt"/>
-               <file Name="der2_ssRefset_ModuleDependencyFull_INT_20180731.txt"/>
-               <file Name="der2_ciRefset_DescriptionTypeFull_INT_20180731.txt"/>
-               <file Name="der2_sssssssRefset_MRCMDomainFull_INT_20180731.txt"/>
-               <file Name="der2_cissccRefset_MRCMAttributeDomainFull_INT_20180731.txt"/>
-               <file Name="der2_ssccRefset_MRCMAttributeRangeFull_INT_20180731.txt"/>
-               <file Name="der2_cRefset_MRCMModuleScopeFull_INT_20180731.txt"/>
+               <file Name="der2_cciRefset_RefsetDescriptorFull_INT_20140131.txt"/>
+               <file Name="der2_ssRefset_ModuleDependencyFull_INT_20140131.txt"/>
+               <file Name="der2_ciRefset_DescriptionTypeFull_INT_20140131.txt"/>
+               <file Name="der2_sssssssRefset_MRCMDomainFull_INT_20140131.txt"/>
+               <file Name="der2_cissccRefset_MRCMAttributeDomainFull_INT_20140131.txt"/>
+               <file Name="der2_ssccRefset_MRCMAttributeRangeFull_INT_20140131.txt"/>
+               <file Name="der2_cRefset_MRCMModuleScopeFull_INT_20140131.txt"/>
             </folder>
          </folder>
       </folder> <!-- Full -->
 
       <folder Name="Snapshot">
          <folder Name="Terminology">
-            <file Name="sct2_Concept_Snapshot_INT_20180731.txt"/>
-            <file Name="sct2_Description_Snapshot-en_INT_20180731.txt"/>
-            <file Name="sct2_StatedRelationship_Snapshot_INT_20180731.txt"/>
-            <file Name="sct2_Relationship_Snapshot_INT_20180731.txt"/>
-            <file Name="sct2_Identifier_Snapshot_INT_20180731.txt"/>
-            <file Name="sct2_TextDefinition_Snapshot-en_INT_20180731.txt"/>
-            <file Name="sct2_sRefset_OWLOntologySnapshot_INT_20180731.txt"/>
-            <file Name="sct2_sRefset_OWLAxiomSnapshot_INT_20180731.txt"/>
+            <file Name="sct2_Concept_Snapshot_INT_20140131.txt"/>
+            <file Name="sct2_Description_Snapshot-en_INT_20140131.txt"/>
+            <file Name="sct2_StatedRelationship_Snapshot_INT_20140131.txt"/>
+            <file Name="sct2_Relationship_Snapshot_INT_20140131.txt"/>
+            <file Name="sct2_Identifier_Snapshot_INT_20140131.txt"/>
+            <file Name="sct2_TextDefinition_Snapshot-en_INT_20140131.txt"/>
+            <file Name="sct2_sRefset_OWLOntologySnapshot_INT_20140131.txt"/>
+            <file Name="sct2_sRefset_OWLAxiomSnapshot_INT_20140131.txt"/>
          </folder>
          <folder Name="Refset">
             <folder Name="Content">
-               <file Name="der2_cRefset_AssociationSnapshot_INT_20180731.txt"/>
-               <file Name="der2_cRefset_AttributeValueSnapshot_INT_20180731.txt"/>
-               <file Name="der2_Refset_SimpleSnapshot_INT_20180731.txt"/>
+               <file Name="der2_cRefset_AssociationSnapshot_INT_20140131.txt"/>
+               <file Name="der2_cRefset_AttributeValueSnapshot_INT_20140131.txt"/>
+               <file Name="der2_Refset_SimpleSnapshot_INT_20140131.txt"/>
             </folder>
             <folder Name="Map">
-               <file Name="der2_sRefset_SimpleMapSnapshot_INT_20180731.txt"/>
-               <file Name="der2_iisssccRefset_ExtendedMapSnapshot_INT_20180731.txt"/>
+               <file Name="der2_sRefset_SimpleMapSnapshot_INT_20140131.txt"/>
+               <file Name="der2_iisssccRefset_ExtendedMapSnapshot_INT_20140131.txt"/>
             </folder>
             <folder Name="Language">
-               <file Name="der2_cRefset_LanguageSnapshot-en_INT_20180731.txt"/>
+               <file Name="der2_cRefset_LanguageSnapshot-en_INT_20140131.txt"/>
             </folder>
             <folder Name="Metadata">
-               <file Name="der2_cciRefset_RefsetDescriptorSnapshot_INT_20180731.txt"/>
-               <file Name="der2_ssRefset_ModuleDependencySnapshot_INT_20180731.txt"/>
-               <file Name="der2_ciRefset_DescriptionTypeSnapshot_INT_20180731.txt"/>
-               <file Name="der2_sssssssRefset_MRCMDomainSnapshot_INT_20180731.txt"/>
-               <file Name="der2_cissccRefset_MRCMAttributeDomainSnapshot_INT_20180731.txt"/>
-               <file Name="der2_ssccRefset_MRCMAttributeRangeSnapshot_INT_20180731.txt"/>
-               <file Name="der2_cRefset_MRCMModuleScopeSnapshot_INT_20180731.txt"/>
+               <file Name="der2_cciRefset_RefsetDescriptorSnapshot_INT_20140131.txt"/>
+               <file Name="der2_ssRefset_ModuleDependencySnapshot_INT_20140131.txt"/>
+               <file Name="der2_ciRefset_DescriptionTypeSnapshot_INT_20140131.txt"/>
+               <file Name="der2_sssssssRefset_MRCMDomainSnapshot_INT_20140131.txt"/>
+               <file Name="der2_cissccRefset_MRCMAttributeDomainSnapshot_INT_20140131.txt"/>
+               <file Name="der2_ssccRefset_MRCMAttributeRangeSnapshot_INT_20140131.txt"/>
+               <file Name="der2_cRefset_MRCMModuleScopeSnapshot_INT_20140131.txt"/>
             </folder>
          </folder>
       </folder> <!-- Snapshot -->
 
-   </folder> <!-- SnomedCT_Release_INT_20180731 -->
+   </folder> <!-- SnomedCT_Release_INT_20140131 -->
 </listing>
 

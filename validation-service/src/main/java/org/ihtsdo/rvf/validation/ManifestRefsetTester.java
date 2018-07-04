@@ -35,7 +35,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 import org.ihtsdo.rvf.validation.model.manifest.*;
-public class RefsetStructureTester {
+public class ManifestRefsetTester {
 
     private static final String REFSET_STRUCTURE_TEST = "RefsetStructureTest";
     private static final String REFSET_DESCRIPTOR_SNAPSHOT_PATTERN = "RefsetDescriptorSnapshot";
@@ -48,10 +48,10 @@ public class RefsetStructureTester {
     private final ManifestFile manifestFile;
     private final TestReportable report;
     private Map<String, Set<String>> refsetMap = new HashMap<>();
-    private static final Logger LOGGER = LoggerFactory.getLogger(RefsetStructureTester.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ManifestRefsetTester.class);
     private Date startDate;
 
-    public RefsetStructureTester(ValidationLog validationLog, ResourceProvider resourceManager, ManifestFile manifestFile, TestReportable report) {
+    public ManifestRefsetTester(ValidationLog validationLog, ResourceProvider resourceManager, ManifestFile manifestFile, TestReportable report) {
         this.validationLog = validationLog;
         this.resourceManager = resourceManager;
         this.manifestFile = manifestFile;
@@ -77,7 +77,7 @@ public class RefsetStructureTester {
             throw new ResourceNotFoundException("Failed to load manifest due to null inputstream");
         }
         //Load the manifest file xml into a java object hierarchy
-        JAXBContext jc = JAXBContext.newInstance("org.ihtsdo.rvf.manifest");
+        JAXBContext jc = JAXBContext.newInstance("org.ihtsdo.rvf.validation.model.manifest");
         Unmarshaller um = jc.createUnmarshaller();
         ListingType manifestListing = um.unmarshal(new StreamSource(new InputStreamReader(manifestInputStream, "UTF-8")), ListingType.class).getValue();
 
@@ -85,22 +85,31 @@ public class RefsetStructureTester {
             throw new ResourceNotFoundException("Failed to recover root folder from manifest.  Ensure the root element is named 'listing' "
                     + "and it has a namespace of xmlns=\"http://release.ihtsdo.org/manifest/1.0.0\" ");
         }
-        for (FolderType folderType : manifestListing.getFolder().getFolder()) {
-            if (folderType.getName().equalsIgnoreCase("Delta")) {
-                for (FileType fileType : folderType.getFile()) {
-                    if (fileType.getContainsReferenceSets() != null) {
-                        String fileName = fileType.getName().replace("Delta","###");
-                        for (RefsetType refsetType : fileType.getContainsReferenceSets().getRefset()) {
+        getRefsetsFromManifest(manifestListing.getFolder());
+    }
+
+    private void getRefsetsFromManifest(FolderType folder) {
+        if(folder != null) {
+            if(folder.getFile() != null) {
+                for (FileType file : folder.getFile()) {
+                    if(file.getContainsReferenceSets() != null) {
+                        for (RefsetType refset : file.getContainsReferenceSets().getRefset()) {
+                            String fileName = file.getName().replace("Delta","###");
                             if (!refsetMap.containsKey(fileName)) {
                                 refsetMap.put(fileName, new HashSet<>());
                             }
-                            refsetMap.get(fileName).add(refsetType.getId().toString());
+                            refsetMap.get(fileName).add(refset.getId().toString());
                         }
                     }
                 }
-                break;
+            }
+            if(folder.getFolder() != null) {
+                for (FolderType subFolder : folder.getFolder()) {
+                    getRefsetsFromManifest(subFolder);
+                }
             }
         }
+
     }
 
     

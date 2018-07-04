@@ -91,8 +91,8 @@ public class StructuralTestRunner implements InitializingBean{
 
 	private void runRefsetStructureTests(final ResourceProvider resourceManager, final TestReportable report,
 										 final ManifestFile manifest, final ValidationLog validationLog) {
-		final RefsetStructureTester refsetStructureTester = new RefsetStructureTester(validationLog, resourceManager, manifest, report);
-		refsetStructureTester.runTests();
+		final ManifestRefsetTester manifestRefsetTester = new ManifestRefsetTester(validationLog, resourceManager, manifest, report);
+		manifestRefsetTester.runTests();
 	}
 	
 	public boolean verifyZipFileStructure(final ValidationReport validationReport, final File tempFile, final Long runId, final File manifestFile,
