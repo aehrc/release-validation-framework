@@ -13,7 +13,7 @@
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<lucene.version>5.5.2</lucene.version>
-		<snomed-drools.version>1.6.0-SNAPSHOT</snomed-drools.version>
+		<snomed-drools.version>1.8.0</snomed-drools.version>
 	</properties>
 
 	<dependencies>
@@ -134,6 +134,10 @@
 				<exclusion>
 					<groupId>org.slf4j</groupId>
 					<artifactId>log4j-over-slf4j</artifactId>
+				</exclusion>
+				<exclusion>
+					<groupId>com.google.collections</groupId>
+					<artifactId>google-collections</artifactId>
 				</exclusion>
 			</exclusions>
 		</dependency>
