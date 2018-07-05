@@ -139,6 +139,10 @@
 					<groupId>com.google.collections</groupId>
 					<artifactId>google-collections</artifactId>
 				</exclusion>
+				<exclusion>
+					<groupId>org.snomed.otf</groupId>
+					<artifactId>snomed-boot</artifactId>
+				</exclusion>
 			</exclusions>
 		</dependency>
 		<dependency>
