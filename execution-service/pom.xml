@@ -12,7 +12,7 @@
 
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<lucene.version>5.5.2</lucene.version>
+		<lucene.version>7.3.0</lucene.version>
 		<snomed-drools.version>1.8.0</snomed-drools.version>
 	</properties>
 
@@ -129,7 +129,7 @@
 		<dependency>
 			<groupId>org.snomed.quality</groupId>
 			<artifactId>mrcm-validator</artifactId>
-			<version>1.1.1</version>
+			<version>1.1.6</version>
 			<exclusions>
 				<exclusion>
 					<groupId>org.slf4j</groupId>

@@ -9,6 +9,7 @@ import org.ihtsdo.drools.response.InvalidContent;
 import org.ihtsdo.drools.validator.rf2.DroolsRF2Validator;
 import org.ihtsdo.otf.rest.exception.BusinessServiceException;
 import org.ihtsdo.otf.snomedboot.ReleaseImportException;
+import org.ihtsdo.otf.sqs.service.exception.ServiceException;
 import org.ihtsdo.rvf.entity.*;
 import org.ihtsdo.rvf.execution.service.AssertionExecutionService;
 import org.ihtsdo.rvf.execution.service.ReleaseDataManager;
@@ -173,17 +174,14 @@ public class ValidationRunner {
 			runExtensionReleaseValidation(report, responseMap, validationConfig,reportStorage, executionConfig);
 		} else {
 			runAssertionTests(report, executionConfig, reportStorage);
+			//Run MRCM Validator
+			//runMRCMAssertionTests(report, validationConfig, executionConfig);
 		}
 
 		if(validationConfig.isEnableDrools()) {
 			// Run Drools Validator
 			runDroolsAssertions(responseMap, validationConfig, executionConfig);
 		}
-
-
-
-		//Run MRCM Validator
-//		runMRCMAssertionTests(report, validationConfig, executionConfig);
 
 		report.sortAssertionLists();
 		responseMap.put("TestResult", report);
@@ -272,6 +270,91 @@ public class ValidationRunner {
 		//Only keep the assertion groups with matching Drools Rule modules in the Drools Directory
 		droolsRulesModules.retainAll(assertionGroups);
 		return droolsRulesModules;
+	}
+
+	private File extractZipFile(ValidationRunConfig validationConfig, Long executionId) throws BusinessServiceException {
+		File outputFolder;
+		try{
+			outputFolder = new File(FileUtils.getTempDirectoryPath(), "rvf_loader_data_" + executionId);
+			logger.info("MRCM output folder location = " + outputFolder.getAbsolutePath());
+			if (outputFolder.exists()) {
+				logger.info("MRCM output folder already exists and will be deleted before recreating.");
+				outputFolder.delete();
+			}
+			outputFolder.mkdir();
+			ZipFileUtils.extractFilesFromZipToOneFolder(validationConfig.getLocalProspectiveFile(), outputFolder.getAbsolutePath());
+		} catch (final IOException ex){
+			final String errorMsg = String.format("Error while loading file %s.", validationConfig.getLocalProspectiveFile());
+			logger.error(errorMsg, ex);
+			throw new BusinessServiceException(errorMsg, ex);
+		}
+		return outputFolder;
+	}
+
+	private void runMRCMAssertionTests(final ValidationReport report, ValidationRunConfig validationConfig, ExecutionConfig executionConfig) throws IOException, ReleaseImportException, ServiceException, ParseException {
+		final long timeStart = System.currentTimeMillis();
+		ValidationService validationService = new ValidationService();
+		ValidationRun validationRun = new ValidationRun(executionConfig.getProspectiveVersion(), true);
+		File outputFolder = null;
+		try {
+			outputFolder = extractZipFile(validationConfig, executionConfig.getExecutionId());
+
+		} catch (BusinessServiceException ex) {
+			logger.error("Error:" + ex);
+		}
+		if(outputFolder != null){
+			validationService.loadMRCM(outputFolder, validationRun);
+			validationService.validateRelease(outputFolder, validationRun);
+			FileUtils.deleteQuietly(outputFolder);
+		}
+
+		TestRunItem testRunItem;
+		final List<TestRunItem> passedAssertions = new ArrayList<>();
+		for(org.snomed.quality.validator.mrcm.Assertion assertion : validationRun.getCompletedAssertions()){
+			testRunItem = new TestRunItem();
+			testRunItem.setTestCategory(MMRCM_TYPE_VALIDATION);
+			testRunItem.setTestType(TestType.MRCM);
+			testRunItem.setAssertionUuid(assertion.getUuid());
+			testRunItem.setAssertionText(assertion.getAssertionText());
+			testRunItem.setFailureCount(0L);
+			testRunItem.setExtractResultInMillis(0L);
+			passedAssertions.add(testRunItem);
+		}
+
+		final List<TestRunItem> skippedAssertions = new ArrayList<>();
+		for(org.snomed.quality.validator.mrcm.Assertion assertion : validationRun.getSkippedAssertions()){
+			testRunItem = new TestRunItem();
+			testRunItem.setTestCategory(MMRCM_TYPE_VALIDATION);
+			testRunItem.setTestType(TestType.MRCM);
+			testRunItem.setAssertionUuid(assertion.getUuid());
+			testRunItem.setAssertionText(assertion.getAssertionText());
+			testRunItem.setFailureCount(0L);
+			testRunItem.setExtractResultInMillis(0L);
+			skippedAssertions.add(testRunItem);
+		}
+
+		final List<TestRunItem> failedAssertions = new ArrayList<>();
+		for(org.snomed.quality.validator.mrcm.Assertion assertion : validationRun.getFailedAssertions()){
+			testRunItem = new TestRunItem();
+			testRunItem.setTestCategory(MMRCM_TYPE_VALIDATION);
+			testRunItem.setTestType(TestType.MRCM);
+			testRunItem.setAssertionUuid(assertion.getUuid());
+			testRunItem.setAssertionText(assertion.getAssertionText());
+			testRunItem.setExtractResultInMillis(0L);
+			int failureCount = assertion.getCurrentViolatedConceptIds().size();
+			testRunItem.setFailureCount(Long.valueOf(failureCount));
+			List<FailureDetail> failedDetails = new ArrayList(failureCount);
+			for (Long conceptId : assertion.getCurrentViolatedConceptIds()){
+				failedDetails.add(new FailureDetail(String.valueOf(conceptId), assertion.getAssertionText(), null));
+			}
+			testRunItem.setFirstNInstances(failedDetails);
+			failedAssertions.add(testRunItem);
+		}
+
+		report.addTimeTaken((System.currentTimeMillis() - timeStart) / 1000);
+		report.addSkippedAssertions(skippedAssertions);
+		report.addFailedAssertions(failedAssertions);
+		report.addPassedAssertions(passedAssertions);
 	}
 
 	private void runExtensionReleaseValidation(final ValidationReport report, final Map<String, Object> responseMap, ValidationRunConfig validationConfig, String reportStorage,
