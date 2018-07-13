@@ -30,6 +30,8 @@ public class ValidationRunConfig {
 	private String productName;
 	private String reportingStage;
 	private boolean enableDrools;
+	private boolean enableMRCMValidation;
+	private String effectiveTime;
 	
 	public MultipartFile getFile() {
 		return file;
@@ -279,7 +281,26 @@ public class ValidationRunConfig {
 		return enableDrools;
 	}
 
-	public void setEnableDrools(boolean enableDrools) {
+	public ValidationRunConfig setEnableDrools(boolean enableDrools) {
 		this.enableDrools = enableDrools;
+		return this;
+	}
+
+	public boolean isEnableMRCMValidation() {
+		return enableMRCMValidation;
+	}
+
+	public ValidationRunConfig setEnableMRCMValidation(boolean enableMRCMValidation) {
+		this.enableMRCMValidation = enableMRCMValidation;
+		return this;
+	}
+
+	public String getEffectiveTime() {
+		return effectiveTime;
+	}
+
+	public ValidationRunConfig setEffectiveTime(String effectiveTime) {
+		this.effectiveTime = effectiveTime;
+		return this;
 	}
 }

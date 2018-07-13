@@ -12,8 +12,7 @@
 
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<lucene.version>7.3.0</lucene.version>
-		<snomed-drools.version>1.8.0</snomed-drools.version>
+		<snomed-drools.version>1.8.1</snomed-drools.version>
 	</properties>
 
 	<dependencies>
@@ -129,7 +128,7 @@
 		<dependency>
 			<groupId>org.snomed.quality</groupId>
 			<artifactId>mrcm-validator</artifactId>
-			<version>1.1.6</version>
+			<version>1.2.0</version>
 			<exclusions>
 				<exclusion>
 					<groupId>org.slf4j</groupId>
@@ -165,7 +164,16 @@
 					<groupId>com.google.collections</groupId>
 					<artifactId>google-collections</artifactId>
 				</exclusion>
+				<exclusion>
+					<groupId>org.snomed.otf</groupId>
+					<artifactId>snomed-boot</artifactId>
+				</exclusion>
 			</exclusions>
+		</dependency>
+		<dependency>
+			<groupId>org.snomed.otf</groupId>
+			<artifactId>snomed-boot</artifactId>
+			<version>1.9.0</version>
 		</dependency>
 	</dependencies>
 </project>

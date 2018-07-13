@@ -1,11 +1,14 @@
 package org.ihtsdo.rvf.execution.service.impl;
 
 import com.google.common.collect.Sets;
+import net.rcarz.jiraclient.JiraException;
 import org.apache.commons.codec.DecoderException;
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.ihtsdo.drools.RuleExecutor;
 import org.ihtsdo.drools.response.InvalidContent;
+import org.ihtsdo.drools.response.Severity;
 import org.ihtsdo.drools.validator.rf2.DroolsRF2Validator;
 import org.ihtsdo.otf.rest.exception.BusinessServiceException;
 import org.ihtsdo.otf.snomedboot.ReleaseImportException;
@@ -31,6 +34,7 @@ import java.io.*;
 import java.security.NoSuchAlgorithmException;
 import java.sql.SQLException;
 import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -78,6 +82,9 @@ public class ValidationRunner {
 	ValidationVersionLoader releaseVersionLoader;
 
 	private String droolsRuleDirectoryPath;
+
+	@Autowired
+	private JiraService jiraService;
 	
 	public ValidationRunner(int batchSize, String droolsRuleDirectoryPath) {
 		this.batchSize = batchSize;
@@ -174,16 +181,24 @@ public class ValidationRunner {
 			runExtensionReleaseValidation(report, responseMap, validationConfig,reportStorage, executionConfig);
 		} else {
 			runAssertionTests(report, executionConfig, reportStorage);
-			//Run MRCM Validator
-			//runMRCMAssertionTests(report, validationConfig, executionConfig);
 		}
 
 		if(validationConfig.isEnableDrools()) {
 			// Run Drools Validator
-			runDroolsAssertions(responseMap, validationConfig, executionConfig);
+			//runDroolsAssertions(responseMap, validationConfig, executionConfig);
+			runDroolValidator(responseMap, report, validationConfig, executionConfig);
+		}
+
+		if(validationConfig.isEnableMRCMValidation()) {
+			//Run MRCM Validator
+			runMRCMAssertionTests(report, validationConfig, executionConfig);
 		}
 
 		report.sortAssertionLists();
+		
+		if(validationConfig.isJiraIssueCreationFlag()) {
+			addJiraLinkToReport(validationConfig, report, validationConfig.getEffectiveTime());
+		}
 		responseMap.put("TestResult", report);
 		final Calendar endTime = Calendar.getInstance();
 		final long timeTaken = (endTime.getTimeInMillis() - startTime.getTimeInMillis()) / 60000;
@@ -208,7 +223,13 @@ public class ValidationRunner {
 				List<InvalidContent> invalidContents;
 			try (InputStream snapshotStream = new FileInputStream(validationConfig.getLocalProspectiveFile())) {
 				DroolsRF2Validator droolsRF2Validator = new DroolsRF2Validator(droolsRuleDirectoryPath);
-				invalidContents = droolsRF2Validator.validateSnapshot(snapshotStream, droolsRulesSets,"");
+				String effectiveTime = validationConfig.getEffectiveTime();
+				if(StringUtils.isNotBlank(effectiveTime)) {
+					effectiveTime = effectiveTime.replaceAll("-","");
+				} else {
+					effectiveTime = "";
+				}
+				invalidContents = droolsRF2Validator.validateSnapshot(snapshotStream, droolsRulesSets,effectiveTime);
 				for (String assertionGroup : droolsRulesSets) {
 					totalTestsRun += droolsRF2Validator.getRuleExecutor().getAssertionGroupRuleCount(assertionGroup);
 				}
@@ -259,6 +280,104 @@ public class ValidationRunner {
 
 	}
 
+	private void runDroolValidator(Map<String, Object> responseMap, ValidationReport validationReport, ValidationRunConfig validationConfig, ExecutionConfig executionConfig) throws RVFExecutionException {
+		long timeStart = new Date().getTime();
+		//Filter only Drools rules set from all the assertion groups
+		Set<String> droolsRulesSets = getDroolsRulesSetFromAssertionGroups(Sets.newHashSet(validationConfig.getGroupsList()));
+
+		//Skip running Drools rules set altogether if there is no Drools rules set in the assertion groups
+		if(droolsRulesSets.isEmpty()) return;
+		int totalTestsRun = 0;
+		try {
+			List<InvalidContent> invalidContents;
+			try (InputStream snapshotStream = new FileInputStream(validationConfig.getLocalProspectiveFile())) {
+				DroolsRF2Validator droolsRF2Validator = new DroolsRF2Validator(droolsRuleDirectoryPath);
+				String effectiveTime = validationConfig.getEffectiveTime();
+				if (StringUtils.isNotBlank(effectiveTime)) {
+					effectiveTime = effectiveTime.replaceAll("-", "");
+				} else {
+					effectiveTime = "";
+				}
+				invalidContents = droolsRF2Validator.validateSnapshot(snapshotStream, droolsRulesSets, effectiveTime);
+				for (String assertionGroup : droolsRulesSets) {
+					totalTestsRun += droolsRF2Validator.getRuleExecutor().getAssertionGroupRuleCount(assertionGroup);
+				}
+			} catch (ReleaseImportException | IOException e) {
+				throw new RVFExecutionException("Failed to load RF2 snapshot for Drools validation.", e);
+			}
+			HashMap<String, List<InvalidContent>> invalidContentMap = new HashMap<>();
+			for (InvalidContent invalidContent : invalidContents) {
+				if (!invalidContentMap.containsKey(invalidContent.getMessage())) {
+					List<InvalidContent> invalidContentArrayList = new ArrayList<>();
+					invalidContentArrayList.add(invalidContent);
+					invalidContentMap.put(invalidContent.getMessage(), invalidContentArrayList);
+				} else {
+					invalidContentMap.get(invalidContent.getMessage()).add(invalidContent);
+				}
+			}
+			invalidContents.clear();
+			List<TestRunItem> failedAssertions = new ArrayList<>();
+			List<TestRunItem> warningAssertions = new ArrayList<>();
+			int failureExportMax = validationConfig.getFailureExportMax() != null ? validationConfig.getFailureExportMax() : 10;
+			Map<String, List<InvalidContent>> groupRules = new HashMap<>();
+			for (String rule : invalidContentMap.keySet()) {
+				TestRunItem validationRule = new TestRunItem();
+				validationRule.setTestType(TestType.DROOL_RULES);
+				validationRule.setTestCategory("");
+				//Some Drools validations message has SCTID, making it is impossible to group the same failures together unless the message is generalized by replacing the SCTID
+				String groupedRuleName = rule.replaceAll("\\d{6,20}","<SCTID>");
+				if(groupedRuleName.contains("<SCTID>")) {
+					groupDroolsRules(groupRules, groupedRuleName, invalidContentMap.get(rule), failureExportMax);
+				} else {
+					validationRule.setAssertionText(rule);
+					List<InvalidContent> invalidContentList = invalidContentMap.get(rule);
+					validationRule.setFailureCount((long) invalidContentList.size());
+					validationRule.setFirstNInstances(invalidContentList.stream().limit(failureExportMax)
+							.map(item -> new FailureDetail(item.getConceptId(), item.getMessage(), null))
+							.collect(Collectors.toList()));
+					Severity severity = invalidContentList.get(0).getSeverity();
+					if(Severity.WARNING.equals(severity)) {
+						warningAssertions.add(validationRule);
+					} else {
+						failedAssertions.add(validationRule);
+					}
+				}
+			}
+			if(!groupRules.isEmpty()) {
+				for (String rule : groupRules.keySet()) {
+					TestRunItem testRunItem = new TestRunItem();
+					testRunItem.setTestType(TestType.DROOL_RULES);
+					testRunItem.setTestCategory("");;
+					testRunItem.setAssertionText(rule);
+					List<InvalidContent> invalidContentList = groupRules.get(rule);
+					testRunItem.setFailureCount((long)invalidContentList.size());
+					testRunItem.setFirstNInstances(invalidContentList.stream().limit(failureExportMax)
+							.map(item -> new FailureDetail(item.getConceptId(), item.getMessage(), null))
+							.collect(Collectors.toList()));
+					Severity severity = invalidContentList.get(0).getSeverity();
+					if(Severity.WARNING.equals(severity)) {
+						warningAssertions.add(testRunItem);
+					} else {
+						failedAssertions.add(testRunItem);
+					}
+				}
+			}
+			validationReport.addFailedAssertions(failedAssertions);
+			validationReport.addWarningAssertions(warningAssertions);
+			validationReport.addTimeTaken((System.currentTimeMillis() - timeStart) / 1000);
+		} catch (Exception ex) {
+			final DroolsRulesValidationReport report = new DroolsRulesValidationReport(TestType.DROOL_RULES);
+			report.setRuleSetExecuted(String.join(",", droolsRulesSets));
+			report.setTimeTakenInSeconds((System.currentTimeMillis() - timeStart) / 1000);
+			report.setExecutionId(executionConfig.getExecutionId());
+			report.setMessage(ExceptionUtils.getStackTrace(ex));
+			report.setCompleted(false);
+			responseMap.put(report.getTestType().toString() + "TestResult", report);
+		}
+
+
+	}
+
 	private Set<String> getDroolsRulesSetFromAssertionGroups(Set<String> assertionGroups) throws RVFExecutionException {
 		File droolsRuleDir = new File(droolsRuleDirectoryPath);
 		if(!droolsRuleDir.isDirectory()) throw new RVFExecutionException("Drools rules directory path " + droolsRuleDirectoryPath + " is not a directory or inaccessible");
@@ -270,6 +389,15 @@ public class ValidationRunner {
 		//Only keep the assertion groups with matching Drools Rule modules in the Drools Directory
 		droolsRulesModules.retainAll(assertionGroups);
 		return droolsRulesModules;
+	}
+
+	private Map<String, List<InvalidContent>> groupDroolsRules(Map<String, List<InvalidContent>> groupedRules, String rule, List<InvalidContent> invalidContents,
+															   int failureMaxExport) {
+		if(!groupedRules.containsKey(rule)) {
+			groupedRules.put(rule, new ArrayList<>());
+		}
+		groupedRules.get(rule).addAll(invalidContents);
+		return groupedRules;
 	}
 
 	private File extractZipFile(ValidationRunConfig validationConfig, Long executionId) throws BusinessServiceException {
@@ -292,69 +420,74 @@ public class ValidationRunner {
 	}
 
 	private void runMRCMAssertionTests(final ValidationReport report, ValidationRunConfig validationConfig, ExecutionConfig executionConfig) throws IOException, ReleaseImportException, ServiceException, ParseException {
-		final long timeStart = System.currentTimeMillis();
-		ValidationService validationService = new ValidationService();
-		ValidationRun validationRun = new ValidationRun(executionConfig.getProspectiveVersion(), true);
-		File outputFolder = null;
 		try {
-			outputFolder = extractZipFile(validationConfig, executionConfig.getExecutionId());
+			final long timeStart = System.currentTimeMillis();
+			ValidationService validationService = new ValidationService();
+			ValidationRun validationRun = new ValidationRun(executionConfig.getProspectiveVersion(), true);
+			File outputFolder = null;
+			try {
+				outputFolder = extractZipFile(validationConfig, executionConfig.getExecutionId());
 
-		} catch (BusinessServiceException ex) {
-			logger.error("Error:" + ex);
-		}
-		if(outputFolder != null){
-			validationService.loadMRCM(outputFolder, validationRun);
-			validationService.validateRelease(outputFolder, validationRun);
-			FileUtils.deleteQuietly(outputFolder);
-		}
-
-		TestRunItem testRunItem;
-		final List<TestRunItem> passedAssertions = new ArrayList<>();
-		for(org.snomed.quality.validator.mrcm.Assertion assertion : validationRun.getCompletedAssertions()){
-			testRunItem = new TestRunItem();
-			testRunItem.setTestCategory(MMRCM_TYPE_VALIDATION);
-			testRunItem.setTestType(TestType.MRCM);
-			testRunItem.setAssertionUuid(assertion.getUuid());
-			testRunItem.setAssertionText(assertion.getAssertionText());
-			testRunItem.setFailureCount(0L);
-			testRunItem.setExtractResultInMillis(0L);
-			passedAssertions.add(testRunItem);
-		}
-
-		final List<TestRunItem> skippedAssertions = new ArrayList<>();
-		for(org.snomed.quality.validator.mrcm.Assertion assertion : validationRun.getSkippedAssertions()){
-			testRunItem = new TestRunItem();
-			testRunItem.setTestCategory(MMRCM_TYPE_VALIDATION);
-			testRunItem.setTestType(TestType.MRCM);
-			testRunItem.setAssertionUuid(assertion.getUuid());
-			testRunItem.setAssertionText(assertion.getAssertionText());
-			testRunItem.setFailureCount(0L);
-			testRunItem.setExtractResultInMillis(0L);
-			skippedAssertions.add(testRunItem);
-		}
-
-		final List<TestRunItem> failedAssertions = new ArrayList<>();
-		for(org.snomed.quality.validator.mrcm.Assertion assertion : validationRun.getFailedAssertions()){
-			testRunItem = new TestRunItem();
-			testRunItem.setTestCategory(MMRCM_TYPE_VALIDATION);
-			testRunItem.setTestType(TestType.MRCM);
-			testRunItem.setAssertionUuid(assertion.getUuid());
-			testRunItem.setAssertionText(assertion.getAssertionText());
-			testRunItem.setExtractResultInMillis(0L);
-			int failureCount = assertion.getCurrentViolatedConceptIds().size();
-			testRunItem.setFailureCount(Long.valueOf(failureCount));
-			List<FailureDetail> failedDetails = new ArrayList(failureCount);
-			for (Long conceptId : assertion.getCurrentViolatedConceptIds()){
-				failedDetails.add(new FailureDetail(String.valueOf(conceptId), assertion.getAssertionText(), null));
+			} catch (BusinessServiceException ex) {
+				logger.error("Error:" + ex);
 			}
-			testRunItem.setFirstNInstances(failedDetails);
-			failedAssertions.add(testRunItem);
+			if(outputFolder != null){
+				validationService.loadMRCM(outputFolder, validationRun);
+				validationService.validateRelease(outputFolder, validationRun);
+				FileUtils.deleteQuietly(outputFolder);
+			}
+
+			TestRunItem testRunItem;
+			final List<TestRunItem> passedAssertions = new ArrayList<>();
+			for(org.snomed.quality.validator.mrcm.Assertion assertion : validationRun.getCompletedAssertions()){
+				testRunItem = new TestRunItem();
+				testRunItem.setTestCategory(MMRCM_TYPE_VALIDATION);
+				testRunItem.setTestType(TestType.MRCM);
+				testRunItem.setAssertionUuid(assertion.getUuid());
+				testRunItem.setAssertionText(assertion.getAssertionText());
+				testRunItem.setFailureCount(0L);
+				testRunItem.setExtractResultInMillis(0L);
+				passedAssertions.add(testRunItem);
+			}
+
+			final List<TestRunItem> skippedAssertions = new ArrayList<>();
+			for(org.snomed.quality.validator.mrcm.Assertion assertion : validationRun.getSkippedAssertions()){
+				testRunItem = new TestRunItem();
+				testRunItem.setTestCategory(MMRCM_TYPE_VALIDATION);
+				testRunItem.setTestType(TestType.MRCM);
+				testRunItem.setAssertionUuid(assertion.getUuid());
+				testRunItem.setAssertionText(assertion.getAssertionText());
+				testRunItem.setFailureCount(0L);
+				testRunItem.setExtractResultInMillis(0L);
+				skippedAssertions.add(testRunItem);
+			}
+
+			final List<TestRunItem> failedAssertions = new ArrayList<>();
+			for(org.snomed.quality.validator.mrcm.Assertion assertion : validationRun.getFailedAssertions()){
+				testRunItem = new TestRunItem();
+				testRunItem.setTestCategory(MMRCM_TYPE_VALIDATION);
+				testRunItem.setTestType(TestType.MRCM);
+				testRunItem.setAssertionUuid(assertion.getUuid());
+				testRunItem.setAssertionText(assertion.getAssertionText());
+				testRunItem.setExtractResultInMillis(0L);
+				int failureCount = assertion.getCurrentViolatedConceptIds().size();
+				testRunItem.setFailureCount(Long.valueOf(failureCount));
+				List<FailureDetail> failedDetails = new ArrayList(failureCount);
+				for (Long conceptId : assertion.getCurrentViolatedConceptIds()){
+					failedDetails.add(new FailureDetail(String.valueOf(conceptId), assertion.getAssertionText(), null));
+				}
+				testRunItem.setFirstNInstances(failedDetails);
+				failedAssertions.add(testRunItem);
+			}
+
+			report.addTimeTaken((System.currentTimeMillis() - timeStart) / 1000);
+			report.addSkippedAssertions(skippedAssertions);
+			report.addFailedAssertions(failedAssertions);
+			report.addPassedAssertions(passedAssertions);
+		} catch (Exception ex) {
+			logger.error("Encounter error while running MRCM Validation: {}", ex);
 		}
 
-		report.addTimeTaken((System.currentTimeMillis() - timeStart) / 1000);
-		report.addSkippedAssertions(skippedAssertions);
-		report.addFailedAssertions(failedAssertions);
-		report.addPassedAssertions(passedAssertions);
 	}
 
 	private void runExtensionReleaseValidation(final ValidationReport report, final Map<String, Object> responseMap, ValidationRunConfig validationConfig, String reportStorage,
@@ -514,5 +647,31 @@ public class ValidationRunner {
 		reportService.writeProgress(String.format("[%1s] of [%2s] assertions are completed.", counter, assertions.size()), reportStorage);
 		return results;
 	}
+
+	private void addJiraLinkToReport(ValidationRunConfig validationRunConfig, ValidationReport report, String effectiveTime) {
+		if(validationRunConfig.isJiraIssueCreationFlag()) {
+			String reportingStage = validationRunConfig.getReportingStage();
+			if(StringUtils.isBlank(reportingStage)) {
+				logger.error("Reporting stage is required for creating JIRA ticket");
+				return;
+			}
+			String productName = validationRunConfig.getProductName();
+			if(StringUtils.isBlank(productName)) {
+				logger.error("Product name is required for creating JIRA ticket");
+				return;
+			}
+			if(StringUtils.isBlank(effectiveTime)) {
+				logger.error("Effective time is required for creating JIRA ticket");
+				return;
+			}
+			// Add Jira ticket for each fail assertions
+			try {
+				jiraService.addJiraTickets(validationRunConfig.getProductName(),effectiveTime,validationRunConfig.getReportingStage(), report.getAssertionsFailed());
+			} catch (JiraException e) {
+				logger.error("Error while creating Jira Ticket for failed assertions. Message : " + e.getMessage());
+			}
+		}
+	}
+
 
 }

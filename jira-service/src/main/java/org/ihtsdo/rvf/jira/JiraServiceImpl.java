@@ -6,9 +6,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import net.rcarz.jiraclient.*;
+import org.apache.commons.lang.StringUtils;
 import org.ihtsdo.rvf.entity.FailureDetail;
 import org.ihtsdo.rvf.entity.TestRunItem;
 import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -56,6 +59,8 @@ public class JiraServiceImpl implements JiraService {
 
     @Value("${rvf.jira.endpoint}")
     private String jiraEndpoint;
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(JiraServiceImpl.class);
 
     @Override
     public List<Issue> getTicketsByJQL(String jql) throws JiraException {
@@ -150,7 +155,7 @@ public class JiraServiceImpl implements JiraService {
                 .field(fieldIdReportStage, reportingStages)
                 .field(fieldIdReleaseDate, releaseDate)
                 .execute();
-        if (!defaultAssignee.isEmpty()) {
+        if (StringUtils.isNotBlank(defaultAssignee)) {
             issue.update()
                     .field(Field.ASSIGNEE, defaultAssignee)
                     .execute();
@@ -172,9 +177,9 @@ public class JiraServiceImpl implements JiraService {
             for (TestRunItem item : items) {
                 boolean itemFound = false;
                 for (Issue issue : issues) {
+                    String itemSummary = getSummary(item);
                     // If Issue was found, then return URL of issue
-                    if (item.getAssertionUuid() != null && issue.getSummary().contains(item.getAssertionUuid().toString())
-                            && item.getFailureCount().longValue() == getIssueFailureCount(issue)) {
+                    if (issue.getSummary().equals(itemSummary) && item.getFailureCount() == getIssueFailureCount(issue)) {
                         String url = getBrowseURL(issue);
                         item.setJiraLink(url);
                         itemFound = true;
@@ -200,10 +205,9 @@ public class JiraServiceImpl implements JiraService {
         return 0;
     }
 
-    private void createJiraTicket(String productName, String releaseDate, String currentReportingStage, TestRunItem item)
-            throws JiraException {
+    private void createJiraTicket(String productName, String releaseDate, String currentReportingStage, TestRunItem item) {
+        String summary = getSummary(item);
         try {
-            String summary = getSummary(item);
             String descJSON;
             ObjectMapper objectMapper = new ObjectMapper();
             objectMapper.enable(SerializationFeature.INDENT_OUTPUT);
@@ -216,28 +220,26 @@ public class JiraServiceImpl implements JiraService {
             String description = descJSON.length() > 10000 ? descJSON.substring(0, 10000) + " ..." : descJSON;
             Issue newIssue = createRVFFailureTicket(summary, description, productName, releaseDate, currentReportingStage);
             item.setJiraLink(getBrowseURL(newIssue));
-        } catch (JsonProcessingException e) {
-            e.printStackTrace();
+        } catch (Exception e) {
+            LOGGER.error("Error encountered when creating issue: {}", summary);
+            LOGGER.error("{}",e);
         }
     }
 
     private String getSummary(TestRunItem item) {
         String summary = "";
-        if(item.getTestType() != null){
-            summary += "[" + item.getTestType().toString().toUpperCase() + "] ";
-        }
-        summary += "Failed assertion: ";
-        if(item.getAssertionUuid() != null) {
-            summary += item.getAssertionUuid().toString() + ". ";
-        }
-
         switch (item.getTestType()){
             case SQL:
+                summary = "RVF Assertion failure: " + item.getAssertionUuid();
+                break;
             case MRCM:
+                summary = "MRCM Assertion failure: " + item.getAssertionText();
+                break;
             case DROOL_RULES:
-                summary += item.getAssertionText();
+                summary = "Drools Assertion failures: " + item.getAssertionText();
                 break;
             case ARCHIVE_STRUCTURAL:
+                summary = "Structural Assertion failures: ";
                 if(item.getFirstNInstances() != null && item.getFirstNInstances().size() > 0) {
                     for (FailureDetail failItem : item.getFirstNInstances()) {
                         summary += failItem.getDetail() + ". ";
@@ -245,7 +247,7 @@ public class JiraServiceImpl implements JiraService {
                 }
                 break;
         }
-        return summary;
+        return summary.length() > 255 ? summary.substring(0, 252) + "..." : summary;
     }
 
     private String getBrowseURL(Issue issue) {

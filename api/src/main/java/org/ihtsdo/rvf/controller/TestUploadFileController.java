@@ -183,8 +183,10 @@ public class TestUploadFileController {
 			@ApiParam(value = "The sub folder for validaiton reports") @RequestParam(value = "storageLocation") final String storageLocation,
 			@ApiParam(value = "True if require to create JIRA issue. Defaults to false.") @RequestParam(value = "jiraIssueCreationFlag", required = false) final boolean jiraIssueCreationFlag,
 			@ApiParam(value = "Release product name (e.g SNOMED CT International edition, SNOMED CT Spanish edition, SNOMED CT Managed Service - Denmark Extension (DK), SNOMED CT Managed Service - Sweden Extension (SE), SNOMED CT to GMDN Simple Map)") @RequestParam(value = "productName", required = false) final String productName,
-			@ApiParam(value = "Reproting State (e.g Pre-Alpha, Alpha feedback, Beta feedback, Pre-Production feedback, Post-Production)") @RequestParam(value = "reportingStage", required = false) final String reportingStage,
+			@ApiParam(value = "Reporting State (e.g Pre-Alpha, Alpha feedback, Beta feedback, Pre-Production feedback, Post-Production)") @RequestParam(value = "reportingStage", required = false) final String reportingStage,
 			@ApiParam(value = "Defaults to false") @RequestParam(value = "enableDrools", required = false) final boolean enableDrools,
+			@ApiParam(value = "Defaults to false") @RequestParam(value = "enableMRCMValidation", required = false) final boolean enableMRCMValidation,
+			@ApiParam(value = "Effective time, optionally used in Drools validation, required if Jira creation flag is true") @RequestParam(value = "effectiveTime", required = false) final String effectiveTime,
 			final HttpServletRequest request) throws IOException {
 
 		final String requestUrl = String.valueOf(request.getRequestURL());
@@ -204,7 +206,9 @@ public class TestUploadFileController {
 				.addProductName(productName)
 				.addReportingStage(reportingStage)
 				.addProspectiveFilesInS3(false)
-				.setEnableDrools(enableDrools);
+				.setEnableDrools(enableDrools)
+				.setEnableMRCMValidation(enableMRCMValidation)
+				.setEffectiveTime(effectiveTime);
 
 		// Before we start running, ensure that we've made our mark in the
 		// storage location
@@ -244,6 +248,8 @@ public class TestUploadFileController {
 			@ApiParam(value = "Release product name (e.g SNOMED CT International edition, SNOMED CT Spanish edition, SNOMED CT Managed Service - Denmark Extension (DK), SNOMED CT Managed Service - Sweden Extension (SE), SNOMED CT to GMDN Simple Map)") @RequestParam(value = "productName", required = false) final String productName,
 			@ApiParam(value = "Reproting State (e.g Pre-Alpha, Alpha feedback, Beta feedback, Pre-Production feedback, Post-Production)") @RequestParam(value = "reportingStage", required = false) final String reportingStage,
 			@ApiParam(value = "Defaults to false") @RequestParam(value = "enableDrools", required = false) final boolean enableDrools,
+			@ApiParam(value = "Defaults to false") @RequestParam(value = "enableMRCMValidation", required = false) final boolean enableMRCMValidation,
+			@ApiParam(value = "Effective time, optionally used in Drools validation, required if Jira creation flag is true") @RequestParam(value = "effectiveTime", required = false) final String effectiveTime,
 			final HttpServletRequest request) throws IOException {
 
 		final String requestUrl = String.valueOf(request.getRequestURL());
@@ -264,7 +270,9 @@ public class TestUploadFileController {
 				.addProductName(productName)
 				.addReportingStage(reportingStage)
 				.addProspectiveFilesInS3(true)
-				.setEnableDrools(enableDrools);
+				.setEnableDrools(enableDrools)
+				.setEnableMRCMValidation(enableMRCMValidation)
+				.setEffectiveTime(effectiveTime);
 
 		// Before we start running, ensure that we've made our mark in the
 		// storage location
