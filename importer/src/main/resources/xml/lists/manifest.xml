@@ -807,6 +807,8 @@
 			<keywords>MrcmRuleRefsetId in MRCM MODULE SCOPE SNAPSHOT exists in the RefsetId values of MRCM DOMAIN SNAPSHOT or MRCM ATTRIBUTE DOMAIN SNAPSHOT or MRCM ATTRIBUTE RANGE SNAPSHOT</keywords>
 		</script>
 
+		<script uuid="eba7fa2b-efb3-40fc-9ee0-caf9e914bac2" category="file-centric-validation,US" sqlFile="file-centric-snapshot-language-unique-fsn-us.sql" text="Every active FSN in the US module is referenced in the US lang refset." />
+
 		<!-- rt added this as a template... -->
 		<!--  <script uuid="" category="" sqlFile="" text=""  />-->
 
