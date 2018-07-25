@@ -146,12 +146,12 @@ public class RVFAssertionsRegressionTestHarnesss {
 			releaseDataManager.clearQAResult(config.getExecutionId());
 			assertTestResult(groupName, expectedJsonFile, runItems);
 	 }
-	
-	
+
+
 	@Test
 	public void testGetAssertionsByGroup() {
 		AssertionGroup group = assertionService.getAssertionGroupByName("InternationalEdition");
-		
+
 		List<Assertion> assertions = assertionService.getAssertionsForGroup(group);
 		List<Assertion> releaseTypeAssertions = new ArrayList<>();
 		for (Assertion assertion : assertions) {
@@ -159,25 +159,25 @@ public class RVFAssertionsRegressionTestHarnesss {
 				releaseTypeAssertions.add(assertion);
 			}
 		}
-		assertEquals(196, assertions.size());
-		assertEquals(79, releaseTypeAssertions.size());
+		assertEquals(260, assertions.size());
+		assertEquals(103, releaseTypeAssertions.size());
 	}
-	
+
 	@Test
 	public void testGetAssertionsForIntAuthoring() {
 		AssertionGroup group = assertionService.getAssertionGroupByName("int-authoring");
-		
+
 		List<Assertion> assertions = assertionService.getAssertionsForGroup(group);
-		assertEquals(25, assertions.size());
+		assertEquals(63, assertions.size());
 	}
-	
-	
+
+
 	@Test
 	public void testGetAssertionsForCommonAuthoring() {
 		AssertionGroup group = assertionService.getAssertionGroupByName("common-authoring");
-		
+
 		List<Assertion> assertions = assertionService.getAssertionsForGroup(group);
-		assertEquals(80, assertions.size());
+		assertEquals(82, assertions.size());
 	}
 	
 	@Test
