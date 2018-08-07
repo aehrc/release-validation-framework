@@ -187,6 +187,8 @@ public class TestUploadFileController {
 			@ApiParam(value = "Defaults to false") @RequestParam(value = "enableDrools", required = false) final boolean enableDrools,
 			@ApiParam(value = "Defaults to false") @RequestParam(value = "enableMRCMValidation", required = false) final boolean enableMRCMValidation,
 			@ApiParam(value = "Effective time, optionally used in Drools validation, required if Jira creation flag is true") @RequestParam(value = "effectiveTime", required = false) final String effectiveTime,
+			@ApiParam(value = "If release package file is an MS edition, should set to true. Defaults to false") @RequestParam(value = "releaseAsAnEdition", required = false) final boolean releaseAsAnEdition,
+			@ApiParam(value = "Module IDs of components in the MS extension. Used for filtering results in Drools validation. Values are separated by comma") @RequestParam(value = "includedModules", required = false) final String includedModules,
 			final HttpServletRequest request) throws IOException {
 
 		final String requestUrl = String.valueOf(request.getRequestURL());
@@ -208,7 +210,9 @@ public class TestUploadFileController {
 				.addProspectiveFilesInS3(false)
 				.setEnableDrools(enableDrools)
 				.setEnableMRCMValidation(enableMRCMValidation)
-				.setEffectiveTime(effectiveTime);
+				.setEffectiveTime(effectiveTime)
+				.setReleaseAsAnEdition(releaseAsAnEdition)
+				.setIncludedModules(includedModules);
 
 		// Before we start running, ensure that we've made our mark in the
 		// storage location
@@ -250,6 +254,8 @@ public class TestUploadFileController {
 			@ApiParam(value = "Defaults to false") @RequestParam(value = "enableDrools", required = false) final boolean enableDrools,
 			@ApiParam(value = "Defaults to false") @RequestParam(value = "enableMRCMValidation", required = false) final boolean enableMRCMValidation,
 			@ApiParam(value = "Effective time, optionally used in Drools validation, required if Jira creation flag is true") @RequestParam(value = "effectiveTime", required = false) final String effectiveTime,
+			@ApiParam(value = "If release package file is an MS edition, should set to true. Defaults to false") @RequestParam(value = "releaseAsAnEdition", required = false) final boolean releaseAsAnEdition,
+			@ApiParam(value = "Module IDs of components in the MS extension. Used for filtering results in Drools validation. Values are separated by comma") @RequestParam(value = "includedModules", required = false) final String includedModules,
 			final HttpServletRequest request) throws IOException {
 
 		final String requestUrl = String.valueOf(request.getRequestURL());
@@ -272,7 +278,9 @@ public class TestUploadFileController {
 				.addProspectiveFilesInS3(true)
 				.setEnableDrools(enableDrools)
 				.setEnableMRCMValidation(enableMRCMValidation)
-				.setEffectiveTime(effectiveTime);
+				.setEffectiveTime(effectiveTime)
+				.setReleaseAsAnEdition(releaseAsAnEdition)
+				.setIncludedModules(includedModules);
 
 		// Before we start running, ensure that we've made our mark in the
 		// storage location
