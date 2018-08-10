@@ -179,11 +179,17 @@ public class ValidationRunner {
 		if(validationConfig.isEnableDrools()) {
 			// Run Drools Validator
 			//runDroolsAssertions(responseMap, validationConfig, executionConfig);
+			final String droolsTestStartMsg = "Start Drools validation for release file:" + validationConfig.getTestFileName();
+			logger.info(droolsTestStartMsg);
+			reportService.writeProgress(structureTestStartMsg, reportStorage);
 			runDroolsAssertions(responseMap, report, validationConfig, executionConfig);
 		}
 
 		if(validationConfig.isEnableMRCMValidation()) {
 			//Run MRCM Validator
+			final String mrcmTestStartMsg = "Start MRCM validation for release file:" + validationConfig.getTestFileName();
+			logger.info(mrcmTestStartMsg);
+			reportService.writeProgress(structureTestStartMsg, reportStorage);
 			runMRCMAssertionTests(report, validationConfig, executionConfig);
 		}
 

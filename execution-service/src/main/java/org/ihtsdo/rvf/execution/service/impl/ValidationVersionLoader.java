@@ -401,22 +401,19 @@ public class ValidationVersionLoader {
 		return true;
 	}
 
-	private String getVersion(String versionString, boolean isEdition) {
+	private String getVersion(String versionString, boolean isEdition) throws BusinessServiceException {
 		String publishedS3Path = getPublishedFilePath(versionString);
 		String[] splits = publishedS3Path.split("/");
 		String releaseCenter = splits[0];
 		String fileName = splits[splits.length-1];
-		Pattern pattern = Pattern.compile("\\d{8}(T\\d+|.zip)");
+		Pattern pattern = Pattern.compile("\\d{8}(?=(T\\d+|.zip))");
 		Matcher matcher = pattern.matcher(fileName);
-		String datetimeText = null;
-		if(matcher.find()) {
-			datetimeText = matcher.group();
-		}
 		String versionDate = null;
-		if(datetimeText.contains(ZIP_FILE_EXTENSION)) {
-			versionDate = datetimeText.substring(0,datetimeText.indexOf(ZIP_FILE_EXTENSION));
-		} else {
-			versionDate = datetimeText.substring(0,datetimeText.indexOf("T"));
+		if(matcher.find()) {
+			versionDate = matcher.group();
+		}
+		if(versionDate==null) {
+			throw new BusinessServiceException("Could not extract version date from " + versionString);
 		}
 		if(releaseCenter.equalsIgnoreCase(INTERNATIONAL)) {
 			releaseCenter = INT;
