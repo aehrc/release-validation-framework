@@ -11,6 +11,7 @@ import org.ihtsdo.drools.response.Severity;
 import org.ihtsdo.drools.validator.rf2.DroolsRF2Validator;
 import org.ihtsdo.otf.rest.exception.BusinessServiceException;
 import org.ihtsdo.otf.snomedboot.ReleaseImportException;
+import org.ihtsdo.otf.snomedboot.ReleaseImporter;
 import org.ihtsdo.otf.sqs.service.exception.ServiceException;
 import org.ihtsdo.rvf.entity.*;
 import org.ihtsdo.rvf.execution.service.AssertionExecutionService;
@@ -181,7 +182,7 @@ public class ValidationRunner {
 			//runDroolsAssertions(responseMap, validationConfig, executionConfig);
 			final String droolsTestStartMsg = "Start Drools validation for release file:" + validationConfig.getTestFileName();
 			logger.info(droolsTestStartMsg);
-			reportService.writeProgress(structureTestStartMsg, reportStorage);
+			reportService.writeProgress(droolsTestStartMsg, reportStorage);
 			runDroolsAssertions(responseMap, report, validationConfig, executionConfig);
 		}
 
@@ -189,7 +190,7 @@ public class ValidationRunner {
 			//Run MRCM Validator
 			final String mrcmTestStartMsg = "Start MRCM validation for release file:" + validationConfig.getTestFileName();
 			logger.info(mrcmTestStartMsg);
-			reportService.writeProgress(structureTestStartMsg, reportStorage);
+			reportService.writeProgress(mrcmTestStartMsg, reportStorage);
 			runMRCMAssertionTests(report, validationConfig, executionConfig);
 		}
 
@@ -214,7 +215,7 @@ public class ValidationRunner {
 		long timeStart = new Date().getTime();
 		//Filter only Drools rules set from all the assertion groups
 		Set<String> droolsRulesSets = getDroolsRulesSetFromAssertionGroups(Sets.newHashSet(validationConfig.getGroupsList()));
-
+		Set<String> directoryPaths = new HashSet<>();
 		//Skip running Drools rules set altogether if there is no Drools rules set in the assertion groups
 		if(droolsRulesSets.isEmpty()) return;
 		int totalTestsRun = 0;
@@ -243,6 +244,10 @@ public class ValidationRunner {
 					effectiveTime = effectiveTime.replaceAll("-", "");
 				} else {
 					effectiveTime = "";
+				}
+				for (InputStream inputStream : inputStreams) {
+					String snapshotDirectoryPath = new ReleaseImporter().unzipRelease(inputStream, ReleaseImporter.ImportType.SNAPSHOT).getAbsolutePath();
+					directoryPaths.add(snapshotDirectoryPath);
 				}
 				invalidContents = droolsRF2Validator.validateSnapshotStreams(inputStreams, droolsRulesSets, effectiveTime, modulesSet);
 				for (String assertionGroup : droolsRulesSets) {
@@ -319,6 +324,10 @@ public class ValidationRunner {
 			report.setMessage(ExceptionUtils.getStackTrace(ex));
 			report.setCompleted(false);
 			responseMap.put(report.getTestType().toString() + "TestResult", report);
+		} finally {
+			for (String directoryPath : directoryPaths) {
+				FileUtils.deleteQuietly(new File(directoryPath));
+			}
 		}
 
 
