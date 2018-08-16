@@ -249,7 +249,7 @@ public class ValidationRunner {
 					String snapshotDirectoryPath = new ReleaseImporter().unzipRelease(inputStream, ReleaseImporter.ImportType.SNAPSHOT).getAbsolutePath();
 					directoryPaths.add(snapshotDirectoryPath);
 				}
-				invalidContents = droolsRF2Validator.validateSnapshotStreams(inputStreams, droolsRulesSets, effectiveTime, modulesSet);
+				invalidContents = droolsRF2Validator.validateSnapshots(directoryPaths, droolsRulesSets, effectiveTime, modulesSet);
 				for (String assertionGroup : droolsRulesSets) {
 					totalTestsRun += droolsRF2Validator.getRuleExecutor().getAssertionGroupRuleCount(assertionGroup);
 				}
