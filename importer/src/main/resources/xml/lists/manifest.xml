@@ -15,7 +15,7 @@
 		<script uuid="02181f89-2a4c-4d3e-87ca-ff04e44f678d" category="resource" sqlFile="component-centric-snapshot-mrcm-refset-validate-concept-is-valid-descendant-proc.sql" text="Defines a procedure to validate whether a concept is a descendant of specified concepts in MRCM Refsets Snapshot" />
 		<script uuid="e8d87ec5-bb55-42a2-8368-f2fabd5835ca" category="resource" sqlFile="component-centric-delta-mrcm-refset-validate-concept-is-valid-descendant-proc.sql" text="Defines a procedure to validate whether a concept is a descendant of specified concepts in MRCM Refsets Delta" />
 		<script uuid="8d25d6e7-e4c6-488d-b96b-df1665c968ad" category="resource" sqlFile="component-centric-full-mrcm-refset-validate-concept-is-valid-descendant-proc.sql" text="Defines a procedure to validate whether a concept is a descendant of specified concepts in MRCM Refsets Full" />
-      		<script uuid="045b977a-a5cb-49f6-9a80-54ff478062bb" category="resource" sqlFile="file-centric-moduleid-validation-proc.sql" text="Defines procedure to validate module ID in data" />
+		<script uuid="045b977a-a5cb-49f6-9a80-54ff478062bb" category="resource" sqlFile="file-centric-moduleid-validation-proc.sql" text="Defines procedure to validate module ID in data" />
 
 		<!-- release-type-full-validation -->
 		<script uuid="84f5edda-1249-4d79-87da-e248e61f06a6" category="release-type-validation" sqlFile="release-type-full-validation-concept.sql" text="The current Concept full file contains all previously published data unchanged." >
@@ -810,7 +810,13 @@
 
 		<script uuid="eba7fa2b-efb3-40fc-9ee0-caf9e914bac2" category="file-centric-validation,US" sqlFile="file-centric-snapshot-language-unique-fsn-us.sql" text="Every active FSN in the US module is referenced in the US lang refset." />
 
+		<!-- Assertions for Module Dependency files-->
 		<script uuid="0145fbad-f067-41ff-b700-cf54fc639e21" category="file-centric-validation" sqlFile="file-centric-snapshot-correct-module-id.sql" text="The module id of components should be in module dependency list" />
+		<script uuid="4bf2274d-94d9-4aca-87e6-e0348fee502d" category="file-centric-validation" sqlFile="file-centric-snapshot-valid-module-dependency.sql" text="In ModuleDependency files, the refsetId field is always set to 900000000000534007" />
+		<script uuid="cde37e86-7dff-47c6-a08a-01d5ba6ca744" category="release-type-validation" sqlFile="release-type-delta-previous-snapshot-validation-module-dependency.sql" text="There must be updated records for previously existing module dependency with same UUID but new effective time" />
+		<script uuid="f5da66cc-5ae7-4260-afcf-068c61c62ef1" category="file-centric-validation,INT" sqlFile="file-centric-snapshot-module-dependency-target-and-source-effective-time-must-match.sql" text="In ModuleDependency files, targetEffectiveTime and sourceEffectiveTime must match" />
+		<script uuid="e285baab-14a3-4ff6-822b-9e570da49e87" category="file-centric-validation,US,DK,SE,BE,NO" sqlFile="file-centric-snapshot-module-dependency-extension-effective-time-validation.sql"
+				  text="In ModuleDependency files for Extensions, effectiveTime and sourceEffectiveTime must match while having same values as current release effective time and targetEffectiveTime must match the dependent INT effective time" />
 		<!-- rt added this as a template... -->
 		<!--  <script uuid="" category="" sqlFile="" text=""  />-->
 

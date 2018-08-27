@@ -20,6 +20,7 @@ import javax.annotation.Resource;
 import javax.naming.ConfigurationException;
 
 import org.apache.commons.dbcp.BasicDataSource;
+import org.apache.commons.lang3.StringUtils;
 import org.ihtsdo.rvf.entity.Assertion;
 import org.ihtsdo.rvf.entity.AssertionTest;
 import org.ihtsdo.rvf.entity.ExecutionCommand;
@@ -276,6 +277,9 @@ public List<TestRunItem> executeAssertionsConcurrently(List<Assertion> assertion
 		final String previousRelease = config.getPreviousVersion();
 		final String prospectiveSchema = releaseDataManager.getSchemaForRelease(prospectiveRelease);
 		final String previousReleaseSchema = releaseDataManager.getSchemaForRelease(previousRelease);
+		//Make sure effective time format is ddMMyyyy
+		final String currentReleaseEffectiveTime = StringUtils.isNotBlank(config.getEffectiveTime()) ? config.getEffectiveTime().replaceAll("-","") : "";
+		final String dependencyEffectiveTime = StringUtils.isNotBlank(config.getDependencyEffectiveTime()) ? config.getEffectiveTime().replaceAll("-","") : "";
 		
 		//We need both these schemas to exist
 		if (prospectiveSchema == null) {
@@ -303,6 +307,10 @@ public List<TestRunItem> executeAssertionsConcurrently(List<Assertion> assertion
 			part = part.replaceAll("<DELTA>", deltaTableSuffix);
 			part = part.replaceAll("<SNAPSHOT>", snapshotTableSuffix);
 			part = part.replaceAll("<FULL>", fullTableSuffix);
+
+			//Some assertions require information about effectiveTime
+			part = part.replaceAll("<CURR_EFFECTIVE_TIME>",currentReleaseEffectiveTime);
+			part = part.replaceAll("<DEPENDENCY_EFFECTIVE_TIME>", dependencyEffectiveTime);
 			part.trim();
 			logger.debug("Transformed sql statement: {}", part);
 			result.add(part);

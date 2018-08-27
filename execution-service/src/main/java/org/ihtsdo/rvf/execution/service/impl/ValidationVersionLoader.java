@@ -172,6 +172,10 @@ public class ValidationVersionLoader {
 		executionConfig.setJiraIssueCreationFlag(validationConfig.isJiraIssueCreationFlag());
 		executionConfig.setProductName(validationConfig.getProductName());
 		executionConfig.setReportingStage(validationConfig.getReportingStage());
+		executionConfig.setEffectiveTime(validationConfig.getEffectiveTime());
+		if(validationConfig.getExtensionDependency() != null) {
+			executionConfig.setDependencyEffectiveTime(extractEffetiveTimeFromDepedencyVersion(validationConfig.getExtensionDependency()));
+		}
 		//default to 10
 		executionConfig.setFailureExportMax(10);
 		if (validationConfig.getFailureExportMax() != null) {
@@ -399,6 +403,29 @@ public class ValidationVersionLoader {
 			return false;
 		}
 		return true;
+	}
+
+	private String extractEffetiveTimeFromDepedencyVersion(String dependencyVersion) {
+		String effectiveTime = null;
+		try {
+			Pattern pattern = null;
+			String text;
+			if(dependencyVersion.endsWith(ZIP_FILE_EXTENSION)) {
+				pattern = Pattern.compile("\\d{8}(?=(T\\d+|.zip))");
+				String[] splits = dependencyVersion.split("/");
+				text = splits[splits.length-1];
+			} else {
+				pattern = Pattern.compile("(?<=_)(\\d{8})");
+				text = dependencyVersion;
+			}
+			Matcher matcher = pattern.matcher(text);
+			if(matcher.find()) {
+				effectiveTime = matcher.group();
+			}
+		} catch (Exception e) {
+			logger.error("Encounter error when extracting effective time from {}", dependencyVersion);
+		}
+		return  effectiveTime;
 	}
 
 	private String getVersion(String versionString, boolean isEdition) throws BusinessServiceException {
