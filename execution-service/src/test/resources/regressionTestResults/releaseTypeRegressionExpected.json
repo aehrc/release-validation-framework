@@ -1,7 +1,7 @@
 {
   "assertionType" : "release-type-validation",
-  "totalAssertionsRun" : 121,
-  "totalAssertionsFailed" : 121,
+  "totalAssertionsRun" : 122,
+  "totalAssertionsFailed" : 122,
   "results" : [ {
     "assertionName" : "There must be actual changes made to previously published complex map refset components in order for them to appear in the current delta.",
     "assertionUuid" : "80463c76-d84e-4a1a-8abb-c5b4d12b5da4",
@@ -582,6 +582,14 @@
     "firstNInstances" : [ {
       "conceptId" : "900000000000207008",
       "detail" : "Mrcm Module Scope Refset: id=f1524dde-5466-46a7-926c-37b0e161bc7f is inactive but no active state found in the previous snapshot."
+    } ],
+    "totalFailed" : 1
+  }, {
+    "assertionName" : "There must be updated records for previously existing module dependency with same UUID but new effective time",
+    "assertionUuid" : "cde37e86-7dff-47c6-a08a-01d5ba6ca744",
+    "firstNInstances" : [ {
+      "conceptId" : "449080006",
+      "detail" : "Module Dependency with id = f6431457-161b-5b46-9217-573c20c00072 in previous Snapshot does not exist in current in Delta file"
     } ],
     "totalFailed" : 1
   }, {

@@ -814,9 +814,9 @@
 		<script uuid="0145fbad-f067-41ff-b700-cf54fc639e21" category="file-centric-validation" sqlFile="file-centric-snapshot-correct-module-id.sql" text="The module id of components should be in module dependency list" />
 		<script uuid="4bf2274d-94d9-4aca-87e6-e0348fee502d" category="file-centric-validation" sqlFile="file-centric-snapshot-valid-module-dependency.sql" text="In ModuleDependency files, the refsetId field is always set to 900000000000534007" />
 		<script uuid="cde37e86-7dff-47c6-a08a-01d5ba6ca744" category="release-type-validation" sqlFile="release-type-delta-previous-snapshot-validation-module-dependency.sql" text="There must be updated records for previously existing module dependency with same UUID but new effective time" />
-		<script uuid="f5da66cc-5ae7-4260-afcf-068c61c62ef1" category="file-centric-validation,INT" sqlFile="file-centric-snapshot-module-dependency-target-and-source-effective-time-must-match.sql" text="In ModuleDependency files, targetEffectiveTime and sourceEffectiveTime must match" />
+		<script uuid="f5da66cc-5ae7-4260-afcf-068c61c62ef1" category="file-centric-validation,INT" sqlFile="file-centric-snapshot-module-dependency-target-and-source-effective-time-must-match.sql" text="In ModuleDependency files for International releases, targetEffectiveTime and sourceEffectiveTime must match with each other and with effectiveTime" />
 		<script uuid="e285baab-14a3-4ff6-822b-9e570da49e87" category="file-centric-validation,US,DK,SE,BE,NO" sqlFile="file-centric-snapshot-module-dependency-extension-effective-time-validation.sql"
-				  text="In ModuleDependency files for Extensions, effectiveTime and sourceEffectiveTime must match while having same values as current release effective time and targetEffectiveTime must match the dependent INT effective time" />
+				  text="In ModuleDependency files for Extensions, effectiveTime and sourceEffectiveTime must match while having same values as current release effective time and targetEffectiveTime must match the dependent International release's effective time" />
 		<!-- rt added this as a template... -->
 		<!--  <script uuid="" category="" sqlFile="" text=""  />-->
 

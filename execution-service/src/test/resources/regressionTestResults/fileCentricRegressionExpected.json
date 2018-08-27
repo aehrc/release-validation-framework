@@ -1,7 +1,7 @@
 {
   "assertionType" : "file-centric-validation",
-  "totalAssertionsRun" : 90,
-  "totalAssertionsFailed" : 76,
+  "totalAssertionsRun" : 93,
+  "totalAssertionsFailed" : 79,
   "results" : [ {
     "assertionName" : "RefsetId value refers to valid concept identifier in the MRCM MODULE SCOPE REFSET snapshot",
     "assertionUuid" : "844f4f15-ac5d-48a6-ba33-f11893cb7a20",
@@ -650,6 +650,14 @@
     "firstNInstances" : null,
     "totalFailed" : 0
   }, {
+    "assertionName" : "In ModuleDependency files for Extensions, effectiveTime and sourceEffectiveTime must match while having same values as current release effective time and targetEffectiveTime must match the dependent International release's effective time",
+    "assertionUuid" : "e285baab-14a3-4ff6-822b-9e570da49e87",
+    "firstNInstances" : [ {
+      "conceptId" : "449080006",
+      "detail" : "Refset with id = f6431457-161b-5b46-9217-573c20c00071 in Module Dependency Snapshot file , effectiveTime = 20140731 does not match the sourceEffectiveTime = 20140831"
+    } ],
+    "totalFailed" : 1
+  }, {
     "assertionName" : "ReferenceComponentIds refers to valid concepts in the LOINC ExpressionAssociationRefset snapshot file.",
     "assertionUuid" : "e33922c3-5200-458b-b8f3-2cd08252234e",
     "firstNInstances" : [ {
@@ -796,6 +804,17 @@
     } ],
     "totalFailed" : 6
   }, {
+    "assertionName" : "In ModuleDependency files for International releases, targetEffectiveTime and sourceEffectiveTime must match with each other and with effectiveTime",
+    "assertionUuid" : "f5da66cc-5ae7-4260-afcf-068c61c62ef1",
+    "firstNInstances" : [ {
+      "conceptId" : "449080006",
+      "detail" : "Refset with id = f6431457-161b-5b46-9217-573c20c00071 in Module Dependency Snapshot file , targetEffectiveTime = 20140931 does not match the sourceEffectiveTime = 20140831"
+    }, {
+      "conceptId" : "449080006",
+      "detail" : "Refset with id = f6431457-161b-5b46-9217-573c20c00071 in Module Dependency Snapshot file , effectiveTime = 20140731 does not match the sourceEffectiveTime = 20140831 or targetEffectiveTime = 20140931"
+    } ],
+    "totalFailed" : 2
+  }, {
     "assertionName" : "The current Language Refset snapshot file does not contain duplicate Member Ids.",
     "assertionUuid" : "fc24db60-7856-11e1-b0c4-0800200c9a66",
     "firstNInstances" : [ {
@@ -878,16 +897,10 @@
     "assertionUuid" : "0145fbad-f067-41ff-b700-cf54fc639e21",
     "firstNInstances" : [ {
       "conceptId" : "0",
-      "detail" : "complexmaprefset ::id= 217a9bea-0b4e-5499-8a61-e4d661e722b2 ::module id: 449080006 is not in module dependency list"
+      "detail" : "description ::id= 3494181019 ::module id: 900000000000012004 is not in module dependency list"
     }, {
       "conceptId" : "0",
-      "detail" : "complexmaprefset ::id= 69703317-411e-5d4d-b853-eef523f0109d ::module id: 449080006 is not in module dependency list"
-    }, {
-      "conceptId" : "0",
-      "detail" : "complexmaprefset ::id= 317a9bea-0b4e-5499-8a61-e4d661e722b3 ::module id: 449080006 is not in module dependency list"
-    }, {
-      "conceptId" : "0",
-      "detail" : "complexmaprefset ::id= 79703317-411e-5d4d-b853-eef523f0109a ::module id: 449080006 is not in module dependency list"
+      "detail" : "description ::id= 3494182014 ::module id: 900000000000012004 is not in module dependency list"
     }, {
       "conceptId" : "0",
       "detail" : "expressionAssociationRefset ::id= 1ca0b461-66a6-45c8-b01e-5a227c1fc27a ::module id: 705115006 is not in module dependency list"
@@ -906,8 +919,14 @@
     }, {
       "conceptId" : "0",
       "detail" : "expressionAssociationRefset ::id= adb4ebdb-c3af-4f6a-9d80-add0730fcee0 ::module id: 705115006 is not in module dependency list"
+    }, {
+      "conceptId" : "0",
+      "detail" : "expressionAssociationRefset ::id= 88d0eeb0-10b3-4d68-9d21-f4c42e0aac93 ::module id: 705115006 is not in module dependency list"
+    }, {
+      "conceptId" : "0",
+      "detail" : "expressionAssociationRefset ::id= a4f9d42e-eb98-468b-9024-e5aa236eb16f ::module id: 705115006 is not in module dependency list"
     } ],
-    "totalFailed" : 50
+    "totalFailed" : 220
   }, {
     "assertionName" : "Preferred Term exists exactly once in each language refset for each concept.",
     "assertionUuid" : "03cf9850-7857-11e1-b0c4-0800200c9a66",
@@ -1548,6 +1567,14 @@
     "firstNInstances" : [ {
       "conceptId" : "703672002",
       "detail" : "TextDefinition: id=3005197021 is not unique in the TextDefinition Snapshot file."
+    } ],
+    "totalFailed" : 1
+  }, {
+    "assertionName" : "In ModuleDependency files, the refsetId field is always set to 900000000000534007",
+    "assertionUuid" : "4bf2274d-94d9-4aca-87e6-e0348fee502d",
+    "firstNInstances" : [ {
+      "conceptId" : "449080006",
+      "detail" : "Refset: id=f6431457-161b-5b46-9217-573c20c00071 in MODULE DEPENDENCY SNAPSHOT is set to 900000000000534006 instead of 900000000000534007"
     } ],
     "totalFailed" : 1
   }, {

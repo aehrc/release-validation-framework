@@ -6,15 +6,28 @@
 	identified by the index of the three fields moduleid + refsetid + referencedcomponentid
 
 ********************************************************************************/
+
+insert into qa_result (runid, assertionuuid, concept_id, details)
+	select
+		<RUNID>,
+		'<ASSERTIONUUID>',
+		a.moduleid,
+		concat('Module Dependency with id = ',a.id,' in previous Snapshot does not exist in current Delta file')
+    from (
+    select distinct id,moduleid from prev_moduledependencyrefset_s t1
+    where t1.id not in (select id from curr_moduledependencyrefset_s)
+    ) a;
+	commit;
+
   insert into qa_result (runid, assertionuuid, concept_id, details)
 	select
 		<RUNID>,
 		'<ASSERTIONUUID>',
 		a.moduleid,
-		concat('Module Dependency with id = ',a.id,' in Delta file has different ID with Module Dependency ',a.prev_id,
+		concat('Module Dependency with id = ',a.id,' in Delta file has different ID with Module Dependency ',a.previous_id,
 		 ' which share the same refsetId = ', a.refsetid,',moduleId = ', a.moduleid, ' referencedComponentId = ', a.referencedcomponentid)
     from (
-    select distinct t1.id,t1.moduleId,t1.refsetid,t1.referencedcomponentid,t2.id as prev_id
+    select distinct t1.id,t1.moduleId,t1.refsetid,t1.referencedcomponentid,t2.id as previous_id
     from curr_moduledependencyrefset_d t1
     join prev_moduledependencyrefset_s t2
     on t1.moduleid = t2.moduleid
