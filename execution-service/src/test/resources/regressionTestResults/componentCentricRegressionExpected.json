@@ -1,7 +1,7 @@
 {
   "assertionType" : "component-centric-validation",
-  "totalAssertionsRun" : 111,
-  "totalAssertionsFailed" : 111,
+  "totalAssertionsRun" : 112,
+  "totalAssertionsFailed" : 112,
   "results" : [ {
     "assertionName" : "Case-sensitive terms that share initial words also share caseSignificanceId value.",
     "assertionUuid" : "805ab37c-33fa-45aa-876b-f86365a828c8",
@@ -439,7 +439,7 @@
     "assertionUuid" : "c3249e80-84f0-11e1-b0c4-0800200c9a66",
     "firstNInstances" : [ {
       "conceptId" : "700132006",
-      "detail" : "DESCRIPTION: id=2984057019: Synonym is prefered in en-us language refset but refers to a word that has en-gb spelling: tumour"
+      "detail" : "DESCRIPTION: id=2984057019: Synonym is prefered in en-us language refset but refers to a word that has en-gb spelling: tumour\r"
     } ],
     "totalFailed" : 1
   }, {
@@ -642,6 +642,23 @@
       "detail" : "CONCEPT: id=702411003:Concept has only one defining relationship but the definition status is not primitive."
     } ],
     "totalFailed" : 1
+  }, {
+    "assertionName" : "Verify that moduleId is a valid module in Module Dependency Snapshot",
+    "assertionUuid" : "f24d3377-30eb-4c7b-9d2b-b016ec5e7654",
+    "firstNInstances" : [ {
+      "conceptId" : "900000000000207008",
+      "detail" : "Refset with Id = 1244116f-fdb5-5645-afcc-5281288409da referenced in the column: moduleid of table: moduledependencyrefset_s is inactive or not a valid descendant of 900000000000443000 |Module|"
+    }, {
+      "conceptId" : "449080006",
+      "detail" : "Refset with Id = 686fe392-d2f7-586d-98aa-078aba426832 referenced in the column: moduleid of table: moduledependencyrefset_s is inactive or not a valid descendant of 900000000000443000 |Module|"
+    }, {
+      "conceptId" : "449080006",
+      "detail" : "Refset with Id = f6431457-161b-5b46-9217-573c20c00070 referenced in the column: moduleid of table: moduledependencyrefset_s is inactive or not a valid descendant of 900000000000443000 |Module|"
+    }, {
+      "conceptId" : "449080006",
+      "detail" : "Refset with Id = f6431457-161b-5b46-9217-573c20c00071 referenced in the column: moduleid of table: moduledependencyrefset_s is inactive or not a valid descendant of 900000000000443000 |Module|"
+    } ],
+    "totalFailed" : 4
   }, {
     "assertionName" : "AttributeInGroupCardinality value is in ('0..0', '0..1', '0..*') in MRCM ATTRIBUTE DOMAIN snapshot file",
     "assertionUuid" : "f47d1537-41dc-4cb5-ad0a-ed4caf993801",

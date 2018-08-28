@@ -14,7 +14,7 @@ insert into qa_result (runid, assertionuuid, concept_id, details)
 		'<ASSERTIONUUID>',
 		a.moduleid,
 		concat('Refset with id = ',a.id, ' in Module Dependency Snapshot file , effectiveTime = ',effectivetime,' does not match the current release effective time = <CURR_EFFECTIVE_TIME>')
-	from curr_moduledependencyrefset_s a
+	from original_curr_moduledependencyrefset_s a
 	where a.effectivetime <> '<CURR_EFFECTIVE_TIME>'
 	and '' <> '<CURR_EFFECTIVE_TIME>';
 	commit;
@@ -25,7 +25,7 @@ insert into qa_result (runid, assertionuuid, concept_id, details)
 		'<ASSERTIONUUID>',
 		a.moduleid,
 		concat('Refset with id = ',a.id, ' in Module Dependency Snapshot file , targetEffectiveTime = ',targeteffectivetime,' does not match the dependency release effective time = <DEPENDENCY_EFFECTIVE_TIME>')
-	from curr_moduledependencyrefset_s a
+	from original_curr_moduledependencyrefset_s a
 	where a.targeteffectivetime <> '<DEPENDENCY_EFFECTIVE_TIME>'
 	and '' <> '<DEPENDENCY_EFFECTIVE_TIME>';
 	commit;
@@ -36,6 +36,6 @@ insert into qa_result (runid, assertionuuid, concept_id, details)
 		'<ASSERTIONUUID>',
 		a.moduleid,
 		concat('Refset with id = ',a.id, ' in Module Dependency Snapshot file , effectiveTime = ',effectivetime,' does not match the sourceEffectiveTime = ',a.sourceeffectivetime)
-	from curr_moduledependencyrefset_s a
+	from original_curr_moduledependencyrefset_s a
 	where a.effectivetime <> a.sourceeffectivetime;
 	commit;
