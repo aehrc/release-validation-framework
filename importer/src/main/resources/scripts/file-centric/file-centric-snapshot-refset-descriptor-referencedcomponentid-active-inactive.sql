@@ -15,7 +15,7 @@
         from curr_refsetdescriptor_s a
         left join curr_concept_s b
         on  a.referencedcomponentid = b.id
-        where b.id is not null and a.active = 1 and b.active = 0;
+        where b.id is not null and a.active = 0 and b.active = 1;
     commit;
 
   insert into qa_result (runid, assertionuuid, concept_id, details)
@@ -27,5 +27,5 @@
         from curr_refsetdescriptor_s a
         left join curr_concept_s b
         on  a.referencedcomponentid = b.id
-        where b.id is not null and a.active = 0 and b.active = 1;
+        where b.id is not null and a.active = 1 and b.active = 0;
     commit;

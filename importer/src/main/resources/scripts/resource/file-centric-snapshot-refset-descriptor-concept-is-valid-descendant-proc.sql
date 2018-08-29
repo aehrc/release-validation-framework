@@ -49,7 +49,7 @@ begin
 
     drop table if exists tmp_s;
 	create table tmp_s( conceptid bigint(20));
-	set @runSql = concat("insert into tmp_s( conceptid) select ", columnname, " from ", tablename, ";");
+	set @runSql = concat("insert into tmp_s( conceptid) select ", columnname, " from ", tablename, " where ", tablename ,".active = 1;");
 	prepare statement from @runSql;
 	execute statement;
 

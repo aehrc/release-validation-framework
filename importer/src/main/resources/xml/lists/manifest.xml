@@ -17,7 +17,7 @@
 		<script uuid="8d25d6e7-e4c6-488d-b96b-df1665c968ad" category="resource" sqlFile="component-centric-full-mrcm-refset-validate-concept-is-valid-descendant-proc.sql" text="Defines a procedure to validate whether a concept is a descendant of specified concepts in MRCM Refsets Full" />
 		<script uuid="045b977a-a5cb-49f6-9a80-54ff478062bb" category="resource" sqlFile="file-centric-moduleid-validation-proc.sql" text="Defines procedure to validate module ID in data" />
 		<script uuid="1078db94-8e05-44b6-8b3f-72d7d4e6b7f2" category="resource" sqlFile="file-centric-snapshot-module-dependency-validate-moduleid-is-valid-module-proc.sql" text="Defines a procedure to validate whether a moduleId is a valid descendant concept in Module Dependency Snapshot file"/>
-		<script uuid="46c07ecc-1811-4157-a445-11e4a47c791 " category="resource" sqlFile="file-centric-snapshot-refset-descriptor-concept-is-valid-descendant-proc.sql" text="Defines a procedure to validate whether a concept is a valid descendant of specified concept in Refset Descriptor file"/>
+		<script uuid="c10faec4-0e48-45a2-8bc2-94522b6179f9" category="resource" sqlFile="file-centric-snapshot-refset-descriptor-concept-is-valid-descendant-proc.sql" text="Defines a procedure to validate whether a concept is a valid descendant of specified concept in Refset Descriptor file"/>
 
 		<!-- release-type-full-validation -->
 		<script uuid="84f5edda-1249-4d79-87da-e248e61f06a6" category="release-type-validation" sqlFile="release-type-full-validation-concept.sql" text="The current Concept full file contains all previously published data unchanged." >

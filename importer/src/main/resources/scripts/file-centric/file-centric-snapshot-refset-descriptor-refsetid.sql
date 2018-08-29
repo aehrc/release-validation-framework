@@ -11,6 +11,6 @@
 		'<ASSERTIONUUID>',
 		a.moduleid,
 		concat('RefsetId of: id=',a.id,' in REFSET DESCRIPTOR SNAPSHOT is not set to value 900000000000456007')
-	from curr_refsetDescriptor_s a
+	from curr_refsetdescriptor_s a
 	where a.refsetid <> '900000000000456007';
 	commit;

@@ -15,5 +15,5 @@ call validateModuleIdIsValidModuleInModuleDependencySnapshot_proc(<RUNID>,'<ASSE
 		'<ASSERTIONUUID>',
 		a.moduleid,
 		concat('Module with id = ',a.id,' in Module Dependency Snapshot file is inactive')
-    from curr_moduleDependency_s a where a.active = 0;
+    from curr_moduledependencyrefset_s a where a.active = 0;
 	commit;

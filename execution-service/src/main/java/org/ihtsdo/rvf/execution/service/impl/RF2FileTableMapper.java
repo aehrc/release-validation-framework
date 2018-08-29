@@ -53,7 +53,7 @@ public class RF2FileTableMapper {
 		tableNameMap.put(MRCM_ATRRIBUTE_RANGE_FILE_HEADER + DELTA, "mrcmAttributeRangeRefset_d");
 		tableNameMap.put(MRCM_DOMAIN_FILE_HEADER + DELTA, "mrcmDomainRefset_d");
 		tableNameMap.put(MODULE_DEPENDENCY_FILE_HEADER + DELTA, "moduledependencyrefset_d");
-		tableNameMap.put(REFSET_DESCRIPTOR_FILE_HEADER + DELTA, "refsetDescriptor_d");
+		tableNameMap.put(REFSET_DESCRIPTOR_FILE_HEADER + DELTA, "refsetdescriptor_d");
 		
 		//Full
 		tableNameMap.put(CONCEPT_FILE_HEADER + FULL, "concept_f");
@@ -75,7 +75,7 @@ public class RF2FileTableMapper {
 		tableNameMap.put(MRCM_ATRRIBUTE_RANGE_FILE_HEADER + FULL, "mrcmAttributeRangeRefset_f");
 		tableNameMap.put(MRCM_DOMAIN_FILE_HEADER + FULL, "mrcmDomainRefset_f");
 		tableNameMap.put(MODULE_DEPENDENCY_FILE_HEADER + FULL, "moduledependencyrefset_f");
-		tableNameMap.put(REFSET_DESCRIPTOR_FILE_HEADER + FULL, "refsetDescriptor_f");
+		tableNameMap.put(REFSET_DESCRIPTOR_FILE_HEADER + FULL, "refsetdescriptor_f");
 
 		//Snapshot
 		tableNameMap.put(CONCEPT_FILE_HEADER + SNAPSHOT, "concept_s");
@@ -97,7 +97,7 @@ public class RF2FileTableMapper {
 		tableNameMap.put(MRCM_ATRRIBUTE_RANGE_FILE_HEADER + SNAPSHOT, "mrcmAttributeRangeRefset_s");
 		tableNameMap.put(MRCM_DOMAIN_FILE_HEADER + SNAPSHOT, "mrcmDomainRefset_s");
 		tableNameMap.put(MODULE_DEPENDENCY_FILE_HEADER + SNAPSHOT, "moduledependencyrefset_s");
-		tableNameMap.put(REFSET_DESCRIPTOR_FILE_HEADER + SNAPSHOT, "refsetDescriptor_s");
+		tableNameMap.put(REFSET_DESCRIPTOR_FILE_HEADER + SNAPSHOT, "refsetdescriptor_s");
 	}
 	
 	public static String getLegacyTableName(final String filename) {

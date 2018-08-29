@@ -1196,8 +1196,8 @@ create table moduledependencyrefset_d(
 ) engine=myisam default charset=utf8;
 
 
-drop table if exists refsetDescriptor_d;
-create table refsetDescriptor_d(
+drop table if exists refsetdescriptor_d;
+create table refsetdescriptor_d(
 	id varchar(36) not null,
 	effectivetime char(8) not null,
 	active char(1) not null,
@@ -1218,8 +1218,8 @@ create table refsetDescriptor_d(
 	key idx_attributeorder(attributeorder)
 ) engine=myisam default charset=utf8;
 
-drop table if exists refsetDescriptor_f;
-create table refsetDescriptor_f(
+drop table if exists refsetdescriptor_f;
+create table refsetdescriptor_f(
 	id varchar(36) not null,
 	effectivetime char(8) not null,
 	active char(1) not null,
@@ -1240,8 +1240,8 @@ create table refsetDescriptor_f(
 	key idx_attributeorder(attributeorder)
 ) engine=myisam default charset=utf8;
 
-drop table if exists refsetDescriptor_s;
-create table refsetDescriptor_s(
+drop table if exists refsetdescriptor_s;
+create table refsetdescriptor_s(
 	id varchar(36) not null,
 	effectivetime char(8) not null,
 	active char(1) not null,
