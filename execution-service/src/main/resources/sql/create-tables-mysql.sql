@@ -1196,3 +1196,68 @@ create table moduledependencyrefset_d(
 ) engine=myisam default charset=utf8;
 
 
+drop table if exists refsetDescriptor_d;
+create table refsetDescriptor_d(
+	id varchar(36) not null,
+	effectivetime char(8) not null,
+	active char(1) not null,
+	moduleid bigint(20) not null,
+	refsetid bigint(20) not null,
+	referencedcomponentid bigint(20) not null,
+	attributedescription bigint(20) not null,
+	attributetype bigint(20) not null,
+	attributeorder bigint(20) not null,
+	key idx_id(id),
+	key idx_effectivetime(effectivetime),
+	key idx_active(active),
+	key idx_moduleid(moduleid),
+	key idx_refsetid(refsetid),
+	key idx_referencedcomponentid(referencedcomponentid),
+  key idx_attributedescription(attributedescription),
+	key idx_attributetype(attributetype),
+	key idx_attributeorder(attributeorder)
+) engine=myisam default charset=utf8;
+
+drop table if exists refsetDescriptor_f;
+create table refsetDescriptor_f(
+	id varchar(36) not null,
+	effectivetime char(8) not null,
+	active char(1) not null,
+	moduleid bigint(20) not null,
+	refsetid bigint(20) not null,
+	referencedcomponentid bigint(20) not null,
+	attributedescription bigint(20) not null,
+	attributetype bigint(20) not null,
+	attributeorder bigint(20) not null,
+	key idx_id(id),
+	key idx_effectivetime(effectivetime),
+	key idx_active(active),
+	key idx_moduleid(moduleid),
+	key idx_refsetid(refsetid),
+	key idx_referencedcomponentid(referencedcomponentid),
+  key idx_attributedescription(attributedescription),
+	key idx_attributetype(attributetype),
+	key idx_attributeorder(attributeorder)
+) engine=myisam default charset=utf8;
+
+drop table if exists refsetDescriptor_s;
+create table refsetDescriptor_s(
+	id varchar(36) not null,
+	effectivetime char(8) not null,
+	active char(1) not null,
+	moduleid bigint(20) not null,
+	refsetid bigint(20) not null,
+	referencedcomponentid bigint(20) not null,
+	attributedescription bigint(20) not null,
+	attributetype bigint(20) not null,
+	attributeorder bigint(20) not null,
+	key idx_id(id),
+	key idx_effectivetime(effectivetime),
+	key idx_active(active),
+	key idx_moduleid(moduleid),
+	key idx_refsetid(refsetid),
+	key idx_referencedcomponentid(referencedcomponentid),
+  key idx_attributedescription(attributedescription),
+	key idx_attributetype(attributetype),
+	key idx_attributeorder(attributeorder)
+) engine=myisam default charset=utf8;

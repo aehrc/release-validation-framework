@@ -1,6 +1,6 @@
 
 /********************************************************************************
-	component-centric-snapshot-module-dependency-validate-moduleid-is-valid-module-proc.sql
+	file-centric-snapshot-module-dependency-validate-moduleid-is-valid-module-proc.sql
 
 	Defines a procedure to validate whether a moduleId is a descendant of valid module in in Module Dependency Snapshot file
 

@@ -16,7 +16,8 @@
 		<script uuid="e8d87ec5-bb55-42a2-8368-f2fabd5835ca" category="resource" sqlFile="component-centric-delta-mrcm-refset-validate-concept-is-valid-descendant-proc.sql" text="Defines a procedure to validate whether a concept is a descendant of specified concepts in MRCM Refsets Delta" />
 		<script uuid="8d25d6e7-e4c6-488d-b96b-df1665c968ad" category="resource" sqlFile="component-centric-full-mrcm-refset-validate-concept-is-valid-descendant-proc.sql" text="Defines a procedure to validate whether a concept is a descendant of specified concepts in MRCM Refsets Full" />
 		<script uuid="045b977a-a5cb-49f6-9a80-54ff478062bb" category="resource" sqlFile="file-centric-moduleid-validation-proc.sql" text="Defines procedure to validate module ID in data" />
-		<script uuid="1078db94-8e05-44b6-8b3f-72d7d4e6b7f2" category="resource" sqlFile="component-centric-snapshot-module-dependency-validate-moduleid-is-valid-module-proc.sql" text="Defines a procedure to validate whether a moduleId is a valid descendant concept in Module Dependency Snapshot file"/>
+		<script uuid="1078db94-8e05-44b6-8b3f-72d7d4e6b7f2" category="resource" sqlFile="file-centric-snapshot-module-dependency-validate-moduleid-is-valid-module-proc.sql" text="Defines a procedure to validate whether a moduleId is a valid descendant concept in Module Dependency Snapshot file"/>
+		<script uuid="46c07ecc-1811-4157-a445-11e4a47c791 " category="resource" sqlFile="file-centric-snapshot-refset-descriptor-concept-is-valid-descendant-proc.sql" text="Defines a procedure to validate whether a concept is a valid descendant of specified concept in Refset Descriptor file"/>
 
 		<!-- release-type-full-validation -->
 		<script uuid="84f5edda-1249-4d79-87da-e248e61f06a6" category="release-type-validation" sqlFile="release-type-full-validation-concept.sql" text="The current Concept full file contains all previously published data unchanged." >
@@ -818,8 +819,16 @@
 		<script uuid="f5da66cc-5ae7-4260-afcf-068c61c62ef1" category="file-centric-validation,INT" sqlFile="file-centric-snapshot-module-dependency-target-and-source-effective-time-must-match.sql" text="In ModuleDependency files for International releases, targetEffectiveTime and sourceEffectiveTime must match with each other and with effectiveTime" />
 		<script uuid="e285baab-14a3-4ff6-822b-9e570da49e87" category="file-centric-validation,US,DK,SE,BE,NO" sqlFile="file-centric-snapshot-module-dependency-extension-effective-time-validation.sql"
 				  text="In ModuleDependency files for Extensions, effectiveTime and sourceEffectiveTime must match while having same values as current release effective time and targetEffectiveTime must match the dependent International release's effective time" />
-		<script uuid="f24d3377-30eb-4c7b-9d2b-b016ec5e7654" category="component-centric-validation,INT"
-				  sqlFile="component-centric-snapshot-module-dependency-moduleid-is-valid-module.sql" text="In Module Dependency, moduleId is a valid, active module within the International Edition"/>
+		<script uuid="f24d3377-30eb-4c7b-9d2b-b016ec5e7654" category="file-centric-validation,INT"
+				  sqlFile="file-centric-snapshot-module-dependency-moduleid-is-valid-module.sql" text="In Module Dependency, moduleId is a valid, active module within the International Edition"/>
+
+		<!-- Assertions for RefsetDescriptor files -->
+		<script uuid="5aa54c92-d6fe-4cb1-b5cf-37b127e6c6f2" category="file-centric-validation" sqlFile="file-centric-snapshot-refset-descriptor-refsetid.sql" text="In RefsetDescriptor files, the refsetId field is always set to 900000000000456007" />
+		<script uuid="28a809c5-7e3f-45b8-b8b4-b29e231ed532" category="file-centric-validation" sqlFile="file-centric-snapshot-refset-descriptor-field-value-valid.sql" text="In RefsetDescriptor files, the values of referencedComponentId, attributeDescription, attributeType must be valid" />
+		<script uuid="d35adea7-ed26-4071-b4f6-c76e4594d37a" category="file-centric-validation" sqlFile="file-centric-snapshot-refset-descriptor-attributeorder.sql" text="In RefsetDescriptor files, there must be one record with attributeOrder = 0 for each referencedComponentId and attributeOrder must be >= 0" />
+		<script uuid="82019fb7-0aaf-4d32-a68b-92d65bf7eeac" category="file-centric-validation" sqlFile="file-centric-snapshot-refset-descriptor-referencedcomponentid-attributeorder-unique.sql" text="Verify that RefsetDescriptor files contain only rows where each 'referencedComponentId + attributeOrder' pair is unique" />
+		<script uuid="8a44f630-287c-47ec-bce3-bc57cfd303c1" category="file-centric-validation" sqlFile="file-centric-snapshot-refset-descriptor-set-of-attributeorder.sql" text="Verify that RefsetDescriptor files contain only rows where for each referencedComponentId (ie) group by referencedComponentId, the set of attributeOrder values is a consecutive sequence starting at 0 (eg) 0, 1, 2, 3" />
+		<script uuid="4a5f3e98-97f3-4c0c-b388-7ab4a388fb33" category="file-centric-validation" sqlFile="file-centric-snapshot-refset-descriptor-referencedcomponentid-active-inactive.sql" text="Verify that RefsetDescriptor files contain only active rows where the referenced refset is active and contains only inactive rows where the referenced refset is inactive" />
 
 		<!-- rt added this as a template... -->
 		<!--  <script uuid="" category="" sqlFile="" text=""  />-->
