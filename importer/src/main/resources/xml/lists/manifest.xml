@@ -840,8 +840,14 @@
 
 		<script uuid="66d18b46-e359-4bbc-9bdd-1cfafc441ff5" category="component-centric-validation,INT" sqlFile="component-centric-snapshot-description-root-concept-synonym-reference-new-release.sql" text="Verify that the root concept synonym is now referencing the latest new release" />
 
-		
-
+		<!-- Warning -->
+		<script uuid="d209029c-f4ac-4a4e-8fb0-50590513c0f2" category="file-centric-validation,INT" sqlFile="file-centric-snapshot-simple-refset-contains-only-lateralizable.sql" text="Verify that the simple refset files only contains Lateralizable refset (International Edition only)" />
+		<script uuid="0cc4a621-7043-40d5-8ff4-ba6fb899de87" category="release-type-validation" sqlFile="release-type-delta-no-reactivated-concept.sql" text="Verify that there are no concepts that have been re-activated since the last release" />
+		<script uuid="c5aae9c7-337a-4d68-8877-5a2df5bb1ff4" category="release-type-validation" sqlFile="release-type-delta-concept-definition-status-unchanged.sql" text="Verify that there are no concepts that changed from fully defined to primitive and vice versa" />
+		<script uuid="8b3cb11e-8e05-4396-8739-4b1f52978581" category="component-centric-validation" sqlFile="component-centric-snapshot-validation-active-concept-historical-association.sql" text="Verify that there are no active concepts having active historical associations and reasons for inactivation" />
+		<script uuid="d2787a3a-c347-466b-bee2-f72f1e668af9" category="release-type-validation" sqlFile="release-type-delta-no-concept-fsn-change.sql" text="Verify that there are no concepts with changed FSN and semantic tags" />
+		<script uuid="87eac640-bdd7-451e-b3d7-211c0ecde76c" category="release-type-validation" sqlFile="release-type-full-snapshot-refset-descriptor-identical-to-previous-release.sql" text="Verify that RefsetDescriptor Full and Snapshot files should be identical to last release" />
+		<script uuid="995ee930-4200-45dd-a96d-2b8b48092fdb" category="release-type-validation" sqlFile="release-type-full-snapshot-refset-description-type-identical-to-previous-release.sql" text="Verify that DescriptionType Full and Snapshot files should be identical to last release" />
 		<!-- rt added this as a template... -->
 		<!--  <script uuid="" category="" sqlFile="" text=""  />-->
 
