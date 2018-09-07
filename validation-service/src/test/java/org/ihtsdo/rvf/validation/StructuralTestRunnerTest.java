@@ -96,7 +96,7 @@ public class StructuralTestRunnerTest {
 		TestReportable response = validationRunner.execute(provider, new TestWriterDelegate(new StringWriter()), true, manifestFile);
 
 		assertTrue(response.getResult() != null);
-		assertEquals("should only be manifest errors in this", 54, response.getNumErrors());
+		assertEquals("should only be manifest errors in this", 55, response.getNumErrors());
 	}
 
 	private File getFile(String testFileName) throws URISyntaxException {
