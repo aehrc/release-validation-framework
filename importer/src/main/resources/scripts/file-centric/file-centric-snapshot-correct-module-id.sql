@@ -17,5 +17,5 @@ where active = 1;
 
 insert into module_id(moduleid) values(900000000000207008);
 
-call validate_module_id('<PROSPECTIVE>',<RUNID>,'<ASSERTIONUUID>');
+call validate_module_id('<ORIGINAL_PROSPECTIVE>',<RUNID>,'<ASSERTIONUUID>');
 	

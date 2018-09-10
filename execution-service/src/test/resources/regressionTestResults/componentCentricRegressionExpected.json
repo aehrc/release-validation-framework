@@ -1,7 +1,7 @@
 {
   "assertionType" : "component-centric-validation",
-  "totalAssertionsRun" : 112,
-  "totalAssertionsFailed" : 112,
+  "totalAssertionsRun" : 117,
+  "totalAssertionsFailed" : 114,
   "results" : [ {
     "assertionName" : "Case-sensitive terms that share initial words also share caseSignificanceId value.",
     "assertionUuid" : "805ab37c-33fa-45aa-876b-f86365a828c8",
@@ -40,6 +40,14 @@
       "detail" : "MEMBER: id=65f4359b-bf19-5d99-abc1-7139bbff5d47: Active Non-human simple refset members refer to inactive components."
     } ],
     "totalFailed" : 2
+  }, {
+    "assertionName" : "Verify that there are no active concepts having active historical associations and reasons for inactivation",
+    "assertionUuid" : "8b3cb11e-8e05-4396-8739-4b1f52978581",
+    "firstNInstances" : [ {
+      "conceptId" : "702411003",
+      "detail" : "Warning: Concept:702411003 is active but has active historical association"
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "The FSN term should be unique in active content.",
     "assertionUuid" : "8d6ab114-caca-4d99-9fec-bb8fd9cea518",
@@ -286,6 +294,11 @@
     } ],
     "totalFailed" : 160
   }, {
+    "assertionName" : "Verify that ExtendedMap files contain nothing except ICD-10 maps (International Edition only)",
+    "assertionUuid" : "a23ad275-836a-45b2-a57b-b48222305588",
+    "firstNInstances" : null,
+    "totalFailed" : 0
+  }, {
     "assertionName" : "CTV3 simple map refset members are unique.",
     "assertionUuid" : "a2e01ee0-7f25-11e1-b0c4-0800200c9a66",
     "firstNInstances" : [ {
@@ -443,6 +456,17 @@
     } ],
     "totalFailed" : 1
   }, {
+    "assertionName" : "Verify that simpleMap files contain both ICD-0 + CTV3 maps, but nothing else (International Edition only)",
+    "assertionUuid" : "c3f0d731-6318-48bf-8028-b58b18b7c329",
+    "firstNInstances" : [ {
+      "conceptId" : "900000000000207008",
+      "detail" : "Refset with id = e406cda8-4ffe-54d0-b0d0-b0b8f8249621 and refsetId = 900000000000498005 in Simple Map Snapshot file is not ICD-0 or CTV3 map"
+    }, {
+      "conceptId" : "900000000000207008",
+      "detail" : "Refset with id = e406cda8-4ffe-54d0-b0d0-b0b8f8249623 and refsetId = 900000000000498005 in Simple Map Snapshot file is not ICD-0 or CTV3 map"
+    } ],
+    "totalFailed" : 2
+  }, {
     "assertionName" : "Active preferred terms for active concepts are unique in the same hierarchy",
     "assertionUuid" : "c82246b1-a137-40c5-8653-554c9ce82c6b",
     "firstNInstances" : [ {
@@ -453,6 +477,41 @@
       "detail" : "Preferred term=Exposure to vibration   is duplicated in hierarchy (disorder)"
     } ],
     "totalFailed" : 2
+  }, {
+    "assertionName" : "Verify that all map records have valid, active SNOMED CT concepts in the referencedComponentId field",
+    "assertionUuid" : "cc565f6b-a681-4f98-b129-36b42d0ae02e",
+    "firstNInstances" : [ {
+      "conceptId" : "449080006",
+      "detail" : "EXTENDED MAP REFSET SNAPSHOT: id=1d507f04-26a6-5a9d-8f3c-abb34b971a61 has invalid concept in ReferencedComponentId field = 127009"
+    }, {
+      "conceptId" : "449080006",
+      "detail" : "EXTENDED MAP REFSET SNAPSHOT: id=49361643-765b-54e7-8033-9b8f8426f081 has invalid concept in ReferencedComponentId field = 127009"
+    }, {
+      "conceptId" : "449080006",
+      "detail" : "EXTENDED MAP REFSET SNAPSHOT: id=217a9bea-0b4e-5499-8a61-e4d661e722b0 has invalid concept in ReferencedComponentId field = 140004"
+    }, {
+      "conceptId" : "449080006",
+      "detail" : "EXTENDED MAP REFSET SNAPSHOT: id=69703317-411e-5d4d-b853-eef523f0109b has invalid concept in ReferencedComponentId field = 140004"
+    }, {
+      "conceptId" : "449080006",
+      "detail" : "EXTENDED MAP REFSET SNAPSHOT: id=174a7931-88f1-5fc7-99fc-f0fc8f104f87 has invalid concept in ReferencedComponentId field = 140004"
+    }, {
+      "conceptId" : "449080006",
+      "detail" : "EXTENDED MAP REFSET SNAPSHOT: id=02dc8b54-b1ce-5fbb-8b2c-9f84140426ff has invalid concept in ReferencedComponentId field = 162004"
+    }, {
+      "conceptId" : "449080006",
+      "detail" : "EXTENDED MAP REFSET SNAPSHOT: id=eb06f231-de00-53a1-901b-f016aa4d2e65 has invalid concept in ReferencedComponentId field = 171008"
+    }, {
+      "conceptId" : "449080006",
+      "detail" : "EXTENDED MAP REFSET SNAPSHOT: id=a80af01d-cb02-58b0-a267-123144076f48 has invalid concept in ReferencedComponentId field = 177007"
+    }, {
+      "conceptId" : "449080006",
+      "detail" : "EXTENDED MAP REFSET SNAPSHOT: id=9d7c45ee-5a0d-5a3c-95dd-30b8b4853550 has invalid concept in ReferencedComponentId field = 177007"
+    }, {
+      "conceptId" : "449080006",
+      "detail" : "EXTENDED MAP REFSET SNAPSHOT: id=9d7c45ee-5a0d-5a3c-95dd-30b8b4853550 has invalid concept in ReferencedComponentId field = 177007"
+    } ],
+    "totalFailed" : 51
   }, {
     "assertionName" : "Terms that contain en-gb specific words are in the en-gb language refset.",
     "assertionUuid" : "cc9c5340-84f0-11e1-b0c4-0800200c9a66",
@@ -642,23 +701,6 @@
       "detail" : "CONCEPT: id=702411003:Concept has only one defining relationship but the definition status is not primitive."
     } ],
     "totalFailed" : 1
-  }, {
-    "assertionName" : "Verify that moduleId is a valid module in Module Dependency Snapshot",
-    "assertionUuid" : "f24d3377-30eb-4c7b-9d2b-b016ec5e7654",
-    "firstNInstances" : [ {
-      "conceptId" : "900000000000207008",
-      "detail" : "Refset with Id = 1244116f-fdb5-5645-afcc-5281288409da referenced in the column: moduleid of table: moduledependencyrefset_s is inactive or not a valid descendant of 900000000000443000 |Module|"
-    }, {
-      "conceptId" : "449080006",
-      "detail" : "Refset with Id = 686fe392-d2f7-586d-98aa-078aba426832 referenced in the column: moduleid of table: moduledependencyrefset_s is inactive or not a valid descendant of 900000000000443000 |Module|"
-    }, {
-      "conceptId" : "449080006",
-      "detail" : "Refset with Id = f6431457-161b-5b46-9217-573c20c00070 referenced in the column: moduleid of table: moduledependencyrefset_s is inactive or not a valid descendant of 900000000000443000 |Module|"
-    }, {
-      "conceptId" : "449080006",
-      "detail" : "Refset with Id = f6431457-161b-5b46-9217-573c20c00071 referenced in the column: moduleid of table: moduledependencyrefset_s is inactive or not a valid descendant of 900000000000443000 |Module|"
-    } ],
-    "totalFailed" : 4
   }, {
     "assertionName" : "AttributeInGroupCardinality value is in ('0..0', '0..1', '0..*') in MRCM ATTRIBUTE DOMAIN snapshot file",
     "assertionUuid" : "f47d1537-41dc-4cb5-ad0a-ed4caf993801",
@@ -1012,6 +1054,11 @@
     } ],
     "totalFailed" : 1
   }, {
+    "assertionName" : "Verify that LOINC concepts never make it into the International Edition",
+    "assertionUuid" : "49965d3e-9afd-43e4-8e7d-16fae915ff7c",
+    "firstNInstances" : null,
+    "totalFailed" : 0
+  }, {
     "assertionName" : "Stated relationship modifier is always SOME.",
     "assertionUuid" : "4d32c9d0-7d08-11e1-b0c4-0800200c9a66",
     "firstNInstances" : [ {
@@ -1227,6 +1274,11 @@
       "detail" : "DESCRIPTION ID=3006276018: Synonym=Fracture \\clinic  contains invalid character."
     } ],
     "totalFailed" : 1
+  }, {
+    "assertionName" : "Verify that the root concept synonym is now referencing the latest new release",
+    "assertionUuid" : "66d18b46-e359-4bbc-9bdd-1cfafc441ff5",
+    "firstNInstances" : null,
+    "totalFailed" : 0
   }, {
     "assertionName" : "SNOMED RT identifier simple map refset refers to active components.",
     "assertionUuid" : "695cea40-7f25-11e1-b0c4-0800200c9a66",
