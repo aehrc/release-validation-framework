@@ -456,7 +456,7 @@
     } ],
     "totalFailed" : 1
   }, {
-    "assertionName" : "Verify that simpleMap files contain both ICD-0 + CTV3 maps, but nothing else (International Edition only)",
+    "assertionName" : "Verify that simple map files contain both ICD-0 + CTV3 maps, but nothing else (International Edition only)",
     "assertionUuid" : "c3f0d731-6318-48bf-8028-b58b18b7c329",
     "firstNInstances" : [ {
       "conceptId" : "900000000000207008",
@@ -478,7 +478,7 @@
     } ],
     "totalFailed" : 2
   }, {
-    "assertionName" : "Verify that all map records have valid, active SNOMED CT concepts in the referencedComponentId field",
+    "assertionName" : "Verify that simple map, extended map, complex map have valid, active SNOMED CT concepts in the referencedComponentId field",
     "assertionUuid" : "cc565f6b-a681-4f98-b129-36b42d0ae02e",
     "firstNInstances" : [ {
       "conceptId" : "449080006",

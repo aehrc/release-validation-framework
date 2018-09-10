@@ -829,8 +829,8 @@
 		<script uuid="4a5f3e98-97f3-4c0c-b388-7ab4a388fb33" category="file-centric-validation" sqlFile="file-centric-snapshot-refset-descriptor-referencedcomponentid-active-inactive.sql" text="Verify that RefsetDescriptor files contain only active rows where the referenced refset is active and contains only inactive rows where the referenced refset is inactive" />
 
 		<!-- Assertion for map refset -->
-		<script uuid="cc565f6b-a681-4f98-b129-36b42d0ae02e" category="component-centric-validation,INT" sqlFile="component-centric-snapshot-all-maps-referencedcomponentid-is-active-concept.sql" text="Verify that all map records have valid, active SNOMED CT concepts in the referencedComponentId field" />
-		<script uuid="c3f0d731-6318-48bf-8028-b58b18b7c329" category="component-centric-validation,INT" sqlFile="component-centric-snapshot-simple-map-refsetid-contains-only-ICD0-CTV3.sql" text="Verify that simpleMap files contain both ICD-0 + CTV3 maps, but nothing else (International Edition only)" />
+		<script uuid="cc565f6b-a681-4f98-b129-36b42d0ae02e" category="component-centric-validation,INT" sqlFile="component-centric-snapshot-all-maps-referencedcomponentid-is-active-concept.sql" text="Verify that simple map, extended map, complex map have valid, active SNOMED CT concepts in the referencedComponentId field" />
+		<script uuid="c3f0d731-6318-48bf-8028-b58b18b7c329" category="component-centric-validation,INT" sqlFile="component-centric-snapshot-simple-map-refsetid-contains-only-ICD0-CTV3.sql" text="Verify that simple map files contain both ICD-0 + CTV3 maps, but nothing else (International Edition only)" />
 		<script uuid="a23ad275-836a-45b2-a57b-b48222305588" category="component-centric-validation,INT" sqlFile="component-centric-snapshot-extendedmap-contains-only-ICD10.sql" text="Verify that ExtendedMap files contain nothing except ICD-10 maps (International Edition only)" />
 
 		<!-- Assertion to make sure LOINC not in INT -->
