@@ -17,6 +17,8 @@ public class ExecutionConfig {
 	private boolean jiraIssueCreationFlag;
 	private String productName;
 	private String reportingStage;
+	private String effectiveTime;
+	private String dependencyEffectiveTime;
 
 	public ExecutionConfig(final Long runId) {
 		this(runId,false);
@@ -132,6 +134,19 @@ public class ExecutionConfig {
 		this.reportingStage = reportingStage;
 	}
 
-	
-	
+	public String getEffectiveTime() {
+		return effectiveTime;
+	}
+
+	public void setEffectiveTime(String effectiveTime) {
+		this.effectiveTime = effectiveTime;
+	}
+
+	public String getDependencyEffectiveTime() {
+		return dependencyEffectiveTime;
+	}
+
+	public void setDependencyEffectiveTime(String dependencyEffectiveTime) {
+		this.dependencyEffectiveTime = dependencyEffectiveTime;
+	}
 }

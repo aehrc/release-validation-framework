@@ -270,6 +270,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 				ratSchema = ratSchema.substring("curr_".length());
 				currOrPrevFound = true;
 			}
+			else if(ratSchema.startsWith("original_curr_")){
+				rvfSchema = "<ORIGINAL_PROSPECTIVE>";
+				// we strip the prefix - note we don't include _ in length since strings are 0 indexed
+				ratSchema = ratSchema.substring("original_curr_".length());
+				currOrPrevFound = true;
+			}
 			else if(ratSchema.startsWith("prev_")){
 				rvfSchema = "<PREVIOUS>";
 				// we strip the prefix - note we don't include _ in length since strings are 0 indexed

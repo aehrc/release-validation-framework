@@ -45,7 +45,7 @@ moduleid bigint(20) not null,
 conceptid bigint(20) not null,
 languagecode varchar(2) not null,
 typeid bigint(20) not null,
-term varchar(2048) not null,
+term varchar(4096) not null,
 casesignificanceid bigint(20) not null,
 key idx_id(id),
 key idx_effectivetime(effectivetime),
@@ -216,6 +216,26 @@ create table complexmaprefset_f(
 	key idx_mapTarget(mapTarget)
 ) engine=myisam default charset=utf8;
 
+drop table if exists moduledependencyrefset_f;
+create table moduledependencyrefset_f(
+	id varchar(36) not null,
+	effectivetime char(8) not null,
+	active char(1) not null,
+	moduleid bigint(20) not null,
+	refsetid bigint(20) not null,
+	referencedcomponentid bigint(20) not null,
+	sourceeffectivetime char(8) not null,
+	targeteffectivetime char(8) not null,
+	key idx_id(id),
+	key idx_effectivetime(effectivetime),
+	key idx_active(active),
+	key idx_moduleid(moduleid),
+	key idx_refsetid(refsetid),
+	key idx_referencedcomponentid(referencedcomponentid),
+	key idx_sourceeffectivetime(sourceeffectivetime),
+	key idx_targeteffectivetime(targeteffectivetime)
+) engine=myisam default charset=utf8;
+
 /* create the Snapshot S-CT data tables */
 
 drop table if exists concept_s;
@@ -264,7 +284,7 @@ moduleid bigint(20) not null,
 conceptid bigint(20) not null,
 languagecode varchar(2) not null,
 typeid bigint(20) not null,
-term varchar(2048) not null,
+term varchar(4096) not null,
 casesignificanceid bigint(20) not null,
 key idx_id(id),
 key idx_effectivetime(effectivetime),
@@ -435,6 +455,26 @@ create table complexmaprefset_s(
 	key idx_mapTarget(mapTarget)
 ) engine=myisam default charset=utf8;
 
+drop table if exists moduledependencyrefset_s;
+create table moduledependencyrefset_s(
+	id varchar(36) not null,
+	effectivetime char(8) not null,
+	active char(1) not null,
+	moduleid bigint(20) not null,
+	refsetid bigint(20) not null,
+	referencedcomponentid bigint(20) not null,
+	sourceeffectivetime char(8) not null,
+	targeteffectivetime char(8) not null,
+	key idx_id(id),
+	key idx_effectivetime(effectivetime),
+	key idx_active(active),
+	key idx_moduleid(moduleid),
+	key idx_refsetid(refsetid),
+	key idx_referencedcomponentid(referencedcomponentid),
+	key idx_sourceeffectivetime(sourceeffectivetime),
+	key idx_targeteffectivetime(targeteffectivetime)
+) engine=myisam default charset=utf8;
+
 
 /* create the Delta S-CT data tables */
 
@@ -484,7 +524,7 @@ moduleid bigint(20) not null,
 conceptid bigint(20) not null,
 languagecode varchar(2) not null,
 typeid bigint(20) not null,
-term varchar(2048) not null,
+term varchar(4096) not null,
 casesignificanceid bigint(20) not null,
 key idx_id(id),
 key idx_effectivetime(effectivetime),
@@ -1133,4 +1173,151 @@ create table mrcmDomainRefset_d(
 	key idx_moduleid(moduleid),
 	key idx_refsetid(refsetid),
 	key idx_referencedcomponentid(referencedcomponentid)
+) engine=myisam default charset=utf8;
+
+drop table if exists moduledependencyrefset_d;
+create table moduledependencyrefset_d(
+	id varchar(36) not null,
+	effectivetime char(8) not null,
+	active char(1) not null,
+	moduleid bigint(20) not null,
+	refsetid bigint(20) not null,
+	referencedcomponentid bigint(20) not null,
+	sourceeffectivetime char(8) not null,
+	targeteffectivetime char(8) not null,
+	key idx_id(id),
+	key idx_effectivetime(effectivetime),
+	key idx_active(active),
+	key idx_moduleid(moduleid),
+	key idx_refsetid(refsetid),
+	key idx_referencedcomponentid(referencedcomponentid),
+	key idx_sourceeffectivetime(sourceeffectivetime),
+	key idx_targeteffectivetime(targeteffectivetime)
+) engine=myisam default charset=utf8;
+
+
+drop table if exists refsetdescriptor_d;
+create table refsetdescriptor_d(
+	id varchar(36) not null,
+	effectivetime char(8) not null,
+	active char(1) not null,
+	moduleid bigint(20) not null,
+	refsetid bigint(20) not null,
+	referencedcomponentid bigint(20) not null,
+	attributedescription bigint(20) not null,
+	attributetype bigint(20) not null,
+	attributeorder bigint(20) not null,
+	key idx_id(id),
+	key idx_effectivetime(effectivetime),
+	key idx_active(active),
+	key idx_moduleid(moduleid),
+	key idx_refsetid(refsetid),
+	key idx_referencedcomponentid(referencedcomponentid),
+  key idx_attributedescription(attributedescription),
+	key idx_attributetype(attributetype),
+	key idx_attributeorder(attributeorder)
+) engine=myisam default charset=utf8;
+
+drop table if exists refsetdescriptor_f;
+create table refsetdescriptor_f(
+	id varchar(36) not null,
+	effectivetime char(8) not null,
+	active char(1) not null,
+	moduleid bigint(20) not null,
+	refsetid bigint(20) not null,
+	referencedcomponentid bigint(20) not null,
+	attributedescription bigint(20) not null,
+	attributetype bigint(20) not null,
+	attributeorder bigint(20) not null,
+	key idx_id(id),
+	key idx_effectivetime(effectivetime),
+	key idx_active(active),
+	key idx_moduleid(moduleid),
+	key idx_refsetid(refsetid),
+	key idx_referencedcomponentid(referencedcomponentid),
+  key idx_attributedescription(attributedescription),
+	key idx_attributetype(attributetype),
+	key idx_attributeorder(attributeorder)
+) engine=myisam default charset=utf8;
+
+drop table if exists refsetdescriptor_s;
+create table refsetdescriptor_s(
+	id varchar(36) not null,
+	effectivetime char(8) not null,
+	active char(1) not null,
+	moduleid bigint(20) not null,
+	refsetid bigint(20) not null,
+	referencedcomponentid bigint(20) not null,
+	attributedescription bigint(20) not null,
+	attributetype bigint(20) not null,
+	attributeorder bigint(20) not null,
+	key idx_id(id),
+	key idx_effectivetime(effectivetime),
+	key idx_active(active),
+	key idx_moduleid(moduleid),
+	key idx_refsetid(refsetid),
+	key idx_referencedcomponentid(referencedcomponentid),
+  key idx_attributedescription(attributedescription),
+	key idx_attributetype(attributetype),
+	key idx_attributeorder(attributeorder)
+) engine=myisam default charset=utf8;
+
+drop table if exists descriptiontype_d;
+create table descriptiontype_d(
+	id varchar(36) not null,
+	effectivetime char(8) not null,
+	active char(1) not null,
+	moduleid bigint(20) not null,
+	refsetid bigint(20) not null,
+	referencedcomponentid bigint(20) not null,
+  descriptionformat bigint(20) not null,
+  descriptionlength integer not null,
+	key idx_id(id),
+	key idx_effectivetime(effectivetime),
+	key idx_active(active),
+	key idx_moduleid(moduleid),
+	key idx_refsetid(refsetid),
+	key idx_referencedcomponentid(referencedcomponentid),
+  key idx_descriptionformat(descriptionformat),
+	key idx_descriptionlength(descriptionlength)
+) engine=myisam default charset=utf8;
+
+drop table if exists descriptiontype_s;
+create table descriptiontype_s(
+  id varchar(36) not null,
+  effectivetime char(8) not null,
+  active char(1) not null,
+  moduleid bigint(20) not null,
+  refsetid bigint(20) not null,
+  referencedcomponentid bigint(20) not null,
+  descriptionformat bigint(20) not null,
+  descriptionlength integer not null,
+  key idx_id(id),
+  key idx_effectivetime(effectivetime),
+  key idx_active(active),
+  key idx_moduleid(moduleid),
+  key idx_refsetid(refsetid),
+  key idx_referencedcomponentid(referencedcomponentid),
+  key idx_descriptionformat(descriptionformat),
+  key idx_descriptionlength(descriptionlength)
+) engine=myisam default charset=utf8;
+
+drop table if exists descriptiontype_f;
+create table descriptiontype_f(
+  id varchar(36) not null,
+  effectivetime char(8) not null,
+  active char(1) not null,
+  moduleid bigint(20) not null,
+  refsetid bigint(20) not null,
+  referencedcomponentid bigint(20) not null,
+  descriptionformat bigint(20) not null,
+  descriptionlength integer not null,
+  key idx_id(id),
+  key idx_effectivetime(effectivetime),
+  key idx_active(active),
+  key idx_moduleid(moduleid),
+  key idx_refsetid(refsetid),
+  key idx_referencedcomponentid(referencedcomponentid),
+  key idx_descriptionformat(descriptionformat),
+  key idx_descriptionlength(descriptionlength)
 ) engine=myisam default charset=utf8;

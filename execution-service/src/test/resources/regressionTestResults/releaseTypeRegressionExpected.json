@@ -1,7 +1,7 @@
 {
   "assertionType" : "release-type-validation",
-  "totalAssertionsRun" : 121,
-  "totalAssertionsFailed" : 121,
+  "totalAssertionsRun" : 127,
+  "totalAssertionsFailed" : 127,
   "results" : [ {
     "assertionName" : "There must be actual changes made to previously published complex map refset components in order for them to appear in the current delta.",
     "assertionUuid" : "80463c76-d84e-4a1a-8abb-c5b4d12b5da4",
@@ -46,6 +46,23 @@
       "detail" : "MRCM DOMAIN REFSET: id=7ca9ec15-74ce-488d-a250-2a3c71278268 is in prior full file but not in current full file."
     } ],
     "totalFailed" : 1
+  }, {
+    "assertionName" : "Verify that RefsetDescriptor Full and Snapshot files should be identical to last release",
+    "assertionUuid" : "87eac640-bdd7-451e-b3d7-211c0ecde76c",
+    "firstNInstances" : [ {
+      "conceptId" : "0",
+      "detail" : "Warning: RefsetDescriptor:ca083ad0-bc5b-5b7b-9641-e3c016af290e is not found in last release RefsetDescriptor Snapshot file"
+    }, {
+      "conceptId" : "0",
+      "detail" : "Warning: RefsetDescriptor:ca083ad0-bc5b-5b7b-9641-e3c016af290a is not found in last release RefsetDescriptor Snapshot file"
+    }, {
+      "conceptId" : "0",
+      "detail" : "Warning: RefsetDescriptor:ca083ad0-bc5b-5b7b-9641-e3c016af290a is not found in last release RefsetDescriptor Snapshot file"
+    }, {
+      "conceptId" : "0",
+      "detail" : "Warning: RefsetDescriptor:ca083ad0-bc5b-5b7b-9641-e3c016af290e is not found in last release RefsetDescriptor Full file"
+    } ],
+    "totalFailed" : 4
   }, {
     "assertionName" : "New inactive states follow active states in the SIMPLE MAP REFSET snapshot.",
     "assertionUuid" : "88315a11-4e71-49d2-977f-a5d5ac2a4dc4",
@@ -203,6 +220,17 @@
       "detail" : "SimpleRefsetId=22934c1b-b7dd-537c-b2cc-caa9ca5ae6f3 is in the detla file, but no actual changes made since the previous release."
     } ],
     "totalFailed" : 1
+  }, {
+    "assertionName" : "Verify that DescriptionType Full and Snapshot files should be identical to last release",
+    "assertionUuid" : "995ee930-4200-45dd-a96d-2b8b48092fdb",
+    "firstNInstances" : [ {
+      "conceptId" : "0",
+      "detail" : "Warning: DescriptionType:807f775b-1d66-5069-b58e-a37ace985dce is not found in last release DescriptionType Snapshot file"
+    }, {
+      "conceptId" : "0",
+      "detail" : "Warning: DescriptionType:807f775b-1d66-5069-b58e-a37ace985dce is not found in last release DescriptionType Full file"
+    } ],
+    "totalFailed" : 2
   }, {
     "assertionName" : "There must be actual changes made to previously published language refset components in order for them to appear in the current delta.",
     "assertionUuid" : "a0a0b444-b1c7-4d31-ac45-c44f2e35c5a5",
@@ -540,6 +568,14 @@
     } ],
     "totalFailed" : 9
   }, {
+    "assertionName" : "Verify that there are no concepts that changed from fully defined to primitive and vice versa",
+    "assertionUuid" : "c5aae9c7-337a-4d68-8877-5a2df5bb1ff4",
+    "firstNInstances" : [ {
+      "conceptId" : "699765004",
+      "detail" : "Warning: Concept:699765004 has been changed from fully defined to primitive"
+    } ],
+    "totalFailed" : 1
+  }, {
     "assertionName" : "The current data in the Definition snapshot file are the same as the data in the current delta file.",
     "assertionUuid" : "c837a6f8-f06a-4599-944c-eaa3a6d68c18",
     "firstNInstances" : [ {
@@ -585,6 +621,14 @@
     } ],
     "totalFailed" : 1
   }, {
+    "assertionName" : "There must be updated records for previously existing module dependency with same UUID but new effective time",
+    "assertionUuid" : "cde37e86-7dff-47c6-a08a-01d5ba6ca744",
+    "firstNInstances" : [ {
+      "conceptId" : "449080006",
+      "detail" : "Module Dependency with id = f6431457-161b-5b46-9217-573c20c00072 in previous Snapshot does not exist in current Delta file"
+    } ],
+    "totalFailed" : 1
+  }, {
     "assertionName" : "There must be actual changes made to previously published MRCM Attribute Range Refset components in order for them to appear in the current delta.",
     "assertionUuid" : "cec2a50e-c04b-4442-a979-e8ad8f83ff91",
     "firstNInstances" : [ {
@@ -627,6 +671,17 @@
       "detail" : "Mrcm Attribute Range Refset: id=9f81ad41-c5ee-4d46-8393-6a1455018880 is inactive but no active state found in the previous snapshot."
     } ],
     "totalFailed" : 1
+  }, {
+    "assertionName" : "Verify that there are no concepts with changed FSN and semantic tags",
+    "assertionUuid" : "d2787a3a-c347-466b-bee2-f72f1e668af9",
+    "firstNInstances" : [ {
+      "conceptId" : "438956003",
+      "detail" : "Warning: Description:2786097015 is a changed FSN"
+    }, {
+      "conceptId" : "438956003",
+      "detail" : "Warning: Description:2786097015 has semantic tag changed"
+    } ],
+    "totalFailed" : 2
   }, {
     "assertionName" : "There must be actual changes made to previously published MRCM Module Scope Refset components in order for them to appear in the current delta.",
     "assertionUuid" : "d7e12c75-9979-4adb-9b5b-3b8a80ab4fbb",
@@ -717,8 +772,14 @@
     }, {
       "conceptId" : "699765003",
       "detail" : "CONCEPT: id=699765003 is in delta but not in snapshot file."
+    }, {
+      "conceptId" : "699765004",
+      "detail" : "CONCEPT: id=699765004 is in delta but not in snapshot file."
+    }, {
+      "conceptId" : "438958002",
+      "detail" : "CONCEPT: id=438958002 is in delta but not in snapshot file."
     } ],
-    "totalFailed" : 5
+    "totalFailed" : 7
   }, {
     "assertionName" : "New inactive states follow active states in the DEFINITION snapshot file.",
     "assertionUuid" : "e6082dc4-c6f4-48c6-afa3-233182336a5c",
@@ -914,7 +975,7 @@
       "conceptId" : "700132006",
       "detail" : "DESCRIPTION: id=3005197021 is in delta file but not in snapshot file."
     } ],
-    "totalFailed" : 14
+    "totalFailed" : 15
   }, {
     "assertionName" : "The current simple refset snapshot file is an accurate derivative of the current full file",
     "assertionUuid" : "0988de1d-29dd-4668-bcbf-032d38692492",
@@ -953,6 +1014,14 @@
     "firstNInstances" : [ {
       "conceptId" : "900000000000207008",
       "detail" : "MRCM MODULE SCOPE REFSET: id=0ed5d8f4-0a9e-479f-929d-e0a6bb9eb871 is in delta file but not in snapshot file."
+    } ],
+    "totalFailed" : 1
+  }, {
+    "assertionName" : "Verify that there are no concepts that have been re-activated since the last release",
+    "assertionUuid" : "0cc4a621-7043-40d5-8ff4-ba6fb899de87",
+    "firstNInstances" : [ {
+      "conceptId" : "438958002",
+      "detail" : "Warning: Concept:438958002 has been reactivated since the last release"
     } ],
     "totalFailed" : 1
   }, {
@@ -1101,8 +1170,14 @@
     }, {
       "conceptId" : "699765003",
       "detail" : "CONCEPT: id=699765003 is in DELTA file, but not in FULL file."
+    }, {
+      "conceptId" : "699765004",
+      "detail" : "CONCEPT: id=699765004 is in DELTA file, but not in FULL file."
+    }, {
+      "conceptId" : "438958002",
+      "detail" : "CONCEPT: id=438958002 is in DELTA file, but not in FULL file."
     } ],
-    "totalFailed" : 2
+    "totalFailed" : 4
   }, {
     "assertionName" : "The current simple map refset snapshot file is an accurate derivative of the current full file",
     "assertionUuid" : "1d38106d-495e-4d86-8936-33c7e5a12a8f",
@@ -1383,7 +1458,7 @@
       "conceptId" : "700132006",
       "detail" : "DESCRIPTION: id=3008862015 is in DELTA file, but not in FULL file."
     } ],
-    "totalFailed" : 17
+    "totalFailed" : 18
   }, {
     "assertionName" : "The current Definition full file contains all previously published data unchanged.",
     "assertionUuid" : "433adc93-fdd5-462a-b1fa-11fb4045a9ec",

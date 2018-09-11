@@ -1,8 +1,19 @@
 {
   "assertionType" : "file-centric-validation",
-  "totalAssertionsRun" : 89,
-  "totalAssertionsFailed" : 75,
+  "totalAssertionsRun" : 101,
+  "totalAssertionsFailed" : 87,
   "results" : [ {
+    "assertionName" : "Verify that RefsetDescriptor files contain only rows where each 'referencedComponentId + attributeOrder' pair is unique",
+    "assertionUuid" : "82019fb7-0aaf-4d32-a68b-92d65bf7eeac",
+    "firstNInstances" : [ {
+      "conceptId" : "449080006",
+      "detail" : "Refset: id=ca083ad0-bc5b-5b7b-9641-e3c016af290e with ReferencedComponentId = 447562003 + AttributeOrder = 8  is not unique pair in REFSET DESCRIPTOR SNAPSHOT"
+    }, {
+      "conceptId" : "449080006",
+      "detail" : "Refset: id=ca083ad0-bc5b-5b7b-9641-e3c016af290a with ReferencedComponentId = 447562003 + AttributeOrder = 8  is not unique pair in REFSET DESCRIPTOR SNAPSHOT"
+    } ],
+    "totalFailed" : 2
+  }, {
     "assertionName" : "RefsetId value refers to valid concept identifier in the MRCM MODULE SCOPE REFSET snapshot",
     "assertionUuid" : "844f4f15-ac5d-48a6-ba33-f11893cb7a20",
     "firstNInstances" : [ {
@@ -53,6 +64,14 @@
       "detail" : "Concept: id=733073007: is added in recent international release but has no active preferred term in the Norwegian language refset"
     } ],
     "totalFailed" : 8
+  }, {
+    "assertionName" : "Verify that RefsetDescriptor files contain only rows where for each referencedComponentId (ie) group by referencedComponentId, the set of attributeOrder values is a consecutive sequence starting at 0 (eg) 0, 1, 2, 3",
+    "assertionUuid" : "8a44f630-287c-47ec-bce3-bc57cfd303c1",
+    "firstNInstances" : [ {
+      "conceptId" : "449080006",
+      "detail" : "ReferencedComponentId=447562003 in REFSET DESCRIPTOR SNAPSHOT is not a consecutive sequence starting at 0"
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "Active Fully Specified Name associated with active concepts is unique in DESCRIPTION snapshot.",
     "assertionUuid" : "8ea2e5d9-5c35-4436-b67d-c5268b5da06c",
@@ -519,6 +538,49 @@
     "firstNInstances" : null,
     "totalFailed" : 0
   }, {
+    "assertionName" : "Verify that the simple refset files only contains Lateralizable refset (International Edition only)",
+    "assertionUuid" : "d209029c-f4ac-4a4e-8fb0-50590513c0f2",
+    "firstNInstances" : [ {
+      "conceptId" : "900000000000207008",
+      "detail" : "Warning: Simple Refset id=a6417d6f-5a66-5039-8e94-698d28a4da46 has refsetId which is not Lateralizable refset (723264001) : 900000000000456007"
+    }, {
+      "conceptId" : "900000000000207008",
+      "detail" : "Warning: Simple Refset id=57c08f90-d110-51d7-9866-687ea59213b4 has refsetId which is not Lateralizable refset (723264001) : 900000000000456007"
+    }, {
+      "conceptId" : "449080006",
+      "detail" : "Warning: Simple Refset id=d4759302-3afb-565d-b627-17c78e060134 has refsetId which is not Lateralizable refset (723264001) : 900000000000456007"
+    }, {
+      "conceptId" : "449080006",
+      "detail" : "Warning: Simple Refset id=aee0e3e2-aa89-5a76-9e6f-3ea574434648 has refsetId which is not Lateralizable refset (723264001) : 900000000000456007"
+    }, {
+      "conceptId" : "449080006",
+      "detail" : "Warning: Simple Refset id=85cc1c27-3a9f-5859-a1c5-7522b51ed528 has refsetId which is not Lateralizable refset (723264001) : 900000000000456007"
+    }, {
+      "conceptId" : "449080006",
+      "detail" : "Warning: Simple Refset id=d7428912-7544-5a88-abda-ef7c1e44c786 has refsetId which is not Lateralizable refset (723264001) : 900000000000456007"
+    }, {
+      "conceptId" : "449080006",
+      "detail" : "Warning: Simple Refset id=9eed7b82-3c3b-521b-b42c-46b09a3ba408 has refsetId which is not Lateralizable refset (723264001) : 900000000000456007"
+    }, {
+      "conceptId" : "449080006",
+      "detail" : "Warning: Simple Refset id=e6283035-2e04-5292-a745-929e03a39735 has refsetId which is not Lateralizable refset (723264001) : 900000000000456007"
+    }, {
+      "conceptId" : "449080006",
+      "detail" : "Warning: Simple Refset id=ca083ad0-bc5b-5b7b-9641-e3c016af290d has refsetId which is not Lateralizable refset (723264001) : 900000000000456007"
+    }, {
+      "conceptId" : "449080006",
+      "detail" : "Warning: Simple Refset id=ca083ad0-bc5b-5b7b-9641-e3c016af290e has refsetId which is not Lateralizable refset (723264001) : 900000000000456007"
+    } ],
+    "totalFailed" : 12
+  }, {
+    "assertionName" : "In RefsetDescriptor files, there must be one record with attributeOrder = 0 for each referencedComponentId and attributeOrder must be >= 0",
+    "assertionUuid" : "d35adea7-ed26-4071-b4f6-c76e4594d37a",
+    "firstNInstances" : [ {
+      "conceptId" : "449080006",
+      "detail" : "Refset: id=ca083ad0-bc5b-5b7b-9641-e3c016af290a ReferencedComponentId = 700132008 has no record where attributeOrder = 0 in REFSET DESCRIPTOR SNAPSHOT"
+    } ],
+    "totalFailed" : 1
+  }, {
     "assertionName" : "Referencedcomponentid refers to valid concepts in the ATTRIBUTEVALUE snapshot file.",
     "assertionUuid" : "d5c80582-ad32-4f26-a729-a91fe04a06b2",
     "firstNInstances" : [ {
@@ -650,6 +712,26 @@
     "firstNInstances" : null,
     "totalFailed" : 0
   }, {
+    "assertionName" : "In ModuleDependency files for Extensions, effectiveTime and sourceEffectiveTime must match while having same values as current release effective time and targetEffectiveTime must match the dependent International release's effective time",
+    "assertionUuid" : "e285baab-14a3-4ff6-822b-9e570da49e87",
+    "firstNInstances" : [ {
+      "conceptId" : "900000000000207008",
+      "detail" : "Refset with id = 1244116f-fdb5-5645-afcc-5281288409da in Module Dependency Snapshot file , effectiveTime = 20140731 does not match the current release effective time = 20130731"
+    }, {
+      "conceptId" : "449080006",
+      "detail" : "Refset with id = 686fe392-d2f7-586d-98aa-078aba426832 in Module Dependency Snapshot file , effectiveTime = 20140731 does not match the current release effective time = 20130731"
+    }, {
+      "conceptId" : "449080006",
+      "detail" : "Refset with id = f6431457-161b-5b46-9217-573c20c00070 in Module Dependency Snapshot file , effectiveTime = 20140731 does not match the current release effective time = 20130731"
+    }, {
+      "conceptId" : "449080006",
+      "detail" : "Refset with id = f6431457-161b-5b46-9217-573c20c00071 in Module Dependency Snapshot file , effectiveTime = 20140731 does not match the current release effective time = 20130731"
+    }, {
+      "conceptId" : "449080006",
+      "detail" : "Refset with id = f6431457-161b-5b46-9217-573c20c00071 in Module Dependency Snapshot file , effectiveTime = 20140731 does not match the sourceEffectiveTime = 20140831"
+    } ],
+    "totalFailed" : 5
+  }, {
     "assertionName" : "ReferenceComponentIds refers to valid concepts in the LOINC ExpressionAssociationRefset snapshot file.",
     "assertionUuid" : "e33922c3-5200-458b-b8f3-2cd08252234e",
     "firstNInstances" : [ {
@@ -773,6 +855,23 @@
     } ],
     "totalFailed" : 2
   }, {
+    "assertionName" : "In Module Dependency, moduleId is a valid, active module within the International Edition",
+    "assertionUuid" : "f24d3377-30eb-4c7b-9d2b-b016ec5e7654",
+    "firstNInstances" : [ {
+      "conceptId" : "900000000000207008",
+      "detail" : "Refset with Id = 1244116f-fdb5-5645-afcc-5281288409da referenced in the column: moduleid of table: moduledependencyrefset_s is not valid descendant of 900000000000443000 |Module|"
+    }, {
+      "conceptId" : "449080006",
+      "detail" : "Refset with Id = 686fe392-d2f7-586d-98aa-078aba426832 referenced in the column: moduleid of table: moduledependencyrefset_s is not valid descendant of 900000000000443000 |Module|"
+    }, {
+      "conceptId" : "449080006",
+      "detail" : "Refset with Id = f6431457-161b-5b46-9217-573c20c00070 referenced in the column: moduleid of table: moduledependencyrefset_s is not valid descendant of 900000000000443000 |Module|"
+    }, {
+      "conceptId" : "449080006",
+      "detail" : "Refset with Id = f6431457-161b-5b46-9217-573c20c00071 referenced in the column: moduleid of table: moduledependencyrefset_s is not valid descendant of 900000000000443000 |Module|"
+    } ],
+    "totalFailed" : 4
+  }, {
     "assertionName" : "All members refer to a description that is referenced in either the description table or the text definition table.",
     "assertionUuid" : "f5d9ae70-7856-11e1-b0c4-0800200c9a66",
     "firstNInstances" : [ {
@@ -795,6 +894,17 @@
       "detail" : "Language Refset: ReferencedComponentId =2988954017 is neither in the description nor the definition snapshot file."
     } ],
     "totalFailed" : 6
+  }, {
+    "assertionName" : "In ModuleDependency files for International releases, targetEffectiveTime and sourceEffectiveTime must match with each other and with effectiveTime",
+    "assertionUuid" : "f5da66cc-5ae7-4260-afcf-068c61c62ef1",
+    "firstNInstances" : [ {
+      "conceptId" : "449080006",
+      "detail" : "Refset with id = f6431457-161b-5b46-9217-573c20c00071 in Module Dependency Snapshot file , targetEffectiveTime = 20140931 does not match the sourceEffectiveTime = 20140831"
+    }, {
+      "conceptId" : "449080006",
+      "detail" : "Refset with id = f6431457-161b-5b46-9217-573c20c00071 in Module Dependency Snapshot file , effectiveTime = 20140731 does not match the sourceEffectiveTime = 20140831 or targetEffectiveTime = 20140931"
+    } ],
+    "totalFailed" : 2
   }, {
     "assertionName" : "The current Language Refset snapshot file does not contain duplicate Member Ids.",
     "assertionUuid" : "fc24db60-7856-11e1-b0c4-0800200c9a66",
@@ -873,6 +983,41 @@
       "detail" : "Concept: id=703672002 does not have an active FSN in any refset."
     } ],
     "totalFailed" : 22
+  }, {
+    "assertionName" : "The module id of components should be in module dependency list",
+    "assertionUuid" : "0145fbad-f067-41ff-b700-cf54fc639e21",
+    "firstNInstances" : [ {
+      "conceptId" : "0",
+      "detail" : "description ::id= 3494181019 ::module id: 900000000000012004 is not in module dependency list"
+    }, {
+      "conceptId" : "0",
+      "detail" : "description ::id= 3494182014 ::module id: 900000000000012004 is not in module dependency list"
+    }, {
+      "conceptId" : "0",
+      "detail" : "expressionAssociationRefset ::id= 1ca0b461-66a6-45c8-b01e-5a227c1fc27a ::module id: 705115006 is not in module dependency list"
+    }, {
+      "conceptId" : "0",
+      "detail" : "expressionAssociationRefset ::id= 576ac8fc-2830-426b-9ae8-de3f36a23300 ::module id: 705115006 is not in module dependency list"
+    }, {
+      "conceptId" : "0",
+      "detail" : "expressionAssociationRefset ::id= 210ffde0-105e-4825-9501-ae49a28ffa0d ::module id: 705115006 is not in module dependency list"
+    }, {
+      "conceptId" : "0",
+      "detail" : "expressionAssociationRefset ::id= 9568f7f7-cf6f-4d6d-98f0-59d7ec447504 ::module id: 705115006 is not in module dependency list"
+    }, {
+      "conceptId" : "0",
+      "detail" : "expressionAssociationRefset ::id= d01509a6-02a2-419a-9b68-ab77e21864c2 ::module id: 705115006 is not in module dependency list"
+    }, {
+      "conceptId" : "0",
+      "detail" : "expressionAssociationRefset ::id= adb4ebdb-c3af-4f6a-9d80-add0730fcee0 ::module id: 705115006 is not in module dependency list"
+    }, {
+      "conceptId" : "0",
+      "detail" : "expressionAssociationRefset ::id= 88d0eeb0-10b3-4d68-9d21-f4c42e0aac93 ::module id: 705115006 is not in module dependency list"
+    }, {
+      "conceptId" : "0",
+      "detail" : "expressionAssociationRefset ::id= a4f9d42e-eb98-468b-9024-e5aa236eb16f ::module id: 705115006 is not in module dependency list"
+    } ],
+    "totalFailed" : 220
   }, {
     "assertionName" : "Preferred Term exists exactly once in each language refset for each concept.",
     "assertionUuid" : "03cf9850-7857-11e1-b0c4-0800200c9a66",
@@ -1193,6 +1338,41 @@
     } ],
     "totalFailed" : 11
   }, {
+    "assertionName" : "In RefsetDescriptor files, the values of referencedComponentId, attributeDescription, attributeType must be valid",
+    "assertionUuid" : "28a809c5-7e3f-45b8-b8b4-b29e231ed532",
+    "firstNInstances" : [ {
+      "conceptId" : "446608001",
+      "detail" : "Refset Descriptor:id=a6417d6f-5a66-5039-8e94-698d28a4da46:ConceptId=446608001 referenced in the column referencedcomponentid in SNAPSHOT is not valid descendant of expression = < 900000000000455006 | Reference set (foundation metadata concept)|"
+    }, {
+      "conceptId" : "446608001",
+      "detail" : "Refset Descriptor:id=57c08f90-d110-51d7-9866-687ea59213b4:ConceptId=446608001 referenced in the column referencedcomponentid in SNAPSHOT is not valid descendant of expression = < 900000000000455006 | Reference set (foundation metadata concept)|"
+    }, {
+      "conceptId" : "447562003",
+      "detail" : "Refset Descriptor:id=d4759302-3afb-565d-b627-17c78e060134:ConceptId=447562003 referenced in the column referencedcomponentid in SNAPSHOT is not valid descendant of expression = < 900000000000455006 | Reference set (foundation metadata concept)|"
+    }, {
+      "conceptId" : "447562003",
+      "detail" : "Refset Descriptor:id=aee0e3e2-aa89-5a76-9e6f-3ea574434648:ConceptId=447562003 referenced in the column referencedcomponentid in SNAPSHOT is not valid descendant of expression = < 900000000000455006 | Reference set (foundation metadata concept)|"
+    }, {
+      "conceptId" : "447562003",
+      "detail" : "Refset Descriptor:id=85cc1c27-3a9f-5859-a1c5-7522b51ed528:ConceptId=447562003 referenced in the column referencedcomponentid in SNAPSHOT is not valid descendant of expression = < 900000000000455006 | Reference set (foundation metadata concept)|"
+    }, {
+      "conceptId" : "447562003",
+      "detail" : "Refset Descriptor:id=d7428912-7544-5a88-abda-ef7c1e44c786:ConceptId=447562003 referenced in the column referencedcomponentid in SNAPSHOT is not valid descendant of expression = < 900000000000455006 | Reference set (foundation metadata concept)|"
+    }, {
+      "conceptId" : "447562003",
+      "detail" : "Refset Descriptor:id=9eed7b82-3c3b-521b-b42c-46b09a3ba408:ConceptId=447562003 referenced in the column referencedcomponentid in SNAPSHOT is not valid descendant of expression = < 900000000000455006 | Reference set (foundation metadata concept)|"
+    }, {
+      "conceptId" : "447562003",
+      "detail" : "Refset Descriptor:id=e6283035-2e04-5292-a745-929e03a39735:ConceptId=447562003 referenced in the column referencedcomponentid in SNAPSHOT is not valid descendant of expression = < 900000000000455006 | Reference set (foundation metadata concept)|"
+    }, {
+      "conceptId" : "447562003",
+      "detail" : "Refset Descriptor:id=ca083ad0-bc5b-5b7b-9641-e3c016af290d:ConceptId=447562003 referenced in the column referencedcomponentid in SNAPSHOT is not valid descendant of expression = < 900000000000455006 | Reference set (foundation metadata concept)|"
+    }, {
+      "conceptId" : "447562003",
+      "detail" : "Refset Descriptor:id=ca083ad0-bc5b-5b7b-9641-e3c016af290e:ConceptId=447562003 referenced in the column referencedcomponentid in SNAPSHOT is not valid descendant of expression = < 900000000000455006 | Reference set (foundation metadata concept)|"
+    } ],
+    "totalFailed" : 36
+  }, {
     "assertionName" : "ReferencedComponentId value refers to valid concept identifier in the MRCM ATTRIBUTE DOMAIN REFSET snapshot",
     "assertionUuid" : "292b4427-0cce-493d-b63c-27cd249eafea",
     "firstNInstances" : [ {
@@ -1508,11 +1688,27 @@
     } ],
     "totalFailed" : 2
   }, {
+    "assertionName" : "Verify that RefsetDescriptor files contain only active rows where the referenced refset is active and contains only inactive rows where the referenced refset is inactive",
+    "assertionUuid" : "4a5f3e98-97f3-4c0c-b388-7ab4a388fb33",
+    "firstNInstances" : [ {
+      "conceptId" : "449080006",
+      "detail" : "REFSET DESCRIPTOR SNAPSHOT: id=ca083ad0-bc5b-5b7b-9641-e3c016af290a contains active rows where the referenced refset is inactive"
+    } ],
+    "totalFailed" : 1
+  }, {
     "assertionName" : "ID is unique in the DEFINITION snapshot.",
     "assertionUuid" : "4ba823ce-8ae4-4b2e-beb5-e119b822cfe2",
     "firstNInstances" : [ {
       "conceptId" : "703672002",
       "detail" : "TextDefinition: id=3005197021 is not unique in the TextDefinition Snapshot file."
+    } ],
+    "totalFailed" : 1
+  }, {
+    "assertionName" : "In ModuleDependency files, the refsetId field is always set to 900000000000534007",
+    "assertionUuid" : "4bf2274d-94d9-4aca-87e6-e0348fee502d",
+    "firstNInstances" : [ {
+      "conceptId" : "449080006",
+      "detail" : "Refset: id=f6431457-161b-5b46-9217-573c20c00071 in MODULE DEPENDENCY SNAPSHOT is set to 900000000000534006 instead of 900000000000534007"
     } ],
     "totalFailed" : 1
   }, {
@@ -1584,6 +1780,14 @@
       "detail" : "DEFINITION: id=2983208019 refers to an invalid concept id in the Text Definition snapshot."
     } ],
     "totalFailed" : 7
+  }, {
+    "assertionName" : "In RefsetDescriptor files, the refsetId field is always set to 900000000000456007",
+    "assertionUuid" : "5aa54c92-d6fe-4cb1-b5cf-37b127e6c6f2",
+    "firstNInstances" : [ {
+      "conceptId" : "449080006",
+      "detail" : "RefsetId of: id=ca083ad0-bc5b-5b7b-9641-e3c016af290a in REFSET DESCRIPTOR SNAPSHOT is not set to value 900000000000456007"
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "RuleStrengthId value refers to valid concept identifier in the MRCM ATTRIBUTE RANGE REFSET snapshot",
     "assertionUuid" : "618115ab-b5bc-4ed3-aaba-fec8536fe498",

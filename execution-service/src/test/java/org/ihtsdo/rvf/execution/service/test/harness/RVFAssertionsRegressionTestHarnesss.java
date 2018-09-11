@@ -119,6 +119,7 @@ public class RVFAssertionsRegressionTestHarnesss {
 		config.setPreviousVersion(PREVIOUS_RELEASE);
 		config.setProspectiveVersion(PROSPECTIVE_RELEASE);
 		config.setFailureExportMax(10);
+		config.setEffectiveTime("20130731");
 		assertionExecutionService.executeAssertions(assertions, config);
 	}
 	
@@ -159,8 +160,8 @@ public class RVFAssertionsRegressionTestHarnesss {
 				releaseTypeAssertions.add(assertion);
 			}
 		}
-		assertEquals(260, assertions.size());
-		assertEquals(103, releaseTypeAssertions.size());
+		assertEquals(282, assertions.size());
+		assertEquals(109, releaseTypeAssertions.size());
 	}
 
 	@Test
@@ -168,7 +169,7 @@ public class RVFAssertionsRegressionTestHarnesss {
 		AssertionGroup group = assertionService.getAssertionGroupByName("int-authoring");
 
 		List<Assertion> assertions = assertionService.getAssertionsForGroup(group);
-		assertEquals(63, assertions.size());
+		assertEquals(69, assertions.size());
 	}
 
 
@@ -177,7 +178,7 @@ public class RVFAssertionsRegressionTestHarnesss {
 		AssertionGroup group = assertionService.getAssertionGroupByName("common-authoring");
 
 		List<Assertion> assertions = assertionService.getAssertionsForGroup(group);
-		assertEquals(82, assertions.size());
+		assertEquals(90, assertions.size());
 	}
 	
 	@Test
@@ -231,12 +232,12 @@ public class RVFAssertionsRegressionTestHarnesss {
 		FileWriter writer = new FileWriter(tempResult);
 		mapper.writeValue(writer,actualReport);
 		System.out.println("Please see result in file:" + tempResult.getAbsolutePath());
-		
+
 		//No need for full result now we just print exact difference
 		System.out.println("Test result");
 		String actualReportStr = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(actualReport);
-		System.out.println(actualReportStr);
-		*/
+		System.out.println(actualReportStr);*/
+		
 		
 		final Gson gson = new Gson();
 		final BufferedReader br = new BufferedReader(new FileReader(expectedJsonFileName));
