@@ -126,9 +126,9 @@ public class ValidationVersionLoader {
 			isSucessful = prepareVersionsFromS3FilesForPreviousVersion(validationConfig, reportStorage,responseMap, rf2FilesLoaded, executionConfig);
 		} else {
 			if (isExtension(validationConfig)) {
-				executionConfig.setPreviousVersion(validationConfig.getPreviousExtVersion());
+				executionConfig.setPreviousVersion(getVersion(validationConfig.getPreviousExtVersion(), validationConfig.isReleaseAsAnEdition()));
 			} else {
-				executionConfig.setPreviousVersion(validationConfig.getPrevIntReleaseVersion());
+				executionConfig.setPreviousVersion(getVersion(validationConfig.getPrevIntReleaseVersion(),false));
 			}
 		}
 		return isSucessful;
@@ -143,9 +143,9 @@ public class ValidationVersionLoader {
 			List<String> excludeTables = Arrays.asList(RELATIONSHIP_SNAPSHOT_TABLE);
 			rf2FilesLoaded.addAll(loadProspectiveDeltaAndCombineWithPreviousSnapshotIntoDB(prospectiveVersion, validationConfig,excludeTables));
 			if (isExtension(validationConfig)) {
-				executionConfig.setPreviousVersion(validationConfig.getPreviousExtVersion());
+				executionConfig.setPreviousVersion(getVersion(validationConfig.getPreviousExtVersion(), validationConfig.isReleaseAsAnEdition()));
 			} else {
-				executionConfig.setPreviousVersion(validationConfig.getPrevIntReleaseVersion());
+				executionConfig.setPreviousVersion(getVersion(validationConfig.getPrevIntReleaseVersion(),false));
 			}
 		} else {
 			//load prospective version alone now as used to combine with dependency for extension testing
@@ -172,6 +172,10 @@ public class ValidationVersionLoader {
 		executionConfig.setJiraIssueCreationFlag(validationConfig.isJiraIssueCreationFlag());
 		executionConfig.setProductName(validationConfig.getProductName());
 		executionConfig.setReportingStage(validationConfig.getReportingStage());
+		executionConfig.setEffectiveTime(validationConfig.getEffectiveTime());
+		if(validationConfig.getExtensionDependency() != null) {
+			executionConfig.setDependencyEffectiveTime(extractEffetiveTimeFromDepedencyVersion(validationConfig.getExtensionDependency()));
+		}
 		//default to 10
 		executionConfig.setFailureExportMax(10);
 		if (validationConfig.getFailureExportMax() != null) {
@@ -186,16 +190,19 @@ public class ValidationVersionLoader {
 		if (validationConfig.isRf2DeltaOnly()) {
 			releaseDataManager.loadSnomedData(prospectiveVersion, filesLoaded, validationConfig.getLocalProspectiveFile());
 			if (isExtension(validationConfig)) {
+				String previousVersion = getVersion(validationConfig.getPreviousExtVersion(), validationConfig.isReleaseAsAnEdition());
+				String extensionDependencyVersion = getVersion(validationConfig.getExtensionDependency(), false);
 				if (!validationConfig.isFirstTimeRelease()) {
-					releaseDataManager.copyTableData(validationConfig.getPreviousExtVersion(),validationConfig.getExtensionDependency(), prospectiveVersion,SNAPSHOT_TABLE, excludeTableNames);
+					releaseDataManager.copyTableData(previousVersion,extensionDependencyVersion, prospectiveVersion,SNAPSHOT_TABLE, excludeTableNames);
 				} else {
-					releaseDataManager.copyTableData(validationConfig.getExtensionDependency(), prospectiveVersion,SNAPSHOT_TABLE, excludeTableNames);
+					releaseDataManager.copyTableData(extensionDependencyVersion, prospectiveVersion,SNAPSHOT_TABLE, excludeTableNames);
 				}
 
 			} else {
 				//copy snapshot from previous release
 				if (!validationConfig.isFirstTimeRelease()) {
-					releaseDataManager.copyTableData(validationConfig.getPrevIntReleaseVersion(), prospectiveVersion,SNAPSHOT_TABLE, excludeTableNames);
+					String previousVersion = getVersion(validationConfig.getPrevIntReleaseVersion(), false);
+					releaseDataManager.copyTableData(previousVersion, prospectiveVersion,SNAPSHOT_TABLE, excludeTableNames);
 				}
 			}
 			releaseDataManager.updateSnapshotTableWithDataFromDelta(prospectiveVersion);
@@ -401,7 +408,33 @@ public class ValidationVersionLoader {
 		return true;
 	}
 
+	private String extractEffetiveTimeFromDepedencyVersion(String dependencyVersion) {
+		String effectiveTime = null;
+		try {
+			Pattern pattern = null;
+			String text;
+			if(dependencyVersion.endsWith(ZIP_FILE_EXTENSION)) {
+				pattern = Pattern.compile("\\d{8}(?=(T\\d+|.zip))");
+				String[] splits = dependencyVersion.split("/");
+				text = splits[splits.length-1];
+			} else {
+				pattern = Pattern.compile("(?<=_)(\\d{8})");
+				text = dependencyVersion;
+			}
+			Matcher matcher = pattern.matcher(text);
+			if(matcher.find()) {
+				effectiveTime = matcher.group();
+			}
+		} catch (Exception e) {
+			logger.error("Encounter error when extracting effective time from {}", dependencyVersion);
+		}
+		return  effectiveTime;
+	}
+
 	private String getVersion(String versionString, boolean isEdition) throws BusinessServiceException {
+		if(!versionString.endsWith(ZIP_FILE_EXTENSION)) {
+			return versionString;
+		}
 		String publishedS3Path = getPublishedFilePath(versionString);
 		String[] splits = publishedS3Path.split("/");
 		String releaseCenter = splits[0];
