@@ -311,11 +311,6 @@ public class InstanceManager {
 			builder.append("sudo echo \"" + propertyStrByFilename.get(filename)
 					+ "\" > " + rvfConfig + "/" + filename + "\n");
 		}
-		//Set permission for rvf-api on mysql group to make it possible to backup the database from /var/lib/mysql to published bucket
-		// so that all RVF workers can get the data from s3 instead of pre-loading the AMI
-		builder.append("sudo adduser rvf-api mysql\n");
-		builder.append("sudo setfacl -d -R -m g:mysql:rwx /var/lib/mysql\n");
-		builder.append("sudo setfacl -R -m g:mysql:rwx /var/lib/mysql\n");
 		// checkout drools version
 		builder.append("sudo git clone");
 		if (droolsRulesVersion != null && !droolsRulesVersion.isEmpty()) {
@@ -331,6 +326,15 @@ public class InstanceManager {
 		}
 		builder.append(droolsRulesDirectory + "\n");
 		builder.append("sudo chown -R rvf-api:rvf-api " + droolsRulesDirectory + "\n");
+
+		//Set permission for rvf-api on mysql group to make it possible to backup the database from /var/lib/mysql to published bucket
+		// so that all RVF workers can get the data from s3 instead of pre-loading the AMI
+		builder.append("sudo setfacl -Rdm u:rvf-api:rwx /var/lib/mysql\n");
+		builder.append("sudo setfacl -Rm u:rvf-api:rwx /var/lib/mysql\n");
+
+		builder.append("sudo setfacl -Rdm u:mysql:rwx /var/lib/mysql\n");
+		builder.append("sudo setfacl -Rm u:mysql:rwx /var/lib/mysql\n");
+
 		builder.append("sudo supervisorctl start rvf-api" + "\n");
 		builder.append("exit 0");
 		return builder.toString();
