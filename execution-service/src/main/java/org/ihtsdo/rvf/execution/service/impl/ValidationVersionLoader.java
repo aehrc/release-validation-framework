@@ -288,9 +288,9 @@ public class ValidationVersionLoader {
 		if (validationConfig.getPreviousExtVersion() != null && validationConfig.getPreviousExtVersion().endsWith(ZIP_FILE_EXTENSION)) {
 			return false;
 		}
-		return !(validationConfig.getExtensionDependency() != null && validationConfig.getExtensionDependency().endsWith(ZIP_FILE_EXTENSION));
+		return true;
 	}
-
+	
 	private void loadPublishedVersionIntoDB( FileHelper s3PublishFileHelper, String publishedReleaseFilename, String rvfVersion) throws Exception {
 		String publishedFileS3Path = getPublishedFilePath(publishedReleaseFilename);
 		InputStream publishedFileInput = s3PublishFileHelper.getFileStream(publishedFileS3Path);

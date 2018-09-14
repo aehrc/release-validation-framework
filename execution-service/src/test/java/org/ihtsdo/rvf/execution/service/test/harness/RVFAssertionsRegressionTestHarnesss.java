@@ -7,6 +7,7 @@ import static org.junit.Assert.assertTrue;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.net.URL;
 import java.sql.SQLException;
@@ -68,18 +69,18 @@ public class RVFAssertionsRegressionTestHarnesss {
 	
 	private static final String PREVIOUS_RELEASE = "regression_test_previous";
 	@Autowired
-    private AssertionExecutionService assertionExecutionService;
-    @Resource(name = "dataSource")
-    private DataSource dataSource;
-    @Autowired
-    private AssertionService assertionService;
-    @Autowired
-    private ReleaseDataManager releaseDataManager;
-    @Autowired
-    private ResourceDataLoader resourceDataLoader;
-    @Autowired
-    private  AssertionDao assertionDao;
-    private  URL releaseTypeExpectedResults;
+	private AssertionExecutionService assertionExecutionService;
+	@Resource(name = "dataSource")
+	private DataSource dataSource;
+	@Autowired
+	private AssertionService assertionService;
+	@Autowired
+	private ReleaseDataManager releaseDataManager;
+	@Autowired
+	private ResourceDataLoader resourceDataLoader;
+	@Autowired
+	private  AssertionDao assertionDao;
+	private  URL releaseTypeExpectedResults;
 	private URL componentCentrilExpected;
 	private URL fileCentricExpected;
 	private ExecutionConfig config;
@@ -89,32 +90,32 @@ public class RVFAssertionsRegressionTestHarnesss {
 	@Before
 	public void setUp() throws IOException, SQLException, BusinessServiceException {
 		//load previous and prospective versions if not loaded already
-        assertNotNull(releaseDataManager);
-        if (!releaseDataManager.isKnownRelease(PREVIOUS_RELEASE)) {
-        	final URL previousReleaseUrl = RVFAssertionsRegressionTestHarnesss.class.getResource("/SnomedCT_RegressionTest_20130131");
-            assertNotNull("Must not be null", previousReleaseUrl);
+		assertNotNull(releaseDataManager);
+		if (!releaseDataManager.isKnownRelease(PREVIOUS_RELEASE)) {
+			final URL previousReleaseUrl = RVFAssertionsRegressionTestHarnesss.class.getResource("/SnomedCT_RegressionTest_20130131");
+			assertNotNull("Must not be null", previousReleaseUrl);
 			final File previousFile = new File(previousReleaseUrl.getFile() + "_test.zip");
 			ZipFileUtils.zip(previousReleaseUrl.getFile(), previousFile.getAbsolutePath());
 			releaseDataManager.uploadPublishedReleaseData(previousFile, "regression_test", "previous");
-        }
-        if(!releaseDataManager.isKnownRelease(PROSPECTIVE_RELEASE)) {
-        	final URL prospectiveReleaseUrl = RVFAssertionsRegressionTestHarnesss.class.getResource("/SnomedCT_RegressionTest_20130731");
-            assertNotNull("Must not be null", prospectiveReleaseUrl);
-            final File prospectiveFile = new File(prospectiveReleaseUrl.getFile() + "_test.zip");
+		}
+		if(!releaseDataManager.isKnownRelease(PROSPECTIVE_RELEASE)) {
+			final URL prospectiveReleaseUrl = RVFAssertionsRegressionTestHarnesss.class.getResource("/SnomedCT_RegressionTest_20130731");
+			assertNotNull("Must not be null", prospectiveReleaseUrl);
+			final File prospectiveFile = new File(prospectiveReleaseUrl.getFile() + "_test.zip");
 			ZipFileUtils.zip(prospectiveReleaseUrl.getFile(), prospectiveFile.getAbsolutePath());
-        	releaseDataManager.loadSnomedData(PROSPECTIVE_RELEASE,rf2FilesLoaded, prospectiveFile);
-        }
-        
-        releaseTypeExpectedResults = RVFAssertionsRegressionTestHarnesss.class.getResource("/regressionTestResults/releaseTypeRegressionExpected.json");
-        assertNotNull("Must not be null", releaseTypeExpectedResults);
-        componentCentrilExpected = RVFAssertionsRegressionTestHarnesss.class.getResource("/regressionTestResults/componentCentricRegressionExpected.json");
-        assertNotNull("Must not be null", componentCentrilExpected);
-        fileCentricExpected = RVFAssertionsRegressionTestHarnesss.class.getResource("/regressionTestResults/fileCentricRegressionExpected.json");
-        assertNotNull("Must not be null", fileCentricExpected);
-        releaseDataManager.setSchemaForRelease(PREVIOUS_RELEASE, "rvf_" + PREVIOUS_RELEASE);
-        releaseDataManager.setSchemaForRelease(PROSPECTIVE_RELEASE, "rvf_"+ PROSPECTIVE_RELEASE);
-        resourceDataLoader.loadResourceData(releaseDataManager.getSchemaForRelease(PROSPECTIVE_RELEASE));
-        final List<Assertion> assertions = assertionDao.getAssertionsByKeyWord("resource",true);
+			releaseDataManager.loadSnomedData(PROSPECTIVE_RELEASE,rf2FilesLoaded, prospectiveFile);
+		}
+
+		releaseTypeExpectedResults = RVFAssertionsRegressionTestHarnesss.class.getResource("/regressionTestResults/releaseTypeRegressionExpected.json");
+		assertNotNull("Must not be null", releaseTypeExpectedResults);
+		componentCentrilExpected = RVFAssertionsRegressionTestHarnesss.class.getResource("/regressionTestResults/componentCentricRegressionExpected.json");
+		assertNotNull("Must not be null", componentCentrilExpected);
+		fileCentricExpected = RVFAssertionsRegressionTestHarnesss.class.getResource("/regressionTestResults/fileCentricRegressionExpected.json");
+		assertNotNull("Must not be null", fileCentricExpected);
+		releaseDataManager.setSchemaForRelease(PREVIOUS_RELEASE, "rvf_" + PREVIOUS_RELEASE);
+		releaseDataManager.setSchemaForRelease(PROSPECTIVE_RELEASE, "rvf_"+ PROSPECTIVE_RELEASE);
+		resourceDataLoader.loadResourceData(releaseDataManager.getSchemaForRelease(PROSPECTIVE_RELEASE));
+		final List<Assertion> assertions = assertionDao.getAssertionsByKeyWord("resource",true);
 		config = new ExecutionConfig(System.currentTimeMillis());
 		config.setPreviousVersion(PREVIOUS_RELEASE);
 		config.setProspectiveVersion(PROSPECTIVE_RELEASE);
@@ -227,16 +228,16 @@ public class RVFAssertionsRegressionTestHarnesss {
 		actualReport.setTotalAssertionsRun(runItems.size());
 		actualReport.setTotalFailures(failureCounter);
 		actualReport.setResults(results);
-		/*
+		
 		File tempResult = File.createTempFile("tempResult_"+ type, ".txt");
 		FileWriter writer = new FileWriter(tempResult);
-		mapper.writeValue(writer,actualReport);
-		System.out.println("Please see result in file:" + tempResult.getAbsolutePath());
-
+		mapper.writerWithDefaultPrettyPrinter().writeValue(writer,actualReport);
+		System.err.println("Please see " + type + " result in file:" + tempResult.getAbsolutePath());
+		
 		//No need for full result now we just print exact difference
 		System.out.println("Test result");
 		String actualReportStr = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(actualReport);
-		System.out.println(actualReportStr);*/
+		System.out.println(actualReportStr);
 		
 		
 		final Gson gson = new Gson();
