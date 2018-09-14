@@ -1,7 +1,7 @@
 {
   "assertionType" : "file-centric-validation",
-  "totalAssertionsRun" : 101,
-  "totalAssertionsFailed" : 87,
+  "totalAssertionsRun" : 111,
+  "totalAssertionsFailed" : 93,
   "results" : [ {
     "assertionName" : "Verify that RefsetDescriptor files contain only rows where each 'referencedComponentId + attributeOrder' pair is unique",
     "assertionUuid" : "82019fb7-0aaf-4d32-a68b-92d65bf7eeac",
@@ -344,42 +344,6 @@
     } ],
     "totalFailed" : 2
   }, {
-    "assertionName" : "ContentTypeId value refers to valid concept identifier in the MRCM ATTRIBUTE RANGE REFSET snapshot",
-    "assertionUuid" : "b110b8de-53df-4387-b0ac-aecfbc01ed0d",
-    "firstNInstances" : [ {
-      "conceptId" : "723596004",
-      "detail" : "MRCM ATTRIBUTE RANGE: id=81288567-57a9-49b1-b7f0-bf5979a6d289 : contentTypeId=723596004 MRCM Attribute Range Refset contains a ContentTypeId that does not exist in the Concept snapshot."
-    }, {
-      "conceptId" : "723595009",
-      "detail" : "MRCM ATTRIBUTE RANGE: id=8163e3c0-b0c4-4c92-82e7-e93a23770b17 : contentTypeId=723595009 MRCM Attribute Range Refset contains a ContentTypeId that does not exist in the Concept snapshot."
-    }, {
-      "conceptId" : "723596005",
-      "detail" : "MRCM ATTRIBUTE RANGE: id=81f6d23b-66c7-46ce-b003-08380b9b236a : contentTypeId=723596005 MRCM Attribute Range Refset contains a ContentTypeId that does not exist in the Concept snapshot."
-    }, {
-      "conceptId" : "723596005",
-      "detail" : "MRCM ATTRIBUTE RANGE: id=903d4612-9e2e-4434-94e8-eaff214f4467 : contentTypeId=723596005 MRCM Attribute Range Refset contains a ContentTypeId that does not exist in the Concept snapshot."
-    }, {
-      "conceptId" : "723596005",
-      "detail" : "MRCM ATTRIBUTE RANGE: id=9883dd72-0fdc-47bf-89d0-4f206ca7800c : contentTypeId=723596005 MRCM Attribute Range Refset contains a ContentTypeId that does not exist in the Concept snapshot."
-    }, {
-      "conceptId" : "723596005",
-      "detail" : "MRCM ATTRIBUTE RANGE: id=98984674-6f17-40fe-8859-5ad2d0f5c09d : contentTypeId=723596005 MRCM Attribute Range Refset contains a ContentTypeId that does not exist in the Concept snapshot."
-    }, {
-      "conceptId" : "723596005",
-      "detail" : "MRCM ATTRIBUTE RANGE: id=9f31fae1-65e6-4ffd-9a0d-badeaf298a8f : contentTypeId=723596005 MRCM Attribute Range Refset contains a ContentTypeId that does not exist in the Concept snapshot."
-    }, {
-      "conceptId" : "723596005",
-      "detail" : "MRCM ATTRIBUTE RANGE: id=a079f482-e7de-4fd8-b4f9-5c8b56798676 : contentTypeId=723596005 MRCM Attribute Range Refset contains a ContentTypeId that does not exist in the Concept snapshot."
-    }, {
-      "conceptId" : "723596005",
-      "detail" : "MRCM ATTRIBUTE RANGE: id=a0a0149b-6541-4789-8645-1e7ce775bdd3 : contentTypeId=723596005 MRCM Attribute Range Refset contains a ContentTypeId that does not exist in the Concept snapshot."
-    }, {
-      "conceptId" : "723596005",
-      "detail" : "MRCM ATTRIBUTE RANGE: id=a107baf4-2724-4ef2-acd1-8f153ed31c21 : contentTypeId=723596005 MRCM Attribute Range Refset contains a ContentTypeId that does not exist in the Concept snapshot."
-    } ],
-    "totalFailed" : 80
-  },
-  {
     "assertionName" : "Every active concept from international release is recommended to have one active preferred term in the Swiss German language refset.",
     "assertionUuid" : "b02b8c82-a4b8-4cc7-b3c3-6f4b567fc28f",
     "firstNInstances" : [ {
@@ -414,6 +378,41 @@
       "detail" : "Concept: id=700132006: has no active preferred term in the Swiss German language refset"
     } ],
     "totalFailed" : 12
+  }, {
+    "assertionName" : "ContentTypeId value refers to valid concept identifier in the MRCM ATTRIBUTE RANGE REFSET snapshot",
+    "assertionUuid" : "b110b8de-53df-4387-b0ac-aecfbc01ed0d",
+    "firstNInstances" : [ {
+      "conceptId" : "723596004",
+      "detail" : "MRCM ATTRIBUTE RANGE: id=81288567-57a9-49b1-b7f0-bf5979a6d289 : contentTypeId=723596004 MRCM Attribute Range Refset contains a ContentTypeId that does not exist in the Concept snapshot."
+    }, {
+      "conceptId" : "723595009",
+      "detail" : "MRCM ATTRIBUTE RANGE: id=8163e3c0-b0c4-4c92-82e7-e93a23770b17 : contentTypeId=723595009 MRCM Attribute Range Refset contains a ContentTypeId that does not exist in the Concept snapshot."
+    }, {
+      "conceptId" : "723596005",
+      "detail" : "MRCM ATTRIBUTE RANGE: id=81f6d23b-66c7-46ce-b003-08380b9b236a : contentTypeId=723596005 MRCM Attribute Range Refset contains a ContentTypeId that does not exist in the Concept snapshot."
+    }, {
+      "conceptId" : "723596005",
+      "detail" : "MRCM ATTRIBUTE RANGE: id=903d4612-9e2e-4434-94e8-eaff214f4467 : contentTypeId=723596005 MRCM Attribute Range Refset contains a ContentTypeId that does not exist in the Concept snapshot."
+    }, {
+      "conceptId" : "723596005",
+      "detail" : "MRCM ATTRIBUTE RANGE: id=9883dd72-0fdc-47bf-89d0-4f206ca7800c : contentTypeId=723596005 MRCM Attribute Range Refset contains a ContentTypeId that does not exist in the Concept snapshot."
+    }, {
+      "conceptId" : "723596005",
+      "detail" : "MRCM ATTRIBUTE RANGE: id=98984674-6f17-40fe-8859-5ad2d0f5c09d : contentTypeId=723596005 MRCM Attribute Range Refset contains a ContentTypeId that does not exist in the Concept snapshot."
+    }, {
+      "conceptId" : "723596005",
+      "detail" : "MRCM ATTRIBUTE RANGE: id=9f31fae1-65e6-4ffd-9a0d-badeaf298a8f : contentTypeId=723596005 MRCM Attribute Range Refset contains a ContentTypeId that does not exist in the Concept snapshot."
+    }, {
+      "conceptId" : "723596005",
+      "detail" : "MRCM ATTRIBUTE RANGE: id=a079f482-e7de-4fd8-b4f9-5c8b56798676 : contentTypeId=723596005 MRCM Attribute Range Refset contains a ContentTypeId that does not exist in the Concept snapshot."
+    }, {
+      "conceptId" : "723596005",
+      "detail" : "MRCM ATTRIBUTE RANGE: id=a0a0149b-6541-4789-8645-1e7ce775bdd3 : contentTypeId=723596005 MRCM Attribute Range Refset contains a ContentTypeId that does not exist in the Concept snapshot."
+    }, {
+      "conceptId" : "723596005",
+      "detail" : "MRCM ATTRIBUTE RANGE: id=a107baf4-2724-4ef2-acd1-8f153ed31c21 : contentTypeId=723596005 MRCM Attribute Range Refset contains a ContentTypeId that does not exist in the Concept snapshot."
+    } ],
+    "totalFailed" : 80
   }, {
     "assertionName" : "Every active concept has one active preferred term in the en-GB language refset.",
     "assertionUuid" : "b7a09892-7124-4a06-b150-7d86b3a75ce4",
@@ -1188,6 +1187,11 @@
     } ],
     "totalFailed" : 12
   }, {
+    "assertionName" : "Every active concept has one active preferred term in the Swiss French language refset.",
+    "assertionUuid" : "0a52c619-05e3-41e9-a634-4eb89e0ac7ec",
+    "firstNInstances" : null,
+    "totalFailed" : 0
+  }, {
     "assertionName" : "DomainId value refers to valid concept identifier in the MRCM ATTRIBUTE DOMAIN REFSET snapshot",
     "assertionUuid" : "0bd6a234-58f9-424f-84b4-0dc800e5a70b",
     "firstNInstances" : [ {
@@ -1222,11 +1226,6 @@
       "detail" : "MRCM ATTRIBUTE DOMAIN: id=a8c88cca-305c-40e8-bf03-2d6d03d47755 : DomainId=723264001 MRCM Attribute Domain Refset contains a DomainId that does not exist in the Concept snapshot."
     } ],
     "totalFailed" : 88
-  }, {
-    "assertionName" : "Every active concept has one active preferred term in the Swiss French language refset.",
-    "assertionUuid" : "0a52c619-05e3-41e9-a634-4eb89e0ac7ec",
-    "firstNInstances" : null,
-    "totalFailed" : 0
   }, {
     "assertionName" : "Every active concept has a preferred FSN in the en-GB language refset.",
     "assertionUuid" : "0dde2aec-14c0-428b-ba1c-15e483aaa155",
@@ -1477,35 +1476,6 @@
     } ],
     "totalFailed" : 12
   }, {
-    "assertionName" : "Newly added active concept has one active preferred term in the Swiss French language refset.",
-    "assertionUuid" : "29599632-f175-441a-aac3-ce12d9bee0a9",
-    "firstNInstances" : [ {
-      "conceptId" : "702411003",
-      "detail" : "Concept: id=702411003: is added in a recent international release but has no active preferred term in the Swiss French language refset"
-    }, {
-      "conceptId" : "702769005",
-      "detail" : "Concept: id=702769005: is added in a recent international release but has no active preferred term in the Swiss French language refset"
-    }, {
-      "conceptId" : "703860006",
-      "detail" : "Concept: id=703860006: is added in a recent international release but has no active preferred term in the Swiss French language refset"
-    }, {
-      "conceptId" : "703155005",
-      "detail" : "Concept: id=703155005: is added in a recent international release but has no active preferred term in the Swiss French language refset"
-    }, {
-      "conceptId" : "702386002",
-      "detail" : "Concept: id=702386002: is added in a recent international release but has no active preferred term in the Swiss French language refset"
-    }, {
-      "conceptId" : "703649005",
-      "detail" : "Concept: id=703649005: is added in a recent international release but has no active preferred term in the Swiss French language refset"
-    }, {
-      "conceptId" : "703672002",
-      "detail" : "Concept: id=703672002: is added in a recent international release but has no active preferred term in the Swiss French language refset"
-    }, {
-      "conceptId" : "733073007",
-      "detail" : "Concept: id=733073007: is added in a recent international release but has no active preferred term in the Swiss French language refset"
-    } ],
-    "totalFailed" : 8
-  }, {
     "assertionName" : "In RefsetDescriptor files, the values of referencedComponentId, attributeDescription, attributeType must be valid",
     "assertionUuid" : "28a809c5-7e3f-45b8-b8b4-b29e231ed532",
     "firstNInstances" : [ {
@@ -1575,6 +1545,35 @@
       "detail" : "MRCM ATTRIBUTE DOMAIN: id=a8c88cca-305c-40e8-bf03-2d6d03d47755 : referencedComponentId=272741003 MRCM Attribute Domain Refset contains a ReferencedComponentId that does not exist in the Concept snapshot."
     } ],
     "totalFailed" : 88
+  }, {
+    "assertionName" : "Newly added active concept has one active preferred term in the Swiss French language refset.",
+    "assertionUuid" : "29599632-f175-441a-aac3-ce12d9bee0a9",
+    "firstNInstances" : [ {
+      "conceptId" : "702411003",
+      "detail" : "Concept: id=702411003: is added in a recent international release but has no active preferred term in the Swiss French language refset"
+    }, {
+      "conceptId" : "702769005",
+      "detail" : "Concept: id=702769005: is added in a recent international release but has no active preferred term in the Swiss French language refset"
+    }, {
+      "conceptId" : "703860006",
+      "detail" : "Concept: id=703860006: is added in a recent international release but has no active preferred term in the Swiss French language refset"
+    }, {
+      "conceptId" : "703155005",
+      "detail" : "Concept: id=703155005: is added in a recent international release but has no active preferred term in the Swiss French language refset"
+    }, {
+      "conceptId" : "702386002",
+      "detail" : "Concept: id=702386002: is added in a recent international release but has no active preferred term in the Swiss French language refset"
+    }, {
+      "conceptId" : "703649005",
+      "detail" : "Concept: id=703649005: is added in a recent international release but has no active preferred term in the Swiss French language refset"
+    }, {
+      "conceptId" : "703672002",
+      "detail" : "Concept: id=703672002: is added in a recent international release but has no active preferred term in the Swiss French language refset"
+    }, {
+      "conceptId" : "733073007",
+      "detail" : "Concept: id=733073007: is added in a recent international release but has no active preferred term in the Swiss French language refset"
+    } ],
+    "totalFailed" : 8
   }, {
     "assertionName" : "There is a 1:1 relationship between the id and the key values in the ASSOCIATION REFSET snapshot file.",
     "assertionUuid" : "2ddc9a28-150d-47a4-9b0e-7dbff2efdd72",

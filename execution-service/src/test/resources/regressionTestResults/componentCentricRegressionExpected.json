@@ -292,7 +292,7 @@
       "conceptId" : "7389001",
       "detail" : "MRCM Attribute Range Refset:id=268b70c3-aa2d-45da-8d2f-dd89f29d82b2:ConceptId=7389001 referenced in the column rangeConstraint in SNAPSHOT is invalid."
     } ],
-    "totalFailed" : 160
+    "totalFailed" : 157
   }, {
     "assertionName" : "Verify that ExtendedMap files contain nothing except ICD-10 maps (International Edition only)",
     "assertionUuid" : "a23ad275-836a-45b2-a57b-b48222305588",
@@ -544,8 +544,7 @@
       "detail" : "MRCM ATTRIBUTE RANGE REFSET: id=7d23e837-4e2b-45cd-b5c8-8ea9b51daae0:Non unique id in current MRCM Attribute Range snapshot file."
     } ],
     "totalFailed" : 1
-  },
-  {
+  }, {
     "assertionName" : "Lang refset members are active for inactive descriptions in the language refset snapshot file.",
     "assertionUuid" : "d76f1430-7e9a-11e1-b0c4-0800200c9a66",
     "firstNInstances" : [ {
@@ -598,8 +597,11 @@
     }, {
       "conceptId" : "71388002",
       "detail" : "Inactive concept (71388002|NO ACTIVE FSN FOUND|) missing active FSN preferred in en-gb AND en-us dialects."
+    }, {
+      "conceptId" : "0",
+      "detail" : "Inactive concept (0|NO ACTIVE FSN FOUND|) missing active FSN preferred in en-gb AND en-us dialects."
     } ],
-    "totalFailed" : 2
+    "totalFailed" : 3
   }, {
     "assertionName" : "The first letter of the FSN should be capitalized.",
     "assertionUuid" : "dd0d0406-7481-444a-9f04-b6fc7db49039",
@@ -792,8 +794,11 @@
     }, {
       "conceptId" : "71388002",
       "detail" : "Inactive concept (71388002|NO ACTIVE FSN FOUND|) missing active Preferred Term in one or more English dialects."
+    }, {
+      "conceptId" : "0",
+      "detail" : "Inactive concept (0|NO ACTIVE FSN FOUND|) missing active Preferred Term in one or more English dialects."
     } ],
-    "totalFailed" : 2
+    "totalFailed" : 3
   }, {
     "assertionName" : "All inactive concepts have definition status of PRIMITIVE.",
     "assertionUuid" : "fdf6a1b0-7cd6-11e1-b0c4-0800200c9a66",
@@ -858,8 +863,11 @@
     }, {
       "conceptId" : "71388002",
       "detail" : "Inactive concept (71388002|NO ACTIVE FSN FOUND|) missing active historical association to active concept."
+    }, {
+      "conceptId" : "0",
+      "detail" : "Inactive concept (0|NO ACTIVE FSN FOUND|) missing active historical association to active concept."
     } ],
-    "totalFailed" : 2
+    "totalFailed" : 3
   }, {
     "assertionName" : "No active Terms contain double spaces.",
     "assertionUuid" : "2d6c61e5-a04d-4115-be18-eeba2a44b835",
@@ -1264,7 +1272,7 @@
       "conceptId" : "433590000",
       "detail" : "MRCM Domain Refset:id=4c97efc0-bfb8-4afc-b3f1-d60862074973:ConceptId=433590000 referenced in the column domainConstraint in SNAPSHOT is invalid."
     } ],
-    "totalFailed" : 78
+    "totalFailed" : 72
   }, {
     "assertionName" : "No Concept has 2 stated relationships with the same type, destination and group.",
     "assertionUuid" : "5d27df10-7d08-11e1-b0c4-0800200c9a66",

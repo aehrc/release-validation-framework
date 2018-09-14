@@ -778,8 +778,11 @@
     }, {
       "conceptId" : "438958002",
       "detail" : "CONCEPT: id=438958002 is in delta but not in snapshot file."
+    }, {
+      "conceptId" : "0",
+      "detail" : "CONCEPT: id=0 is in delta but not in snapshot file."
     } ],
-    "totalFailed" : 7
+    "totalFailed" : 8
   }, {
     "assertionName" : "New inactive states follow active states in the DEFINITION snapshot file.",
     "assertionUuid" : "e6082dc4-c6f4-48c6-afa3-233182336a5c",
@@ -1176,8 +1179,11 @@
     }, {
       "conceptId" : "438958002",
       "detail" : "CONCEPT: id=438958002 is in DELTA file, but not in FULL file."
+    }, {
+      "conceptId" : "0",
+      "detail" : "CONCEPT: id=0 is in DELTA file, but not in FULL file."
     } ],
-    "totalFailed" : 4
+    "totalFailed" : 5
   }, {
     "assertionName" : "The current simple map refset snapshot file is an accurate derivative of the current full file",
     "assertionUuid" : "1d38106d-495e-4d86-8936-33c7e5a12a8f",
@@ -1502,8 +1508,11 @@
     "firstNInstances" : [ {
       "conceptId" : "699765003",
       "detail" : "Concept: id=699765003 is in the detla file, but no actual changes made since the previous release."
+    }, {
+      "conceptId" : "0",
+      "detail" : "Concept: id=0 is in the detla file, but no actual changes made since the previous release."
     } ],
-    "totalFailed" : 1
+    "totalFailed" : 2
   }, {
     "assertionName" : "There must be actual changes made to previously published inferred relationships in order for them to appear in the current delta.",
     "assertionUuid" : "44916964-5b78-4842-81d8-e8293ee93bea",
