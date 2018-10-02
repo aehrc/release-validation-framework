@@ -47,7 +47,7 @@
     } ],
     "totalFailed" : 1
   }, {
-    "assertionName" : "Verify that RefsetDescriptor Full and Snapshot files should be identical to last release",
+    "assertionName" : "Verify that RefsetDescriptor Full and Snapshot files should be identical to previously published release",
     "assertionUuid" : "87eac640-bdd7-451e-b3d7-211c0ecde76c",
     "firstNInstances" : [ {
       "conceptId" : "0",
@@ -221,7 +221,7 @@
     } ],
     "totalFailed" : 1
   }, {
-    "assertionName" : "Verify that DescriptionType Full and Snapshot files should be identical to last release",
+    "assertionName" : "Verify that DescriptionType Full and Snapshot files should be identical to previously published release",
     "assertionUuid" : "995ee930-4200-45dd-a96d-2b8b48092fdb",
     "firstNInstances" : [ {
       "conceptId" : "0",
@@ -568,7 +568,7 @@
     } ],
     "totalFailed" : 9
   }, {
-    "assertionName" : "Verify that there are no concepts that changed from fully defined to primitive and vice versa",
+    "assertionName" : "Verify that there are no concepts that changed from fully defined to primitive and vice versa since previously published release",
     "assertionUuid" : "c5aae9c7-337a-4d68-8877-5a2df5bb1ff4",
     "firstNInstances" : [ {
       "conceptId" : "699765004",
@@ -672,7 +672,7 @@
     } ],
     "totalFailed" : 1
   }, {
-    "assertionName" : "Verify that there are no concepts with changed FSN and semantic tags",
+    "assertionName" : "Verify that there are no concepts with changed FSN and semantic tags since previously published release",
     "assertionUuid" : "d2787a3a-c347-466b-bee2-f72f1e668af9",
     "firstNInstances" : [ {
       "conceptId" : "438956003",
@@ -1020,7 +1020,7 @@
     } ],
     "totalFailed" : 1
   }, {
-    "assertionName" : "Verify that there are no concepts that have been re-activated since the last release",
+    "assertionName" : "Verify that there are no concepts that have been re-activated since previously published release",
     "assertionUuid" : "0cc4a621-7043-40d5-8ff4-ba6fb899de87",
     "firstNInstances" : [ {
       "conceptId" : "438958002",
