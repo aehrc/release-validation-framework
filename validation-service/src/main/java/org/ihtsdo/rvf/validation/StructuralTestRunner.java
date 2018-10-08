@@ -54,7 +54,11 @@ public class StructuralTestRunner implements InitializingBean{
 		}
 		runColumnTests(resourceManager, testReport, validationLog);
 		runLineFeedTests(resourceManager, testReport);
-		
+
+		// run refset structure test when there is a manifest to test against
+		if( manifest != null) {
+			runRefsetStructureTests(resourceManager, testReport, manifest, validationLog);
+		}
 		testReport.getResult();
 		final String summary = testReport.writeSummary();
 		validationLog.info(summary);
@@ -84,6 +88,12 @@ public class StructuralTestRunner implements InitializingBean{
 
 		final ColumnPatternTester columnPatternTest = new ColumnPatternTester(validationLog, resourceManager, report);
 		columnPatternTest.runTests();
+	}
+
+	private void runRefsetStructureTests(final ResourceProvider resourceManager, final TestReportable report,
+										 final ManifestFile manifest, final ValidationLog validationLog) {
+		final ManifestRefsetTester manifestRefsetTester = new ManifestRefsetTester(validationLog, resourceManager, manifest, report);
+		manifestRefsetTester.runTests();
 	}
 	
 	public boolean verifyZipFileStructure(final ValidationReport validationReport, final File tempFile, final Long runId, final File manifestFile,
