@@ -2,6 +2,7 @@ package org.ihtsdo.rvf.validation;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.io.LineIterator;
+import org.apache.commons.lang3.StringUtils;
 import org.ihtsdo.otf.rest.exception.ResourceNotFoundException;
 import org.ihtsdo.rvf.validation.log.ValidationLog;
 import org.ihtsdo.rvf.validation.model.ManifestFile;
@@ -145,7 +146,7 @@ public class ManifestRefsetTester {
                 .replace("Snapshot","###")
                 .replace("Full","###");
         Set<String> refsetForFile = refsetMap.get(keyName);
-        Set<String> unexpectedRefsets = new HashSet<>();
+        String expectedRefsetIds = StringUtils.join(refsetForFile,",");
         if(refsetForFile != null && !refsetForFile.isEmpty()) {
             try {
                 Reader reader = resourceManager.getReader(fileName, Charset.forName(UTF_8));
@@ -154,26 +155,24 @@ public class ManifestRefsetTester {
                 if(lineIterator.hasNext()) {
                     //Skip header line
                     lineIterator.next();
+                    long lineNum = 1;
                     while (lineIterator.hasNext()) {
+                        lineNum++;
                         String line = lineIterator.next();
                         String[] columns = line.split("\t");
                         //Only test if the records has column active = 1
                         if("1".equals(columns[2])) {
                             String refsetId = columns[4];
                             if(!refsetForFile.contains(refsetId)) {
-                                unexpectedRefsets.add(refsetId);
+                                String error = "RefsetId " + refsetId + " at line " + lineNum + " is not specified for " + fileName + " in manifest.xml";
+                                String expected = "RefsetId " + expectedRefsetIds;
+                                report.addError("",startDate,fileName,resourceManager.getFilePath(),"refsetId", REFSET_STRUCTURE_TEST,expectedRefsetIds,error,expected,lineNum);
                             }
                         }
                     }
                 }
             } catch (IOException e) {
                 e.printStackTrace();
-            }
-        }
-        if(!unexpectedRefsets.isEmpty()) {
-            for (String unexpectedRefset : unexpectedRefsets) {
-                String error = "Found refset " + unexpectedRefset + " not specified for this file type in manifest.xml";
-                report.addError("",startDate,fileName,resourceManager.getFilePath(),"", REFSET_STRUCTURE_TEST,"",error,"",null);
             }
         }
         return true;
