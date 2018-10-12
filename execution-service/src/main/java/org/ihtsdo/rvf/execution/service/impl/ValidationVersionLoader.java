@@ -312,7 +312,7 @@ public class ValidationVersionLoader {
 		//Try to restore schema from S3 if there is MyISAM backup, otherwise load data from published package
 		if(!downloadMyISAMOnS3AndRestore(s3PublishFileHelper, rvfVersion)) {
 			String publishedFileS3Path = getPublishedFilePath(publishedReleaseFilename);
-			logger.debug("downloading published file from s3:" + publishedFileS3Path); //download previous ZIP file from S3
+			logger.debug("downloading published file from s3: " + publishedFileS3Path); //download previous ZIP file from S3
 			InputStream publishedFileInput = s3PublishFileHelper.getFileStream(publishedFileS3Path);
 			if (publishedFileInput != null) {
 				File tempFile = File.createTempFile(publishedReleaseFilename, ZIP_FILE_EXTENSION);
@@ -342,7 +342,7 @@ public class ValidationVersionLoader {
 			File myISAMFolder = new File(mysqlMyISamDataFolder + SEPARATOR + createdSchemaName);
 			File[] files = myISAMFolder.listFiles();
 			if(files == null) {
-				logger.warn("RVF cannot access {} to backup database {} to S3. Skip this step", mysqlISAMFolder, createdSchemaName);
+				logger.warn("RVF cannot access {} with user {} to backup database {} to S3. Skip this step", mysqlISAMFolder, System.getProperty("user.name"), createdSchemaName);
 				return;
 			}
 
@@ -352,7 +352,7 @@ public class ValidationVersionLoader {
 			s3PublishFileHelper.putFile(backupMyISAMZipFile, previousMyISAMFullPath);
 			FileUtils.deleteQuietly(backupMyISAMZipFile);
 		} else {
-			logger.warn("RVF cannot access {} to backup database {} to S3. Skip this step", mysqlISAMFolder, createdSchemaName);
+			logger.warn("RVF cannot access {} with user {} to backup database {} to S3. Skip this step", mysqlISAMFolder, System.getProperty("user.name"), createdSchemaName);
 		}
 
 
@@ -510,7 +510,7 @@ public class ValidationVersionLoader {
 			logger.debug("Can not find published MyISAM file from S3:" + rvfVersion);
 			return false;
 		}
-		logger.warn("RVF cannot access {} to restore version {} to S3. Skip this step", mysqlMyISamDataFolder, rvfVersion);
+		logger.warn("RVF cannot access {} with user to restore version {} to S3. Skip this step", mysqlMyISamDataFolder, System.getProperty("user.name"), rvfVersion);
 		return false;
 	}
 

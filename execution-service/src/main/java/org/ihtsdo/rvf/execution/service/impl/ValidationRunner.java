@@ -6,6 +6,7 @@ import org.apache.commons.codec.DecoderException;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
+import org.apache.log4j.LogManager;
 import org.ihtsdo.drools.response.InvalidContent;
 import org.ihtsdo.drools.response.Severity;
 import org.ihtsdo.drools.validator.rf2.DroolsRF2Validator;
@@ -17,12 +18,14 @@ import org.ihtsdo.rvf.entity.*;
 import org.ihtsdo.rvf.execution.service.AssertionExecutionService;
 import org.ihtsdo.rvf.execution.service.ReleaseDataManager;
 import org.ihtsdo.rvf.execution.service.impl.ValidationReportService.State;
+import org.ihtsdo.rvf.execution.service.util.S3LogAppender;
 import org.ihtsdo.rvf.jira.JiraService;
 import org.ihtsdo.rvf.service.AssertionService;
 import org.ihtsdo.rvf.util.ZipFileUtils;
 import org.ihtsdo.rvf.validation.StructuralTestRunner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.snomed.quality.validator.mrcm.ValidationRun;
 import org.snomed.quality.validator.mrcm.ValidationService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -87,6 +90,11 @@ public class ValidationRunner {
 	
 	public void run(ValidationRunConfig validationConfig) {
 		final Map<String , Object> responseMap = new LinkedHashMap<>();
+		String logId = "s3_" + validationConfig.getRunId();
+		MDC.put("runId", logId);
+		org.apache.log4j.Logger RVFLogger = LogManager.getLogger("org.ihtsdo.rvf");
+		S3LogAppender s3LogAppender = new S3LogAppender(logId);
+		RVFLogger.addAppender(s3LogAppender);
 		try {
 			responseMap.put(VALIDATION_CONFIG, validationConfig);
 			runValidation(responseMap, validationConfig);
@@ -105,6 +113,12 @@ public class ValidationRunner {
 		} finally {
 			FileUtils.deleteQuietly(validationConfig.getLocalProspectiveFile());
 			FileUtils.deleteQuietly(validationConfig.getLocalManifestFile());
+			try {
+				reportService.writeToS3(s3LogAppender.getTexts(),validationConfig.getStorageLocation() + "/log.txt");
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+			RVFLogger.removeAppender(s3LogAppender);
 		}
 	}
 	

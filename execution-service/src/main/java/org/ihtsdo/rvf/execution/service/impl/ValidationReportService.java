@@ -97,7 +97,7 @@ public class ValidationReportService {
 		
 	}
 	
-	 private void writeToS3(final String writeMe, final String targetPath) throws IOException, NoSuchAlgorithmException, DecoderException {
+	 public void writeToS3(final String writeMe, final String targetPath) throws IOException, NoSuchAlgorithmException, DecoderException {
 		//First write the data to a local temp file
 		final File temp = File.createTempFile("tempfile", ".tmp"); 
 		try {
