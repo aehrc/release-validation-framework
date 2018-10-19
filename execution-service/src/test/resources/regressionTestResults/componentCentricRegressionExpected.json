@@ -1,7 +1,7 @@
 {
   "assertionType" : "component-centric-validation",
-  "totalAssertionsRun" : 120,
-  "totalAssertionsFailed" : 117,
+  "totalAssertionsRun" : 121,
+  "totalAssertionsFailed" : 118,
   "results" : [ {
     "assertionName" : "Case-sensitive terms that share initial words also share caseSignificanceId value.",
     "assertionUuid" : "805ab37c-33fa-45aa-876b-f86365a828c8",
@@ -617,6 +617,17 @@
     } ],
     "totalFailed" : 1
   }, {
+    "assertionName" : "US and GB text definitions should have equivalents in each dialect",
+    "assertionUuid" : "dfdbf187-e2b7-44a0-aa1e-71c6f39a7384",
+    "firstNInstances" : [ {
+      "conceptId" : "703672002",
+      "detail" : "CONCEPT: id=703672002: Text Definition ID=3005197021 does not have equivalent number of US and GB dialect"
+    }, {
+      "conceptId" : "703672002",
+      "detail" : "CONCEPT: id=703672002: Text Definition ID=3008913022 does not have equivalent number of US and GB dialect"
+    } ],
+    "totalFailed" : 2
+  }, {
     "assertionName" : "Active descriptions do not have active inactivation indicators",
     "assertionUuid" : "e2aa5b09-5754-484f-9eb8-bb18732617ef",
     "firstNInstances" : [ {
@@ -845,13 +856,10 @@
       "conceptId" : "702386002",
       "detail" : "702386002 |Toxic effect of antimony and/or its compounds (disorder)|"
     }, {
-      "conceptId" : "702386002",
-      "detail" : "702386002 |Blood group antibody i (substance)|"
-    }, {
       "conceptId" : "700132006",
       "detail" : "700132006 |Proglumetacin, different semantic tag (procedure)|"
     } ],
-    "totalFailed" : 5
+    "totalFailed" : 4
   }, {
     "assertionName" : "AttributeInGroupCardinality value is in ('0..0', '0..1', '0..*') in MRCM ATTRIBUTE DOMAIN delta file",
     "assertionUuid" : "1f6a9168-534a-4ebe-b0e7-3f424e56a7d1",
