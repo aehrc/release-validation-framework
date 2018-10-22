@@ -54,6 +54,10 @@ public class ValidationRunner {
 
 	public static final String FAILURE_MESSAGE = "failureMessage";
 
+	private static final String LOG_RVF = "org.ihtsdo.rvf";
+
+	private static final String LOG_RVF_FILE = "rvf_log.txt";
+
 	private final Logger logger = LoggerFactory.getLogger(ValidationRunner.class);
 	
 	@Autowired
@@ -92,7 +96,7 @@ public class ValidationRunner {
 		final Map<String , Object> responseMap = new LinkedHashMap<>();
 		String logId = "s3_" + validationConfig.getRunId();
 		MDC.put("runId", logId);
-		org.apache.log4j.Logger RVFLogger = LogManager.getLogger("org.ihtsdo.rvf");
+		org.apache.log4j.Logger RVFLogger = LogManager.getLogger(LOG_RVF);
 		S3LogAppender s3LogAppender = new S3LogAppender(logId);
 		RVFLogger.addAppender(s3LogAppender);
 		try {
@@ -114,7 +118,7 @@ public class ValidationRunner {
 			FileUtils.deleteQuietly(validationConfig.getLocalProspectiveFile());
 			FileUtils.deleteQuietly(validationConfig.getLocalManifestFile());
 			try {
-				reportService.writeToS3(s3LogAppender.getTexts(),validationConfig.getStorageLocation() + "/log.txt");
+				reportService.writeToS3(s3LogAppender.getTexts(),validationConfig.getStorageLocation() + "/" + LOG_RVF_FILE);
 			} catch (Exception e) {
 				e.printStackTrace();
 			}

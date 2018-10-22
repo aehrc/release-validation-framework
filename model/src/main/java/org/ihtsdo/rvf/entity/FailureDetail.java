@@ -8,7 +8,7 @@ public class FailureDetail implements Comparable<FailureDetail>{
 	String errorDescription;
 	
 	public FailureDetail(String conceptId, String detail, String errorDescription) {
-		this.conceptId = new String (conceptId);
+		this.conceptId = conceptId;
 		this.detail = detail;
 		this.errorDescription = errorDescription;
 

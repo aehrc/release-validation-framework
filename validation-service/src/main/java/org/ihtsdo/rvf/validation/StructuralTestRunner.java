@@ -164,7 +164,7 @@ public class StructuralTestRunner implements InitializingBean{
 			String failMsg = "Structural test " + structuralTestRunItem.getTestType() +
 					" failed at row-column " + structuralTestRunItem.getExecutionId() +
 					" with error: " + structuralTestRunItem.getActualExpectedValue();
-			FailureDetail testFailItem  = new FailureDetail("",failMsg, ErrorMessage.getErrorDescription(structuralTestRunItem));
+			FailureDetail testFailItem  = new FailureDetail(null,failMsg, null);
 			failDetailList.add(testFailItem);
 			structuralTestFailItemMap.put(structuralTestRunItem.getFileName(), failDetailList);
 		}

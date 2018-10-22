@@ -33,6 +33,7 @@ import org.slf4j.LoggerFactory;
 
 public class ColumnPatternTester {
 
+
 	public static final Pattern UUID_PATTERN = Pattern.compile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
 	public static final Pattern DATE_PATTERN = Pattern.compile("^\\d{8}$");
 	private static final Pattern BOOLEAN_PATTERN = Pattern.compile("[0-1]");
@@ -42,6 +43,7 @@ public class ColumnPatternTester {
 	private static final Pattern BLANK = Pattern.compile("^$");
 	private static final Pattern NOT_BLANK = Pattern.compile("^(?=\\s*\\S).*$");
 	private static final Pattern URL_PATTERN = Pattern.compile("^(https?|ftp|file)://[-a-zA-Z0-9+&@#/%?=~_|!:,.;]*[-a-zA-Z0-9+&@#/%=~_|]");
+	private static final Map<Pattern, String> patternMap = new HashMap<>();
 	private static final String UTF_8 = "UTF-8";
 	public static final String FILE_NAME_TEST_TYPE = "FileNameTest";
 	private static final String COLUMN_COUNT_TEST_TYPE = "ColumnCountTest";
@@ -51,6 +53,18 @@ public class ColumnPatternTester {
 	public static final String COLUMN_VALUE_TEST_TYPE = "ColumnValuesTest";
 	public static final String COLUMN_DATE_TEST_TYPE = "ColumnDateTest";
 	public static final String COLUMN_BOOLEAN_TEST_TYPE = "ColumnBooleanTest";
+
+	static {
+		patternMap.put(UUID_PATTERN, "UUID value");
+		patternMap.put(DATE_PATTERN, "Date value (DD/MM/yyyy)");
+		patternMap.put(BOOLEAN_PATTERN, "Boolean value (0 or 1)");
+		patternMap.put(SCTID_PATTERN, "SCTID value");
+		patternMap.put(INTEGER_PATTERN, "Integer value");
+		patternMap.put(NON_ZERO_INTEGER_PATTERN, "Non-zero Integer value");
+		patternMap.put(BLANK, "Blank value");
+		patternMap.put(NOT_BLANK, "Non-blank value");
+		patternMap.put(URL_PATTERN, "URL value");
+	}
 
 	private final ValidationLog validationLog;
 	private final ResourceProvider resourceManager;
@@ -403,12 +417,12 @@ public class ColumnPatternTester {
 
 		public String getPatternString() {
 			final StringBuilder builder = new StringBuilder();
-			builder.append(patterns[0].toString());
+			builder.append(ColumnPatternTester.patternMap.get(patterns[0]));
 			if (patterns.length > 1) {
 				for (int i = 1; i < patterns.length; i++) {
 					final Pattern pattern = patterns[i];
 					builder.append(" or ");
-					builder.append(pattern.toString());
+					builder.append(ColumnPatternTester.patternMap.get(pattern));
 				}
 			}
 			return builder.toString();

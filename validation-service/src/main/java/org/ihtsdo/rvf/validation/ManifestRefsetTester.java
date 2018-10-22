@@ -164,8 +164,14 @@ public class ManifestRefsetTester {
                         if("1".equals(columns[2])) {
                             String refsetId = columns[4];
                             if(!refsetForFile.contains(refsetId)) {
-                                String error = "RefsetId " + refsetId + " at line " + lineNum + " is not specified for " + fileName + " in manifest.xml";
-                                String expected = "RefsetId " + expectedRefsetIds;
+                                String error = "Refset Id " + refsetId + " at line " + lineNum + " in " + fileName;
+                                String expected = null;
+                                if(refsetForFile.size() > 1) {
+                                    expected = "1 of Refset Ids " + expectedRefsetIds;
+                                } else {
+                                    expected = "Refset Id " + expectedRefsetIds;
+                                }
+
                                 report.addError("",startDate,fileName,resourceManager.getFilePath(),"refsetId", REFSET_STRUCTURE_TEST,expectedRefsetIds,error,expected,lineNum);
                             }
                         }
