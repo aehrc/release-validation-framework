@@ -1,7 +1,7 @@
 {
   "assertionType" : "component-centric-validation",
-  "totalAssertionsRun" : 121,
-  "totalAssertionsFailed" : 118,
+  "totalAssertionsRun" : 122,
+  "totalAssertionsFailed" : 119,
   "results" : [ {
     "assertionName" : "Case-sensitive terms that share initial words also share caseSignificanceId value.",
     "assertionUuid" : "805ab37c-33fa-45aa-876b-f86365a828c8",
@@ -1030,6 +1030,17 @@
       "detail" : "RELATIONSHIP: id=100000028: Inferred is-a relationship exists in a non-zero relationship group."
     } ],
     "totalFailed" : 1
+  }, {
+    "assertionName" : "There must be exactly 1 active FSN per concept.",
+    "assertionUuid" : "e963de02-dbc5-412d-9762-1b0b153b4c1a",
+    "firstNInstances" : [ {
+      "conceptId" : "700132006",
+      "detail" : "CONCEPT: id=700132006: There must be exactly 1 active FSN per concept, but this concept has 4 active FSN"
+    }, {
+      "conceptId" : "702386002",
+      "detail" : "CONCEPT: id=702386002: There must be exactly 1 active FSN per concept, but this concept has 3 active FSN"
+    } ],
+    "totalFailed" : 2
   }, {
     "assertionName" : "All concepts have at least one inferred is-a relationship.",
     "assertionUuid" : "3ab84230-7d08-11e1-b0c4-0800200c9a66",
