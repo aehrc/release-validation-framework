@@ -1150,7 +1150,7 @@
       "conceptId" : "0",
       "detail" : "expressionAssociationRefset ::id= a4f9d42e-eb98-468b-9024-e5aa236eb16f ::module id: 705115006 is not in module dependency list"
     } ],
-    "totalFailed" : 220
+    "totalFailed" : 221
   }, {
     "assertionName" : "Preferred Term exists exactly once in each language refset for each concept.",
     "assertionUuid" : "03cf9850-7857-11e1-b0c4-0800200c9a66",
@@ -2129,7 +2129,7 @@
       "conceptId" : "703649004",
       "detail" : "RELATIONSHIP: id=1000006026: Inferred Relationship contains a destination id that does not exist in the Concept snapshot file."
     } ],
-    "totalFailed" : 15
+    "totalFailed" : 16
   }, {
     "assertionName" : "ComplexMap refset id is unique in the snapshot file",
     "assertionUuid" : "6e70ea3e-c4dd-4ae3-8b75-0f0567e41b57",
@@ -2191,7 +2191,7 @@
       "conceptId" : "91241007",
       "detail" : "RELATIONSHIP: id=4969199027: Inferred Relationship contains source id that does not exist in the Concept snapshot file."
     } ],
-    "totalFailed" : 10
+    "totalFailed" : 11
   }, {
     "assertionName" : "Every active concept defined in the Danish extension has a preferred FSN in the en-US language refset.",
     "assertionUuid" : "759a1eb8-2ca6-4405-80ba-16fd7540c1d0",
@@ -2231,7 +2231,7 @@
       "conceptId" : "703649004",
       "detail" : "RELATIONSHIP: id=1000006026: Inferred Relationship contains type id that does not exist in the Concept snapshot file."
     } ],
-    "totalFailed" : 15
+    "totalFailed" : 16
   }, {
     "assertionName" : "There is a 1-to-1 relationship between the id and the immutable values in STATED RELATIONSHIP snapshot.",
     "assertionUuid" : "7e453140-79b9-11e1-b0c4-0800200c9a66",

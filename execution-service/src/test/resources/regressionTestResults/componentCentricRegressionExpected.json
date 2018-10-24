@@ -1,7 +1,7 @@
 {
   "assertionType" : "component-centric-validation",
-  "totalAssertionsRun" : 122,
-  "totalAssertionsFailed" : 119,
+  "totalAssertionsRun" : 123,
+  "totalAssertionsFailed" : 120,
   "results" : [ {
     "assertionName" : "Case-sensitive terms that share initial words also share caseSignificanceId value.",
     "assertionUuid" : "805ab37c-33fa-45aa-876b-f86365a828c8",
@@ -655,6 +655,17 @@
     } ],
     "totalFailed" : 1
   }, {
+    "assertionName" : "There must be exactly 1 active FSN per concept.",
+    "assertionUuid" : "e963de02-dbc5-412d-9762-1b0b153b4c1a",
+    "firstNInstances" : [ {
+      "conceptId" : "700132006",
+      "detail" : "CONCEPT: id=700132006: There must be exactly 1 active FSN per concept, but this concept has 4 active FSN"
+    }, {
+      "conceptId" : "702386002",
+      "detail" : "CONCEPT: id=702386002: There must be exactly 1 active FSN per concept, but this concept has 3 active FSN"
+    } ],
+    "totalFailed" : 2
+  }, {
     "assertionName" : "ID is unique in MRCM DOMAIN snapshot.",
     "assertionUuid" : "e980e959-943b-4cdc-998b-f91e670a030b",
     "firstNInstances" : [ {
@@ -1031,17 +1042,6 @@
     } ],
     "totalFailed" : 1
   }, {
-    "assertionName" : "There must be exactly 1 active FSN per concept.",
-    "assertionUuid" : "e963de02-dbc5-412d-9762-1b0b153b4c1a",
-    "firstNInstances" : [ {
-      "conceptId" : "700132006",
-      "detail" : "CONCEPT: id=700132006: There must be exactly 1 active FSN per concept, but this concept has 4 active FSN"
-    }, {
-      "conceptId" : "702386002",
-      "detail" : "CONCEPT: id=702386002: There must be exactly 1 active FSN per concept, but this concept has 3 active FSN"
-    } ],
-    "totalFailed" : 2
-  }, {
     "assertionName" : "All concepts have at least one inferred is-a relationship.",
     "assertionUuid" : "3ab84230-7d08-11e1-b0c4-0800200c9a66",
     "firstNInstances" : [ {
@@ -1077,6 +1077,14 @@
     } ],
     "totalFailed" : 10
   }, {
+    "assertionName" : "All part-of relationships have relationship group of 0.",
+    "assertionUuid" : "3c2a0ca7-2ffc-492b-b430-46b629fded9a",
+    "firstNInstances" : [ {
+      "conceptId" : "733073008",
+      "detail" : "INFERRED RELATIONSHIP: id=8094048029: Inferred part-of relationship exists in a non-zero relationship group."
+    } ],
+    "totalFailed" : 1
+  }, {
     "assertionName" : "AttributeCardinality value is in ('0..1','0..*') in MRCM ATTRIBUTE DOMAIN delta file",
     "assertionUuid" : "3ffbe5e3-ef3e-4c73-983f-24e3438a8434",
     "firstNInstances" : [ {
@@ -1099,8 +1107,11 @@
     }, {
       "conceptId" : "280844000",
       "detail" : "RELATIONSHIP: id=100000028: Relationship is in a relationship group with a single active inferred member."
+    }, {
+      "conceptId" : "733073008",
+      "detail" : "RELATIONSHIP: id=8094048029: Relationship is in a relationship group with a single active inferred member."
     } ],
-    "totalFailed" : 4
+    "totalFailed" : 5
   }, {
     "assertionName" : "No Concept has 2 inferred relationships with the same type, destination and group.",
     "assertionUuid" : "4572d730-7d08-11e1-b0c4-0800200c9a66",
