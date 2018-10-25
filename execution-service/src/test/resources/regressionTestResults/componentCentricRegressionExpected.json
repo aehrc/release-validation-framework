@@ -888,11 +888,8 @@
     }, {
       "conceptId" : "71388002",
       "detail" : "Inactive concept (71388002|NO ACTIVE FSN FOUND|) missing active historical association to active concept."
-    }, {
-      "conceptId" : "0",
-      "detail" : "Inactive concept (0|NO ACTIVE FSN FOUND|) missing active historical association to active concept."
-    } ],
-    "totalFailed" : 3
+    }],
+    "totalFailed" : 2
   }, {
     "assertionName" : "No active Terms contain double spaces.",
     "assertionUuid" : "2d6c61e5-a04d-4115-be18-eeba2a44b835",

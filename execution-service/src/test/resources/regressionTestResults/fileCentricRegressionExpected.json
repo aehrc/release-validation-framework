@@ -1,7 +1,7 @@
 {
   "assertionType" : "file-centric-validation",
-  "totalAssertionsRun" : 111,
-  "totalAssertionsFailed" : 93,
+  "totalAssertionsRun" : 116,
+  "totalAssertionsFailed" : 96,
   "results" : [ {
     "assertionName" : "Verify that RefsetDescriptor files contain only rows where each 'referencedComponentId + attributeOrder' pair is unique",
     "assertionUuid" : "82019fb7-0aaf-4d32-a68b-92d65bf7eeac",
