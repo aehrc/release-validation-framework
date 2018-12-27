@@ -49,7 +49,7 @@ end while;
 
 drop table if exists temp_snapshot;
 create table temp_snapshot(id varchar(36), conceptId bigint(20));
-set @runSql = concat("insert into temp_snapshot(id, conceptId) select id,", columnName, " from ", tableName, ";");
+set @runSql = concat("insert into temp_snapshot(id, conceptId) select id,", columnName, " from ", tableName, " where active = 1;");
 prepare statement from @runSql;
 execute statement;
 

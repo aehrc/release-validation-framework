@@ -56,5 +56,6 @@
                       and a.active = 1
                       and a.effectivetime = '<CURR_EFFECTIVE_TIME>'
                       and '<CURR_EFFECTIVE_TIME>' <> ''
+                      and a.term like concat('%SNOMED Clinical Terms version: %')
                       and a.term not like concat('%SNOMED Clinical Terms version: %<CURR_EFFECTIVE_TIME>%')) as result;
     commit;

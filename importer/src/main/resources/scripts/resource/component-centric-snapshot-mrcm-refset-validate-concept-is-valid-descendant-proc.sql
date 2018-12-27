@@ -35,7 +35,7 @@ end while;
 
 drop table if exists temp_snapshot_refset_conceptId;
 create table temp_snapshot_refset_conceptId(id varchar(36), conceptId bigint(20));
-set @runSql = concat("insert into temp_snapshot_refset_conceptId(id, conceptId) select id,", columnName, " from ", tableName, ";");
+set @runSql = concat("insert into temp_snapshot_refset_conceptId(id, conceptId) select id,", columnName, " from ", tableName, " where active = 1;");
 prepare statement from @runSql;
 execute statement;
 

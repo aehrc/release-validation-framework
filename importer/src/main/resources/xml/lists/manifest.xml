@@ -798,16 +798,6 @@
 			<keywords>AttributeCardinality value is in ('0..1','0..*') in MRCM ATTRIBUTE DOMAIN snapshot file</keywords>
 		</script>
 
-		<script uuid="d23a21cc-6dd0-4371-9f87-f68ea0d5f3a7" category="component-centric-validation,INT"
-				  sqlFile="component-centric-full-mrcm-attribute-domain-valid-attributecardinality.sql" text="AttributeCardinality value is in ('0..1','0..*') in MRCM ATTRIBUTE DOMAIN full file" >
-			<keywords>AttributeCardinality value is in ('0..1','0..*') in MRCM ATTRIBUTE DOMAIN full file</keywords>
-		</script>
-
-		<script uuid="3ffbe5e3-ef3e-4c73-983f-24e3438a8434" category="component-centric-validation,INT"
-				  sqlFile="component-centric-delta-mrcm-attribute-domain-valid-attributecardinality.sql" text="AttributeCardinality value is in ('0..1','0..*') in MRCM ATTRIBUTE DOMAIN delta file" >
-			<keywords>AttributeCardinality value is in ('0..1','0..*') in MRCM ATTRIBUTE DOMAIN delta file</keywords>
-		</script>
-
 		<script uuid="f47d1537-41dc-4cb5-ad0a-ed4caf993801" category="component-centric-validation,INT"
 				  sqlFile="component-centric-snapshot-mrcm-attribute-domain-valid-attributeingroupcardinality.sql" text="AttributeInGroupCardinality value is in ('0..0', '0..1', '0..*') in MRCM ATTRIBUTE DOMAIN snapshot file"  >
 			<keywords>AttributeInGroupCardinality value is in ('0..0', '0..1', '0..*') in MRCM ATTRIBUTE DOMAIN snapshot file</keywords>
