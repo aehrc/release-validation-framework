@@ -11,5 +11,6 @@ insert into qa_result (runid, assertionuuid, concept_id, details)
 		a.conceptid,
 		concat('Description: id=',a.id, ' has a term more than 255 characters long.') 
 		from curr_description_s a 
-		where length(a.term) > 255;
+		where a.active = 1
+		and length(a.term) > 255;
 commit;

@@ -1,7 +1,7 @@
 {
   "assertionType" : "component-centric-validation",
-  "totalAssertionsRun" : 123,
-  "totalAssertionsFailed" : 120,
+  "totalAssertionsRun" : 121,
+  "totalAssertionsFailed" : 118,
   "results" : [ {
     "assertionName" : "Case-sensitive terms that share initial words also share caseSignificanceId value.",
     "assertionUuid" : "805ab37c-33fa-45aa-876b-f86365a828c8",
@@ -340,7 +340,7 @@
       "conceptId" : "900000000000012004",
       "detail" : "mrcmAttributeDomainRefset:id=a8c88cca-305c-40e8-bf03-2d6d03d47755:ConceptId=900000000000012004 referenced in the column moduleId  in SNAPSHOT is not valid descendant of expression < 900000000000443000 |Module|"
     } ],
-    "totalFailed" : 739
+    "totalFailed" : 726
   }, {
     "assertionName" : "ID is unique in MRCM ATTRIBUTE DOMAIN snapshot.",
     "assertionUuid" : "a48d78fe-8ab5-4705-bbc5-1286fb2a98a2",
@@ -526,14 +526,6 @@
     "firstNInstances" : [ {
       "conceptId" : "370129004",
       "detail" : "MRCM ATTRIBUTE DOMAIN REFSET: id=8038688b-80f5-49b3-b3d8-c6fe13f8fb1e Grouped value is not in (0,1) in MRCM ATTRIBUTE DOMAIN snapshot file"
-    } ],
-    "totalFailed" : 1
-  }, {
-    "assertionName" : "AttributeCardinality value is in ('0..1','0..*') in MRCM ATTRIBUTE DOMAIN full file",
-    "assertionUuid" : "d23a21cc-6dd0-4371-9f87-f68ea0d5f3a7",
-    "firstNInstances" : [ {
-      "conceptId" : "370129004",
-      "detail" : "MRCM ATTRIBUTE DOMAIN REFSET: id=8038688b-80f5-49b3-b3d8-c6fe13f8fb1e AttributeCardinality value is not in (\"0..1\",\"0..*\") in MRCM ATTRIBUTE DOMAIN full file"
     } ],
     "totalFailed" : 1
   }, {
@@ -888,7 +880,7 @@
     }, {
       "conceptId" : "71388002",
       "detail" : "Inactive concept (71388002|NO ACTIVE FSN FOUND|) missing active historical association to active concept."
-    }],
+    } ],
     "totalFailed" : 2
   }, {
     "assertionName" : "No active Terms contain double spaces.",
@@ -1079,14 +1071,6 @@
     "firstNInstances" : [ {
       "conceptId" : "733073008",
       "detail" : "INFERRED RELATIONSHIP: id=8094048029: Inferred part-of relationship exists in a non-zero relationship group."
-    } ],
-    "totalFailed" : 1
-  }, {
-    "assertionName" : "AttributeCardinality value is in ('0..1','0..*') in MRCM ATTRIBUTE DOMAIN delta file",
-    "assertionUuid" : "3ffbe5e3-ef3e-4c73-983f-24e3438a8434",
-    "firstNInstances" : [ {
-      "conceptId" : "370129004",
-      "detail" : "MRCM ATTRIBUTE DOMAIN REFSET: id=8038688b-80f5-49b3-b3d8-c6fe13f8fb1e AttributeCardinality value is not in (\"0..1\",\"0..*\") in MRCM ATTRIBUTE DOMAIN delta file"
     } ],
     "totalFailed" : 1
   }, {

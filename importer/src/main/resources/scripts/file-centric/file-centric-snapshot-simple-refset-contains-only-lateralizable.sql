@@ -11,7 +11,7 @@
 		'<ASSERTIONUUID>',
 		a.moduleid,
 		concat('Warning: Simple Refset id=',a.id,' has refsetId which is not Lateralizable refset (723264001) : ', a.refsetid)
-	from curr_refsetdescriptor_s a
+	from curr_simplerefset_s a
 	where a.active = 1
 	and a.refsetid <> '723264001';
 	commit;
