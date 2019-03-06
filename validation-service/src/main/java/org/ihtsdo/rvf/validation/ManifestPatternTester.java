@@ -1,7 +1,7 @@
 package org.ihtsdo.rvf.validation;
 
 import org.apache.commons.io.FilenameUtils;
-import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang.StringUtils;
 import org.ihtsdo.rvf.validation.log.ValidationLog;
 import org.ihtsdo.rvf.validation.model.FileElement;
 import org.ihtsdo.rvf.validation.model.Folder;

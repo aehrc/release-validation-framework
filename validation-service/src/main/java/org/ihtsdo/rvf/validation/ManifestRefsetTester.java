@@ -2,10 +2,13 @@ package org.ihtsdo.rvf.validation;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.io.LineIterator;
-import org.apache.commons.lang3.StringUtils;
-import org.ihtsdo.otf.rest.exception.ResourceNotFoundException;
+import org.apache.commons.lang.StringUtils;
 import org.ihtsdo.rvf.validation.log.ValidationLog;
 import org.ihtsdo.rvf.validation.model.ManifestFile;
+import org.ihtsdo.rvf.validation.model.manifest.FileType;
+import org.ihtsdo.rvf.validation.model.manifest.FolderType;
+import org.ihtsdo.rvf.validation.model.manifest.ListingType;
+import org.ihtsdo.rvf.validation.model.manifest.RefsetType;
 import org.ihtsdo.rvf.validation.resource.ResourceProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,8 +37,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-
-import org.ihtsdo.rvf.validation.model.manifest.*;
 public class ManifestRefsetTester {
 
     private static final String REFSET_STRUCTURE_TEST = "RefsetStructureTest";
@@ -75,7 +76,7 @@ public class ManifestRefsetTester {
     private void createRefsetMap() throws FileNotFoundException, JAXBException, UnsupportedEncodingException {
         InputStream manifestInputStream = new FileInputStream(manifestFile.getFile());
         if (manifestInputStream == null) {
-            throw new ResourceNotFoundException("Failed to load manifest due to null inputstream");
+            throw new FileNotFoundException("Failed to load manifest due to null inputstream");
         }
         //Load the manifest file xml into a java object hierarchy
         JAXBContext jc = JAXBContext.newInstance("org.ihtsdo.rvf.validation.model.manifest");
@@ -83,7 +84,7 @@ public class ManifestRefsetTester {
         ListingType manifestListing = um.unmarshal(new StreamSource(new InputStreamReader(manifestInputStream, "UTF-8")), ListingType.class).getValue();
 
         if (manifestListing.getFolder() == null) {
-            throw new ResourceNotFoundException("Failed to recover root folder from manifest.  Ensure the root element is named 'listing' "
+            throw new FileNotFoundException("Failed to recover root folder from manifest.  Ensure the root element is named 'listing' "
                     + "and it has a namespace of xmlns=\"http://release.ihtsdo.org/manifest/1.0.0\" ");
         }
         getRefsetsFromManifest(manifestListing.getFolder());

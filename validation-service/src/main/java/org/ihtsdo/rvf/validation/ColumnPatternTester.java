@@ -15,11 +15,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.regex.Pattern;
 
-import org.apache.commons.lang3.StringUtils;
-import org.ihtsdo.rvf.util.ECLParser;
-import org.ihtsdo.rvf.util.ECLParserUtil;
-import org.ihtsdo.rvf.util.ExpressionTemplateParser;
-import org.ihtsdo.rvf.util.LongECLGrammar;
 import org.ihtsdo.rvf.validation.log.ValidationLog;
 import org.ihtsdo.rvf.validation.model.ColumnType;
 import org.ihtsdo.rvf.validation.resource.ResourceProvider;
@@ -33,38 +28,23 @@ import org.slf4j.LoggerFactory;
 
 public class ColumnPatternTester {
 
-
-	public static final Pattern UUID_PATTERN = Pattern.compile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
-	public static final Pattern DATE_PATTERN = Pattern.compile("^\\d{8}$");
+	private static final Pattern UUID_PATTERN = Pattern.compile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
+	private static final Pattern DATE_PATTERN = Pattern.compile("^\\d{8}$");
 	private static final Pattern BOOLEAN_PATTERN = Pattern.compile("[0-1]");
-	public static final Pattern SCTID_PATTERN = Pattern.compile("^\\d{6,18}$");
+	private static final Pattern SCTID_PATTERN = Pattern.compile("^\\d{6,18}$");
 	private static final Pattern INTEGER_PATTERN = Pattern.compile("\\d+");
 	private static final Pattern NON_ZERO_INTEGER_PATTERN = Pattern.compile("^[1-9][0-9]*$");
 	private static final Pattern BLANK = Pattern.compile("^$");
 	private static final Pattern NOT_BLANK = Pattern.compile("^(?=\\s*\\S).*$");
-	private static final Pattern URL_PATTERN = Pattern.compile("^(https?|ftp|file)://[-a-zA-Z0-9+&@#/%?=~_|!:,.;]*[-a-zA-Z0-9+&@#/%=~_|]");
-	private static final Map<Pattern, String> patternMap = new HashMap<>();
 	private static final String UTF_8 = "UTF-8";
-	public static final String FILE_NAME_TEST_TYPE = "FileNameTest";
+	private static final String FILE_NAME_TEST_TYPE = "FileNameTest";
 	private static final String COLUMN_COUNT_TEST_TYPE = "ColumnCountTest";
 	private static final String ROW_SPACE_TEST_TYPE = "RowSpaceTest";
 	private static final String EMPTY_ROW_TEST = "BlankRowTest";
 	private static final String COLUMN_HEADING_TEST = "ColumnHeadingTest";
-	public static final String COLUMN_VALUE_TEST_TYPE = "ColumnValuesTest";
-	public static final String COLUMN_DATE_TEST_TYPE = "ColumnDateTest";
-	public static final String COLUMN_BOOLEAN_TEST_TYPE = "ColumnBooleanTest";
-
-	static {
-		patternMap.put(UUID_PATTERN, "UUID value");
-		patternMap.put(DATE_PATTERN, "Date value (DD/MM/yyyy)");
-		patternMap.put(BOOLEAN_PATTERN, "Boolean value (0 or 1)");
-		patternMap.put(SCTID_PATTERN, "SCTID value");
-		patternMap.put(INTEGER_PATTERN, "Integer value");
-		patternMap.put(NON_ZERO_INTEGER_PATTERN, "Non-zero Integer value");
-		patternMap.put(BLANK, "Blank value");
-		patternMap.put(NOT_BLANK, "Non-blank value");
-		patternMap.put(URL_PATTERN, "URL value");
-	}
+	private static final String COLUMN_VALUE_TEST_TYPE = "ColumnValuesTest";
+	private static final String COLUMN_DATE_TEST_TYPE = "ColumnDateTest";
+	private static final String COLUMN_BOOLEAN_TEST_TYPE = "ColumnBooleanTest";
 
 	private final ValidationLog validationLog;
 	private final ResourceProvider resourceManager;
@@ -202,7 +182,7 @@ public class ColumnPatternTester {
 	}
 
 	public boolean validateRow(final Date startTime, final String fileName, final String line, final long lineNumber, final int configColumnCount, final int dataColumnCount) {
-		if (StringUtils.isEmpty(line)) {
+		if (line.isEmpty()) {
 			validationLog.assertionError("Empty line at line {}", lineNumber);
 			testReport.addError(lineNumber + "-0", startTime, fileName, resourceManager.getFilePath(), "Empty Row", EMPTY_ROW_TEST, "", line, "expected data",lineNumber);
 			return false;
@@ -233,70 +213,17 @@ public class ColumnPatternTester {
 		final PatternTest columnTest = columnTests.get(columnType);
 
 		if (columnTest != null) {
-			/*if(isMRCMValidationCheckOnly(fileName,column)) {
-				validateMRCMRules(id,lineNumber,value,column,startTime,fileName,columnTest);
-			} else */
 			if (canBeBlank(value, column) || columnTest.validate(column, lineNumber, value)) {
 				testReport.addSuccess(id, startTime, fileName, resourceManager.getFilePath(), column.getName(),
 						columnTest.getTestType(), columnTest.getPatternString());
 			} else {
-				final String testedValue = StringUtils.isNoneEmpty(value) ? value : "No Value";
+				final String testedValue = value.isEmpty() ? "No Value" : value;
 				validationLog.assertionError(columnTest.getMessage(), columnTest.getErrorArgs());
 				testReport.addError(id, startTime, fileName, resourceManager.getFilePath(), column.getName(),
 						columnTest.getTestType(), columnTest.getPatternString(), testedValue, columnTest.getExpectedValue(),lineNumber);
 			}
 		}
 	}
-	
-	
-	private boolean isMRCMValidationCheckOnly(final String fileName, final Field column){
-		if(	fileName.contains("Refset_MRCMDomain")	&& 
-				   (column.getName().equalsIgnoreCase("domainConstraint")
-				 || column.getName().equalsIgnoreCase("parentDomain")
-				 || column.getName().equalsIgnoreCase("proximalPrimitiveConstraint")
-				 || column.getName().equalsIgnoreCase("proximalPrimitiveRefinement")
-				 || column.getName().equalsIgnoreCase("domainTemplateForPrecoordination")
-				 || column.getName().equalsIgnoreCase("domainTemplateForPostcoordination")
-				 || column.getName().equalsIgnoreCase("guideURL")))
-			return true;
-		return false;
-	}
-	
-	/**
-	 * This specific method is used for checking some validations which will be applied for MRCM Domain SNAPSHOT/FULL/DELTA only
-	 */
-	private void validateMRCMRules(final String id, final long lineNumber, final String value, final Field column, final Date startTime, final String fileName, final PatternTest columnTest){
-		if(column.getName().equalsIgnoreCase("domainConstraint")
-		 || column.getName().equalsIgnoreCase("parentDomain")
-		 || column.getName().equalsIgnoreCase("proximalPrimitiveConstraint")
-		 || column.getName().equalsIgnoreCase("proximalPrimitiveRefinement")) { // Expression Constrain Language validation
-			if(ECLParserUtil.validateECLString(LongECLGrammar.getInstance(),value)){
-				testReport.addSuccess(id, startTime, fileName, resourceManager.getFilePath(), column.getName(),
-						columnTest.getTestType(),"");
-			} else {
-				testReport.addError(id, startTime, fileName, resourceManager.getFilePath(), column.getName(),
-						columnTest.getTestType(), columnTest.getPatternString(), "Invalid ECL", column.getName() + " is a valid Expression Constrain Language string",lineNumber);
-			}			
-		} else if (column.getName().equalsIgnoreCase("domainTemplateForPrecoordination")
-				 || column.getName().equalsIgnoreCase("domainTemplateForPostcoordination")) { // Expression Template validation
-			if(ECLParserUtil.validateECLString(ExpressionTemplateParser.getInstance(),value)){
-				testReport.addSuccess(id, startTime, fileName, resourceManager.getFilePath(), column.getName(),
-						columnTest.getTestType(),"");
-			} else {
-				testReport.addError(id, startTime, fileName, resourceManager.getFilePath(), column.getName(),
-						columnTest.getTestType(), columnTest.getPatternString(), "Invalid Expression Template",column.getName() + " is a valid Expression Template",lineNumber);
-			}
-		} else if (column.getName().equalsIgnoreCase("guideURL")){
-			if(URL_PATTERN.matcher(value).matches()){
-				testReport.addSuccess(id, startTime, fileName, resourceManager.getFilePath(), column.getName(),
-						columnTest.getTestType(),"");
-			} else {
-				testReport.addError(id, startTime, fileName, resourceManager.getFilePath(), column.getName(),
-						columnTest.getTestType(), URL_PATTERN.pattern(), value, URL_PATTERN.pattern(),lineNumber);
-			}			
-		}
-	}
-
 	private boolean canBeBlank(final String value, final Field column) {
 		return !column.isMandatory() && isBlank(value);
 	}
@@ -417,12 +344,12 @@ public class ColumnPatternTester {
 
 		public String getPatternString() {
 			final StringBuilder builder = new StringBuilder();
-			builder.append(ColumnPatternTester.patternMap.get(patterns[0]));
+			builder.append(patterns[0].toString());
 			if (patterns.length > 1) {
 				for (int i = 1; i < patterns.length; i++) {
 					final Pattern pattern = patterns[i];
 					builder.append(" or ");
-					builder.append(ColumnPatternTester.patternMap.get(pattern));
+					builder.append(pattern.toString());
 				}
 			}
 			return builder.toString();

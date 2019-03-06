@@ -5,10 +5,9 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.Writer;
+import java.io.OutputStream;
 import java.nio.charset.Charset;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -26,7 +25,6 @@ import org.slf4j.LoggerFactory;
 public class ZipFileUtils {
 	
 	private static final Logger LOGGER = LoggerFactory.getLogger(ZipFileUtils.class);
-	private static final String UTF_8 = "UTF-8";
 
 	/**
 	 * Size of the buffer to read/write data
@@ -49,19 +47,19 @@ public class ZipFileUtils {
 				final ZipEntry entry = entries.nextElement();
 				if (!entry.isDirectory()) {
 					InputStream in = null;
-					Writer writer = null;
+					OutputStream out = null;
 					try {
 							in = zipFile.getInputStream(entry);
 							String fileName = Paths.get(entry.getName()).getFileName().toString();
-							if (fileName.startsWith("x")) {
+							if (fileName.startsWith("x") && fileName.endsWith(".txt")) {
 								fileName = fileName.substring(1);
 							}
-							final File entryDestination = new File(outputDir,fileName);
-							writer = new FileWriter(entryDestination);
-							IOUtils.copy(in, writer, UTF_8);
+							File entryDestination = new File(outputDir,fileName);
+							out = new FileOutputStream(entryDestination);
+							IOUtils.copy(in, out);
 						} finally {
 							IOUtils.closeQuietly(in);
-							IOUtils.closeQuietly(writer);
+							IOUtils.closeQuietly(out);
 						}
 				}
 			}
@@ -84,18 +82,22 @@ public class ZipFileUtils {
 				final ZipEntry entry = entries.nextElement();
 				final File entryDestination = new File(outputDir,  entry.getName());
 				entryDestination.getParentFile().mkdirs();
+				if (!entryDestination.toPath().normalize().startsWith(outputDir)) {
+					LOGGER.error("Bad zip entry " + entry.getName());
+					continue;
+				}
 				if (entry.isDirectory()) {
 					entryDestination.mkdirs();
 				} else {
 					InputStream in = null;
-					Writer writer = null;
+					OutputStream out = null;
 					try {
 						in = zipFile.getInputStream(entry);
-						writer = new FileWriter(entryDestination);
-						IOUtils.copy(in, writer, UTF_8);
+						out = new FileOutputStream(entryDestination);
+						IOUtils.copy(in, out);
 						} finally {
 							IOUtils.closeQuietly(in);
-							IOUtils.closeQuietly(writer);
+							IOUtils.closeQuietly(out);
 						}
 				}
 			}
