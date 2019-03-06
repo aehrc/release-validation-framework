@@ -418,8 +418,11 @@
     }, {
       "conceptId" : "71388002",
       "detail" : "Inactive concept (71388002|NO ACTIVE FSN FOUND|) missing active FSN preferred in en-gb AND en-us dialects."
+    }, {
+      "conceptId" : "0",
+      "detail" : "Inactive concept (0|NO ACTIVE FSN FOUND|) missing active FSN preferred in en-gb AND en-us dialects."
     } ],
-    "totalFailed" : 2
+    "totalFailed" : 3
   }, {
     "assertionName" : "The first letter of the FSN should be capitalized.",
     "assertionUuid" : "dd0d0406-7481-444a-9f04-b6fc7db49039",
@@ -537,8 +540,11 @@
     }, {
       "conceptId" : "71388002",
       "detail" : "Inactive concept (71388002|NO ACTIVE FSN FOUND|) missing active Preferred Term in one or more English dialects."
+    }, {
+      "conceptId" : "0",
+      "detail" : "Inactive concept (0|NO ACTIVE FSN FOUND|) missing active Preferred Term in one or more English dialects."
     } ],
-    "totalFailed" : 2
+    "totalFailed" : 3
   }, {
     "assertionName" : "All inactive concepts have definition status of PRIMITIVE.",
     "assertionUuid" : "fdf6a1b0-7cd6-11e1-b0c4-0800200c9a66",
@@ -775,8 +781,11 @@
     }, {
       "conceptId" : "280844000",
       "detail" : "RELATIONSHIP: id=100000028: Relationship is in a relationship group with a single active inferred member."
+    }, {
+      "conceptId" : "733073008",
+      "detail" : "RELATIONSHIP: id=8094048029: Relationship is in a relationship group with a single active inferred member."
     } ],
-    "totalFailed" : 4
+    "totalFailed" : 5
   }, {
     "assertionName" : "No Concept has 2 inferred relationships with the same type, destination and group.",
     "assertionUuid" : "4572d730-7d08-11e1-b0c4-0800200c9a66",
