@@ -1,11 +1,14 @@
 package org.ihtsdo.rvf.jira;
 
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import net.rcarz.jiraclient.*;
+import net.rcarz.jiraclient.CustomFieldOption;
+import net.rcarz.jiraclient.Field;
+import net.rcarz.jiraclient.Issue;
+import net.rcarz.jiraclient.JiraClient;
+import net.rcarz.jiraclient.JiraException;
 import org.apache.commons.lang.StringUtils;
 import org.ihtsdo.rvf.entity.FailureDetail;
 import org.ihtsdo.rvf.entity.TestRunItem;
@@ -141,26 +144,32 @@ public class JiraServiceImpl implements JiraService {
         JiraClient jiraClient = jiraClientFactory.getJiraClient();
         if (summary.length() > 255) summary = summary.substring(0, 252) + "...";
         JSONObject productNameObj = new JSONObject();
-        productNameObj.put("value", productName);
-        JSONObject reportingStageObj = new JSONObject();
-        reportingStageObj.put("value", reportingStage);
-        ArrayList products = new ArrayList();
-        products.add(productName);
-        ArrayList reportingStages = new ArrayList();
-        reportingStages.add(reportingStage);
-        Issue issue = jiraClient.createIssue(valueProjectKey, "Bug")
-                .field(Field.SUMMARY, summary)
-                .field(Field.DESCRIPTION, description)
-                .field(fieldIdProductName, productNameObj)
-                .field(fieldIdReportStage, reportingStages)
-                .field(fieldIdReleaseDate, releaseDate)
-                .execute();
-        if (StringUtils.isNotBlank(defaultAssignee)) {
-            issue.update()
-                    .field(Field.ASSIGNEE, defaultAssignee)
+        try {
+            productNameObj.put("value", productName);
+            JSONObject reportingStageObj = new JSONObject();
+            reportingStageObj.put("value", reportingStage);
+            ArrayList products = new ArrayList();
+            products.add(productName);
+            ArrayList reportingStages = new ArrayList();
+            reportingStages.add(reportingStage);
+            Issue issue = jiraClient.createIssue(valueProjectKey, "Bug")
+                    .field(Field.SUMMARY, summary)
+                    .field(Field.DESCRIPTION, description)
+                    .field(fieldIdProductName, productNameObj)
+                    .field(fieldIdReportStage, reportingStages)
+                    .field(fieldIdReleaseDate, releaseDate)
                     .execute();
+            if (StringUtils.isNotBlank(defaultAssignee)) {
+                issue.update()
+                        .field(Field.ASSIGNEE, defaultAssignee)
+                        .execute();
+            }
+            return issue;
+        } catch (Exception e) {
+            LOGGER.error("Failed to create an issue on JIRA", e);
         }
-        return issue;
+        return null;
+
     }
 
     @SuppressWarnings("unchecked")

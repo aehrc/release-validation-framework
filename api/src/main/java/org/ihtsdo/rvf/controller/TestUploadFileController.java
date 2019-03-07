@@ -48,6 +48,14 @@ import io.swagger.annotations.ApiParam;
 @Api(position = 4, value = "Validate release files")
 public class TestUploadFileController {
 
+	private static final String ENABLE_MRCM_VALIDATION = "enableMRCMValidation";
+
+	private static final String CREATE_JIRA_ISSUE = "jiraIssueCreationFlag";
+
+	private static final String PRODUCT_NAME = "productName";
+
+	private static final String REPORTING_STAGE = "reportingStage";
+
 	private static final String INCLUDED_MODULES = "includedModules";
 
 	private static final String RELEASE_AS_AN_EDITION = "releaseAsAnEdition";
@@ -182,6 +190,11 @@ public class TestUploadFileController {
 			@ApiParam(value = "If release package file is an MS edition, should set to true. Defaults to false") @RequestParam(value = RELEASE_AS_AN_EDITION, required = false) final boolean releaseAsAnEdition,
 			@ApiParam(value = "Module IDs of components in the MS extension. Used for filtering results in Drools validation. Values are separated by comma") 
 			@RequestParam(value = INCLUDED_MODULES, required = false) final String includedModules,
+			@ApiParam(value = "Defaults to false.") @RequestParam(value = ENABLE_MRCM_VALIDATION, required = false) final boolean enableMrcmValidation,
+			@ApiParam(value = "Set to true to create JIRA issues for fail assertions. Defaults to false") @RequestParam(value = CREATE_JIRA_ISSUE, required = false) final boolean createJiraIssue,
+			@ApiParam(value = "Release product name on JIRA issue (e.g SNOMED CT International edition, SNOMED CT Spanish edition, SNOMED CT Managed Service - Denmark Extension (DK)" +
+					", SNOMED CT Managed Service - Sweden Extension (SE), SNOMED CT to GMDN Simple Map)") @RequestParam(value = PRODUCT_NAME, required = false) final String productName,
+			@ApiParam(value = "Reporting State on JIRA issue (e.g Pre-Alpha, Alpha feedback, Beta feedback, Pre-Production feedback, Post-Production)") @RequestParam(value = REPORTING_STAGE, required = false) final String reportingStage,
 			UriComponentsBuilder uriComponentsBuilder
 			) throws IOException {
 
@@ -199,6 +212,10 @@ public class TestUploadFileController {
 				.setEffectiveTime(effectiveTime)
 				.setReleaseAsAnEdition(releaseAsAnEdition)
 				.setIncludedModules(includedModules)
+				.setEnableMRCMValidation(enableMrcmValidation)
+				.setJiraIssueCreationFlag(createJiraIssue)
+				.setProductName(productName)
+				.setReportingStage(reportingStage)
 				.addUrl(urlPrefix);
 
 		// Before we start running, ensure that we've made our mark in the storage location
@@ -240,6 +257,11 @@ public class TestUploadFileController {
 			@RequestParam(value = RELEASE_AS_AN_EDITION, required = false) final boolean releaseAsAnEdition,
 			@ApiParam(value = "Module IDs of components in the MS extension. Used for filtering results in Drools validation. Values are separated by comma") 
 			@RequestParam(value = INCLUDED_MODULES, required = false) final String includedModules,
+			@ApiParam(value = "Defaults to false.") @RequestParam(value = ENABLE_MRCM_VALIDATION, required = false) final boolean enableMrcmValidation,
+			@ApiParam(value = "Set to true to create JIRA issues for fail assertions. Defaults to false") @RequestParam(value = CREATE_JIRA_ISSUE, required = false) final boolean createJiraIssue,
+			@ApiParam(value = "Release product name on JIRA issue (e.g SNOMED CT International edition, SNOMED CT Spanish edition, SNOMED CT Managed Service - Denmark Extension (DK)" +
+					", SNOMED CT Managed Service - Sweden Extension (SE), SNOMED CT to GMDN Simple Map)") @RequestParam(value = PRODUCT_NAME, required = false) final String productName,
+			@ApiParam(value = "Reporting State on JIRA issue (e.g Pre-Alpha, Alpha feedback, Beta feedback, Pre-Production feedback, Post-Production)") @RequestParam(value = REPORTING_STAGE, required = false) final String reportingStage,
 			UriComponentsBuilder uriComponentsBuilder
 			) throws IOException {
 		ValidationRunConfig vrConfig = new ValidationRunConfig();
@@ -261,7 +283,11 @@ public class TestUploadFileController {
 				.setEnableDrools(enableDrools)
 				.setEffectiveTime(effectiveTime)
 				.setReleaseAsAnEdition(releaseAsAnEdition)
-				.setIncludedModules(includedModules);
+				.setIncludedModules(includedModules)
+				.setEnableMRCMValidation(enableMrcmValidation)
+				.setJiraIssueCreationFlag(createJiraIssue)
+				.setProductName(productName)
+				.setReportingStage(reportingStage);
 
 		// Before we start running, ensure that we've made our mark in the storage location
 		// Init will fail if we can't write the "running" state to storage

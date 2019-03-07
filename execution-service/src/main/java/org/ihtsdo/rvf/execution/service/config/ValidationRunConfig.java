@@ -29,7 +29,11 @@ public class ValidationRunConfig {
 	private String includedModules;
 	private List<String> droolsRulesGroupList;
 	private String bucketName;
-	
+	private boolean enableMRCMValidation;
+	private boolean jiraIssueCreationFlag;
+	private String productName;
+	private String reportingStage;
+
 	public MultipartFile getFile() {
 		return file;
 	}
@@ -282,5 +286,41 @@ public class ValidationRunConfig {
 	public void setBucketName(String bucketName) {
 		this.bucketName = bucketName;
 		
+	}
+
+	public boolean isEnableMRCMValidation() {
+		return enableMRCMValidation;
+	}
+
+	public ValidationRunConfig setEnableMRCMValidation(boolean enableMRCMValidation) {
+		this.enableMRCMValidation = enableMRCMValidation;
+		return this;
+	}
+
+	public boolean isJiraIssueCreationFlag() {
+		return jiraIssueCreationFlag;
+	}
+
+	public ValidationRunConfig setJiraIssueCreationFlag(boolean jiraIssueCreationFlag) {
+		this.jiraIssueCreationFlag = jiraIssueCreationFlag;
+		return this;
+	}
+
+	public String getProductName() {
+		return productName;
+	}
+
+	public ValidationRunConfig setProductName(String productName) {
+		this.productName = productName;
+		return this;
+	}
+
+	public String getReportingStage() {
+		return reportingStage;
+	}
+
+	public ValidationRunConfig setReportingStage(String reportingStage) {
+		this.reportingStage = reportingStage;
+		return this;
 	}
 }

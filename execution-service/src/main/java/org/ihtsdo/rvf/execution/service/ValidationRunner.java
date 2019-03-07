@@ -5,10 +5,13 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.Calendar;
 
+import net.rcarz.jiraclient.JiraException;
+import org.apache.commons.lang.StringUtils;
 import org.ihtsdo.rvf.entity.ValidationReport;
 import org.ihtsdo.rvf.execution.service.ValidationReportService.State;
 import org.ihtsdo.rvf.execution.service.config.MysqlExecutionConfig;
 import org.ihtsdo.rvf.execution.service.config.ValidationRunConfig;
+import org.ihtsdo.rvf.jira.JiraService;
 import org.ihtsdo.rvf.validation.StructuralTestRunner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,6 +36,13 @@ public class ValidationRunner {
 	
 	@Autowired
 	private MysqlValidationService mysqlValidationService;
+
+
+	@Autowired
+	private MRCMValidationService mrcmValidationService;
+
+	@Autowired
+	private JiraService jiraService;
 	
 	private Logger logger = LoggerFactory.getLogger(ValidationRunner.class);
 
@@ -79,7 +89,20 @@ public class ValidationRunner {
 			reportService.writeProgress(droolsTestStartMsg, validationConfig.getStorageLocation());
 			droolsValidationService.runDroolsAssertions(statusReport, validationConfig);
 		}
+		if(validationConfig.isEnableMRCMValidation()) {
+			// Run MRCM validations
+			String mrcmTestStartMsg = "Start MRCM validation for release file: " + validationConfig.getTestFileName();
+			logger.info(mrcmTestStartMsg);
+			reportService.writeProgress(mrcmTestStartMsg, validationConfig.getStorageLocation());
+			mrcmValidationService.runMRCMAssertionTests(statusReport, validationConfig, executionConfig.getEffectiveTime(), executionConfig.getExecutionId());
+		}
 		report.sortAssertionLists();
+
+		// Create Jira link for failed assertions
+		if(validationConfig.isJiraIssueCreationFlag()) {
+			addJiraLinkToReport(validationConfig, report, validationConfig.getEffectiveTime());
+		}
+		
 		final Calendar endTime = Calendar.getInstance();
 		final long timeTaken = (endTime.getTimeInMillis() - startTime.getTimeInMillis()) / 60000;
 		logger.info(String.format("Finished execution with runId : [%1s] in [%2s] minutes ", validationConfig.getRunId(), timeTaken));
@@ -110,6 +133,31 @@ public class ValidationRunner {
 		reportService.putFileIntoS3(reportStorage, new File(structuralTestRunner.getStructureTestReportFullPath()));
 		if (isFailed) {
 			reportService.writeResults(statusReport, State.FAILED, reportStorage);
+		}
+	}
+
+	private void addJiraLinkToReport(ValidationRunConfig validationRunConfig, ValidationReport report, String effectiveTime) {
+		if(validationRunConfig.isJiraIssueCreationFlag()) {
+			String reportingStage = validationRunConfig.getReportingStage();
+			if(StringUtils.isBlank(reportingStage)) {
+				logger.error("Reporting stage is required for creating JIRA ticket");
+				return;
+			}
+			String productName = validationRunConfig.getProductName();
+			if(StringUtils.isBlank(productName)) {
+				logger.error("Product name is required for creating JIRA ticket");
+				return;
+			}
+			if(StringUtils.isBlank(effectiveTime)) {
+				logger.error("Effective time is required for creating JIRA ticket");
+				return;
+			}
+			// Add Jira ticket for each fail assertions
+			try {
+				jiraService.addJiraTickets(validationRunConfig.getProductName(),effectiveTime,validationRunConfig.getReportingStage(), report.getAssertionsFailed());
+			} catch (JiraException e) {
+				logger.error("Error while creating Jira Ticket for failed assertions. Message : " + e.getMessage());
+			}
 		}
 	}
 }

@@ -3,12 +3,9 @@ package org.ihtsdo.rvf.jira;
 import net.rcarz.jiraclient.ICredentials;
 import net.rcarz.jiraclient.JiraClient;
 import net.rcarz.jiraclient.JiraException;
+import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 
-/**
- * User: huyle
- * Date: 6/23/2017
- * Time: 11:30 AM
- */
 public class JiraClientFactoryImpl implements JiraClientFactory{
 
     private ICredentials credentials;

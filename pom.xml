@@ -39,6 +39,7 @@
 		<module>api</module>
 		<module>execution-service</module>
 		<module>importer</module>
+		<module>jira-service</module>
 	</modules>
 
 
