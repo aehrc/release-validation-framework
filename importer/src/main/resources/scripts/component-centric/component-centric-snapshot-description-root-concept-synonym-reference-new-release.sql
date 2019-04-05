@@ -18,9 +18,10 @@
                      where a.conceptid= '138875005'
                      and a.typeid = '900000000000013009'
                      and a.active = 1
-                     and a.effectiveTime <> '<CURR_EFFECTIVE_TIME>'
+                     and a.effectiveTime = '<CURR_EFFECTIVE_TIME>'
                      and '<CURR_EFFECTIVE_TIME>' <> ''
-                     and a.term like concat('%SNOMED Clinical Terms version: %<CURR_EFFECTIVE_TIME>%')) as result;
+                     and a.term like('SNOMED Clinical Terms version: %')
+                     and a.term not like ('%<CURR_EFFECTIVE_TIME>')) as result;
     commit;
 
     insert into qa_result (runid, assertionuuid, concept_id, details)
@@ -38,24 +39,5 @@
                   and a.active = 0
                   and a.effectivetime = '<CURR_EFFECTIVE_TIME>'
                   and '<CURR_EFFECTIVE_TIME>' <> ''
-                  and a.term like concat('%SNOMED Clinical Terms version: %<CURR_EFFECTIVE_TIME>%')) as result;
-    commit;
-
-    insert into qa_result (runid, assertionuuid, concept_id, details)
-        select
-        	<RUNID>,
-        	'<ASSERTIONUUID>',
-            result.id,
-            result.expression
-            from
-            (select a.id,
-                      concat('Concept id = ',a.id,', root concept synonym is not valid') expression
-                      from curr_description_s a
-                      where a.conceptid= '138875005'
-                      and a.typeid = '900000000000013009'
-                      and a.active = 1
-                      and a.effectivetime = '<CURR_EFFECTIVE_TIME>'
-                      and '<CURR_EFFECTIVE_TIME>' <> ''
-                      and a.term like concat('%SNOMED Clinical Terms version: %')
-                      and a.term not like concat('%SNOMED Clinical Terms version: %<CURR_EFFECTIVE_TIME>%')) as result;
+                  and a.term = 'SNOMED Clinical Terms version: <CURR_EFFECTIVE_TIME>%') as result;
     commit;
