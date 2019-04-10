@@ -19,14 +19,14 @@ create table temp_snapshot_concept_hierachy_tree_md(
 );
 
 set @runSql = concat("insert into temp_snapshot_concept_hierachy_tree_md(conceptId, parentId, depth)
-select sourceid, destinationid,", currentDepth ," from stated_relationship_s s
+select sourceid, destinationid,", currentDepth ," from relationship_s s
 where s.active = 1 and s.typeid = 116680003 and s.destinationid in (900000000000443000);");
 prepare statement from @runSql;
 execute statement;
 set parentsCount = (select count(distinct conceptId) from temp_snapshot_concept_hierachy_tree_md where depth = currentDepth);
 while parentsCount > 0 do
 insert into temp_snapshot_concept_hierachy_tree_md(conceptId, parentId, depth)
-select sourceId, destinationid, (currentDepth + 1) from stated_relationship_s s
+select sourceId, destinationid, (currentDepth + 1) from relationship_s s
 where s.active = 1 and s.typeid = 116680003 and s.destinationid in (select distinct conceptId from temp_snapshot_concept_hierachy_tree_md where depth = currentDepth);
 
 set currentDepth = currentDepth + 1;

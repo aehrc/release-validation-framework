@@ -18,7 +18,7 @@ conceptId bigint(20) not null,
 );
 
 set @runSql = concat("insert into temp_snapshot_concept_hierachy_tree(conceptId, parentId, depth)
-select sourceId, destinationId,", currentDepth ," from stated_relationship_s s
+select sourceId, destinationId,", currentDepth ," from relationship_s s
 where s.active = 1 and s.typeid = 116680003 and s.destinationId in (",rootConceptIds,");");
 
 prepare statement from @runSql;
@@ -27,7 +27,7 @@ set parentsCount = (select count(distinct conceptId) from temp_snapshot_concept_
 
 while parentsCount > 0 do
 insert into temp_snapshot_concept_hierachy_tree(conceptId, parentId, depth)
-select sourceId, destinationId, (currentDepth + 1) from stated_relationship_s s
+select sourceId, destinationId, (currentDepth + 1) from relationship_s s
 where s.active = 1 and s.typeid = 116680003 and s.destinationId in (select distinct conceptId from temp_snapshot_concept_hierachy_tree where depth = currentDepth);
 set parentsCount = (select count(distinct conceptId) from temp_snapshot_concept_hierachy_tree where depth = currentDepth);
 set currentDepth = currentDepth + 1;
