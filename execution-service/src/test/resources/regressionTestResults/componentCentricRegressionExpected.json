@@ -327,34 +327,34 @@
       "conceptId" : "900000000000012005",
       "detail" : "mrcmAttributeDomainRefset:id=8038688b-80f5-49b3-b3d8-c6fe13f8fb1e:ConceptId=900000000000012005 referenced in the column moduleId  in SNAPSHOT is not valid descendant of expression < 900000000000443000 |Module|"
     }, {
-      "conceptId" : "900000000000012004",
-      "detail" : "mrcmAttributeDomainRefset:id=81da6aa5-0cb1-463f-88ad-c25a795a211b:ConceptId=900000000000012004 referenced in the column moduleId  in SNAPSHOT is not valid descendant of expression < 900000000000443000 |Module|"
+      "conceptId" : "900000000000012003",
+      "detail" : "mrcmAttributeRangeRefset:id=81288567-57a9-49b1-b7f0-bf5979a6d289:ConceptId=900000000000012003 referenced in the column moduleId  in SNAPSHOT is not valid descendant of expression < 900000000000443000 |Module|"
     }, {
-      "conceptId" : "900000000000012004",
-      "detail" : "mrcmAttributeDomainRefset:id=840861c7-8d9b-44a6-acfd-01f1b994b6d9:ConceptId=900000000000012004 referenced in the column moduleId  in SNAPSHOT is not valid descendant of expression < 900000000000443000 |Module|"
+      "conceptId" : "900000000000012005",
+      "detail" : "mrcmDomainRefset:id=821b5d55-2985-4293-98a9-2959a69b0b3b:ConceptId=900000000000012005 referenced in the column moduleId  in SNAPSHOT is not valid descendant of expression < 900000000000443000 |Module|"
     }, {
-      "conceptId" : "900000000000012004",
-      "detail" : "mrcmAttributeDomainRefset:id=883bd314-23b7-4ccc-87d6-8067d98b3660:ConceptId=900000000000012004 referenced in the column moduleId  in SNAPSHOT is not valid descendant of expression < 900000000000443000 |Module|"
+      "conceptId" : "900000000000012003",
+      "detail" : "mrcmModuleScopeRefset_s:id=8e5766bc-7755-45fb-99c8-8d2c52e45da5:ConceptId=900000000000012003 referenced in the column moduleId  in SNAPSHOT is not valid descendant of expression < 900000000000443000 |Module|"
     }, {
-      "conceptId" : "900000000000012004",
-      "detail" : "mrcmAttributeDomainRefset:id=8ce25c12-3cc5-4ab0-84e2-fdc0a75dffed:ConceptId=900000000000012004 referenced in the column moduleId  in SNAPSHOT is not valid descendant of expression < 900000000000443000 |Module|"
+      "conceptId" : "723560005",
+      "detail" : "mrcmDomainRefset:id=821b5d55-2985-4293-98a9-2959a69b0b3b:ConceptId=723560005 referenced in the column refsetId  in SNAPSHOT is not valid descendant of expression < 723589008 |MRCM domain reference set|"
     }, {
-      "conceptId" : "900000000000012004",
-      "detail" : "mrcmAttributeDomainRefset:id=8d066b27-118d-4a84-886a-14dabceba155:ConceptId=900000000000012004 referenced in the column moduleId  in SNAPSHOT is not valid descendant of expression < 900000000000443000 |Module|"
+      "conceptId" : "723561004",
+      "detail" : "mrcmAttributeDomainRefset:id=8038688b-80f5-49b3-b3d8-c6fe13f8fb1e:ConceptId=723561004 referenced in the column refsetId  in SNAPSHOT is not valid descendant of expression < 723604009 |MRCM attribute domain reference set|"
     }, {
-      "conceptId" : "900000000000012004",
-      "detail" : "mrcmAttributeDomainRefset:id=a1e92414-b651-4891-a749-d66ddd17cc00:ConceptId=900000000000012004 referenced in the column moduleId  in SNAPSHOT is not valid descendant of expression < 900000000000443000 |Module|"
+      "conceptId" : "370129004",
+      "detail" : "mrcmAttributeDomainRefset:id=8038688b-80f5-49b3-b3d8-c6fe13f8fb1e:ConceptId=370129004 referenced in the column referencedComponentId in SNAPSHOT is not valid descendant of expression < 410662002 |Concept model attribute|"
     }, {
-      "conceptId" : "900000000000012004",
-      "detail" : "mrcmAttributeDomainRefset:id=a3c14d1d-abd2-4259-912d-ede579e4c9d9:ConceptId=900000000000012004 referenced in the column moduleId  in SNAPSHOT is not valid descendant of expression < 900000000000443000 |Module|"
+      "conceptId" : "363713009",
+      "detail" : "mrcmAttributeDomainRefset:id=81da6aa5-0cb1-463f-88ad-c25a795a211b:ConceptId=363713009 referenced in the column referencedComponentId in SNAPSHOT is not valid descendant of expression < 410662002 |Concept model attribute|"
     }, {
-      "conceptId" : "900000000000012004",
-      "detail" : "mrcmAttributeDomainRefset:id=a54a5491-2986-42df-9c23-161823e88753:ConceptId=900000000000012004 referenced in the column moduleId  in SNAPSHOT is not valid descendant of expression < 900000000000443000 |Module|"
+      "conceptId" : "405813007",
+      "detail" : "mrcmAttributeDomainRefset:id=840861c7-8d9b-44a6-acfd-01f1b994b6d9:ConceptId=405813007 referenced in the column referencedComponentId in SNAPSHOT is not valid descendant of expression < 410662002 |Concept model attribute|"
     }, {
-      "conceptId" : "900000000000012004",
-      "detail" : "mrcmAttributeDomainRefset:id=a8c88cca-305c-40e8-bf03-2d6d03d47755:ConceptId=900000000000012004 referenced in the column moduleId  in SNAPSHOT is not valid descendant of expression < 900000000000443000 |Module|"
+      "conceptId" : "704324001",
+      "detail" : "mrcmAttributeDomainRefset:id=883bd314-23b7-4ccc-87d6-8067d98b3660:ConceptId=704324001 referenced in the column referencedComponentId in SNAPSHOT is not valid descendant of expression < 410662002 |Concept model attribute|"
     } ],
-    "totalFailed" : 726
+    "totalFailed" : 435
   }, {
     "assertionName" : "ID is unique in MRCM ATTRIBUTE DOMAIN snapshot.",
     "assertionUuid" : "a48d78fe-8ab5-4705-bbc5-1286fb2a98a2",

@@ -1052,15 +1052,9 @@
       "detail" : "Refset with Id = 1244116f-fdb5-5645-afcc-5281288409da referenced in the column: moduleid of table: moduledependencyrefset_s is not valid descendant of 900000000000443000 |Module|"
     }, {
       "conceptId" : "449080006",
-      "detail" : "Refset with Id = 686fe392-d2f7-586d-98aa-078aba426832 referenced in the column: moduleid of table: moduledependencyrefset_s is not valid descendant of 900000000000443000 |Module|"
-    }, {
-      "conceptId" : "449080006",
-      "detail" : "Refset with Id = f6431457-161b-5b46-9217-573c20c00070 referenced in the column: moduleid of table: moduledependencyrefset_s is not valid descendant of 900000000000443000 |Module|"
-    }, {
-      "conceptId" : "449080006",
-      "detail" : "Refset with Id = f6431457-161b-5b46-9217-573c20c00071 referenced in the column: moduleid of table: moduledependencyrefset_s is not valid descendant of 900000000000443000 |Module|"
+      "detail" : "Module with id = f6431457-161b-5b46-9217-573c20c00070 in Module Dependency Snapshot file is inactive"
     } ],
-    "totalFailed" : 4
+    "totalFailed" : 2
   }, {
     "assertionName" : "All members refer to a description that is referenced in either the description table or the text definition table.",
     "assertionUuid" : "f5d9ae70-7856-11e1-b0c4-0800200c9a66",
@@ -1559,31 +1553,31 @@
       "conceptId" : "446608001",
       "detail" : "Refset Descriptor:id=57c08f90-d110-51d7-9866-687ea59213b4:ConceptId=446608001 referenced in the column referencedcomponentid in SNAPSHOT is not valid descendant of expression = < 900000000000455006 | Reference set (foundation metadata concept)|"
     }, {
-      "conceptId" : "447562003",
-      "detail" : "Refset Descriptor:id=d4759302-3afb-565d-b627-17c78e060134:ConceptId=447562003 referenced in the column referencedcomponentid in SNAPSHOT is not valid descendant of expression = < 900000000000455006 | Reference set (foundation metadata concept)|"
+      "conceptId" : "700132008",
+      "detail" : "Refset Descriptor:id=ca083ad0-bc5b-5b7b-9641-e3c016af290a:ConceptId=700132008 referenced in the column referencedcomponentid in SNAPSHOT is not valid descendant of expression = < 900000000000455006 | Reference set (foundation metadata concept)|"
     }, {
-      "conceptId" : "447562003",
-      "detail" : "Refset Descriptor:id=aee0e3e2-aa89-5a76-9e6f-3ea574434648:ConceptId=447562003 referenced in the column referencedcomponentid in SNAPSHOT is not valid descendant of expression = < 900000000000455006 | Reference set (foundation metadata concept)|"
+      "conceptId" : "900000000000499002",
+      "detail" : "Refset Descriptor:id=57c08f90-d110-51d7-9866-687ea59213b4:ConceptId=900000000000499002 referenced in the column attributedescription in SNAPSHOT is not valid descendant of expression  = < 900000000000457003 | Reference set attribute (foundation metadata concept)|"
     }, {
-      "conceptId" : "447562003",
-      "detail" : "Refset Descriptor:id=85cc1c27-3a9f-5859-a1c5-7522b51ed528:ConceptId=447562003 referenced in the column referencedcomponentid in SNAPSHOT is not valid descendant of expression = < 900000000000455006 | Reference set (foundation metadata concept)|"
+      "conceptId" : "900000000000501005",
+      "detail" : "Refset Descriptor:id=aee0e3e2-aa89-5a76-9e6f-3ea574434648:ConceptId=900000000000501005 referenced in the column attributedescription in SNAPSHOT is not valid descendant of expression  = < 900000000000457003 | Reference set attribute (foundation metadata concept)|"
     }, {
-      "conceptId" : "447562003",
-      "detail" : "Refset Descriptor:id=d7428912-7544-5a88-abda-ef7c1e44c786:ConceptId=447562003 referenced in the column referencedcomponentid in SNAPSHOT is not valid descendant of expression = < 900000000000455006 | Reference set (foundation metadata concept)|"
+      "conceptId" : "900000000000503008",
+      "detail" : "Refset Descriptor:id=d7428912-7544-5a88-abda-ef7c1e44c786:ConceptId=900000000000503008 referenced in the column attributedescription in SNAPSHOT is not valid descendant of expression  = < 900000000000457003 | Reference set attribute (foundation metadata concept)|"
     }, {
-      "conceptId" : "447562003",
-      "detail" : "Refset Descriptor:id=9eed7b82-3c3b-521b-b42c-46b09a3ba408:ConceptId=447562003 referenced in the column referencedcomponentid in SNAPSHOT is not valid descendant of expression = < 900000000000455006 | Reference set (foundation metadata concept)|"
+      "conceptId" : "900000000000504002",
+      "detail" : "Refset Descriptor:id=9eed7b82-3c3b-521b-b42c-46b09a3ba408:ConceptId=900000000000504002 referenced in the column attributedescription in SNAPSHOT is not valid descendant of expression  = < 900000000000457003 | Reference set attribute (foundation metadata concept)|"
     }, {
-      "conceptId" : "447562003",
-      "detail" : "Refset Descriptor:id=e6283035-2e04-5292-a745-929e03a39735:ConceptId=447562003 referenced in the column referencedcomponentid in SNAPSHOT is not valid descendant of expression = < 900000000000455006 | Reference set (foundation metadata concept)|"
+      "conceptId" : "900000000000505001",
+      "detail" : "Refset Descriptor:id=e6283035-2e04-5292-a745-929e03a39735:ConceptId=900000000000505001 referenced in the column attributedescription in SNAPSHOT is not valid descendant of expression  = < 900000000000457003 | Reference set attribute (foundation metadata concept)|"
     }, {
-      "conceptId" : "447562003",
-      "detail" : "Refset Descriptor:id=ca083ad0-bc5b-5b7b-9641-e3c016af290d:ConceptId=447562003 referenced in the column referencedcomponentid in SNAPSHOT is not valid descendant of expression = < 900000000000455006 | Reference set (foundation metadata concept)|"
+      "conceptId" : "900000000000478000",
+      "detail" : "Refset Descriptor:id=aee0e3e2-aa89-5a76-9e6f-3ea574434648:ConceptId=900000000000478000 referenced in the column attributetype in SNAPSHOT is not valid descendant of expression = < 900000000000459000 | Attribute type (foundation metadata concept)|"
     }, {
-      "conceptId" : "447562003",
-      "detail" : "Refset Descriptor:id=ca083ad0-bc5b-5b7b-9641-e3c016af290e:ConceptId=447562003 referenced in the column referencedcomponentid in SNAPSHOT is not valid descendant of expression = < 900000000000455006 | Reference set (foundation metadata concept)|"
+      "conceptId" : "900000000000478000",
+      "detail" : "Refset Descriptor:id=85cc1c27-3a9f-5859-a1c5-7522b51ed528:ConceptId=900000000000478000 referenced in the column attributetype in SNAPSHOT is not valid descendant of expression = < 900000000000459000 | Attribute type (foundation metadata concept)|"
     } ],
-    "totalFailed" : 36
+    "totalFailed" : 10
   }, {
     "assertionName" : "Every active concept defined in the Irish extension has a preferred FSN in the en-US language refset.",
     "assertionUuid" : "28fbe41f-132b-43b6-a7e2-ee1454dd7736",
@@ -2330,7 +2324,7 @@
       "conceptId" : "703649004",
       "detail" : "RELATIONSHIP: id=1000006026: Inferred Relationship contains a destination id that does not exist in the Concept snapshot file."
     } ],
-    "totalFailed" : 16
+    "totalFailed" : 26
   }, {
     "assertionName" : "ComplexMap refset id is unique in the snapshot file",
     "assertionUuid" : "6e70ea3e-c4dd-4ae3-8b75-0f0567e41b57",
@@ -2404,7 +2398,7 @@
       "conceptId" : "91241007",
       "detail" : "RELATIONSHIP: id=4969199027: Inferred Relationship contains source id that does not exist in the Concept snapshot file."
     } ],
-    "totalFailed" : 11
+    "totalFailed" : 21
   }, {
     "assertionName" : "Every active concept defined in the Danish extension has a preferred FSN in the en-US language refset.",
     "assertionUuid" : "759a1eb8-2ca6-4405-80ba-16fd7540c1d0",
@@ -2444,7 +2438,7 @@
       "conceptId" : "703649004",
       "detail" : "RELATIONSHIP: id=1000006026: Inferred Relationship contains type id that does not exist in the Concept snapshot file."
     } ],
-    "totalFailed" : 17
+    "totalFailed" : 27
   }, {
     "assertionName" : "There is a 1-to-1 relationship between the id and the immutable values in STATED RELATIONSHIP snapshot.",
     "assertionUuid" : "7e453140-79b9-11e1-b0c4-0800200c9a66",

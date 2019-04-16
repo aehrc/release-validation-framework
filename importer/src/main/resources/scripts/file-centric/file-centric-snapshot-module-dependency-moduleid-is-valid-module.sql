@@ -1,5 +1,5 @@
 /********************************************************************************
-	file-centric-snapshot-module-dependency-moduleid-is-valid-active-module
+	file-centric-snapshot-module-dependency-moduleid-is-valid-module.sql
 
 	Assertion:
 	ModuleId is set to a valid, active module in Module Dependency Snapshot file
