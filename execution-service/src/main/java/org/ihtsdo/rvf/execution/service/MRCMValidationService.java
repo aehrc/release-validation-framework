@@ -31,7 +31,7 @@ public class MRCMValidationService {
 			final long timeStart = System.currentTimeMillis();
 			ValidationReport report = statusReport.getResultReport();
 			ValidationService validationService = new ValidationService();
-			ValidationRun validationRun = new ValidationRun(effectiveDate, false);
+			ValidationRun validationRun = new ValidationRun(effectiveDate, true);
 			try {
 				outputFolder = extractZipFile(validationConfig, executionId);
 
@@ -57,18 +57,23 @@ public class MRCMValidationService {
 			}
 
 			final List<TestRunItem> failedAssertions = new ArrayList<>();
-			for(org.snomed.quality.validator.mrcm.Assertion assertion : validationRun.getFailedAssertions()){
+
+			for(Assertion assertion : validationRun.getFailedAssertions()){
+				int failureCount = assertion.getCurrentViolatedConceptIds().size();
+				if(failureCount == 0) continue;
+				int maxFailuresCount = validationConfig.getFailureExportMax() != null ? validationConfig.getFailureExportMax() : 10;
+				int firstNCount = failureCount >= maxFailuresCount? maxFailuresCount : failureCount;
 				testRunItem = new TestRunItem();
 				testRunItem.setTestCategory("");
 				testRunItem.setTestType(TestType.MRCM);
 				testRunItem.setAssertionUuid(assertion.getUuid());
 				testRunItem.setAssertionText(assertion.getAssertionText());
 				testRunItem.setExtractResultInMillis(0L);
-				int failureCount = assertion.getCurrentViolatedConceptIds().size();
 				testRunItem.setFailureCount(Long.valueOf(failureCount));
-				List<FailureDetail> failedDetails = new ArrayList(failureCount);
-				for (Long conceptId : assertion.getCurrentViolatedConceptIds()){
-					failedDetails.add(new FailureDetail(String.valueOf(conceptId), assertion.getAssertionText(), null));
+				List<FailureDetail> failedDetails = new ArrayList(firstNCount);
+				for(int i = 0; i < firstNCount; i++) {
+					Long conceptId = assertion.getCurrentViolatedConceptIds().get(i);
+					failedDetails.add(new FailureDetail(String.valueOf(conceptId), assertion.getAssertionText()));
 				}
 				testRunItem.setFirstNInstances(failedDetails);
 				failedAssertions.add(testRunItem);

@@ -1,7 +1,13 @@
 package org.ihtsdo.rvf.validation;
 
+import java.text.Normalizer;
+import java.text.Normalizer.Form;
+import java.util.Date;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang.StringUtils;
+
 import org.ihtsdo.rvf.validation.log.ValidationLog;
 import org.ihtsdo.rvf.validation.model.FileElement;
 import org.ihtsdo.rvf.validation.model.Folder;
@@ -9,9 +15,6 @@ import org.ihtsdo.rvf.validation.model.ManifestFile;
 import org.ihtsdo.rvf.validation.resource.ResourceProvider;
 
 import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 
 public class ManifestPatternTester {
@@ -130,7 +133,10 @@ public class ManifestPatternTester {
 			final List<FileElement> files = folder.getFiles();
 			for (final FileElement file : files) {
 				fileCounter.incrementAndGet();
-				final String filename = file.getFileName();
+				String filename = file.getFileName();
+				if (!Normalizer.isNormalized(filename, Form.NFC)) {
+					filename = Normalizer.normalize(filename, Form.NFC);
+				}
 				if (!(resourceManager.match(filename))) {
 					validationLog.assertionError("Invalid package structure expected file at {} but found none", filename);
 					report.addError(folderCounter + "-" + fileCounter, startTime, filename, filename, filename, MANIFEST_STRUCTURE_TEST, "", "No File Found", filename,null);

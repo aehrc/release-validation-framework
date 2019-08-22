@@ -1,0 +1,42 @@
+version: '2.1'
+
+volumes:
+  mysql:
+    driver: local
+
+services:
+  db:
+    image: mysql:5.7
+    restart: always
+    environment:
+      - MYSQL_ROOT_PASSWORD=snomed
+      - MYSQL_USERNAME=rvf_user
+      - MYSQL_PASSWORD=snomedrvf
+      - MYSQL_DATABASE=rvf_master
+    healthcheck:
+      test: ["CMD", "/usr/bin/healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      rvf_net:
+        aliases:
+         - sql
+    volumes:
+      - mysql:/var/lib/mysql
+    command:
+        mysqld --sql_mode="NO_ENGINE_SUBSTITUTION,STRICT_TRANS_TABLES"
+  rvf:
+    image: snomedinternational/rvf:latest
+    container_name: rvf
+    depends_on:
+      - db
+    entrypoint: java -Xms512m -Xmx4g -DrvfConfigLocation=/app/config -jar api.jar --server.port=8081 --server.servlet.context-path=/api
+    ports:
+      - 8081:8081
+    networks:
+      - rvf_net
+
+
+networks:
+  rvf_net:

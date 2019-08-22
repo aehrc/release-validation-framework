@@ -132,6 +132,7 @@ public class ValidationRunConfig {
 				+ ", previousRelease=" + previousRelease
 				+ ", dependencyRelease=" + dependencyRelease
 				+ ", drools=" + enableDrools
+				+ ", mrcm=" + enableMRCMValidation
 				+ ", runId=" + runId 
 				+ ", url=" + url + "]";
 	}
