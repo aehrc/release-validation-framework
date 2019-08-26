@@ -208,7 +208,7 @@
       "conceptId" : "713135019",
       "detail" : "LANGUAGE REFSET: id=00002fb2-d982-5fbd-822f-045c938480c7 is in SNAPSHOT file, but not in FULL file."
     } ],
-    "totalFailed" : 29
+    "totalFailed" : 31
   }, {
     "assertionName" : "The current data in the SimpleMap refset snapshot file are the same as the data in the current delta file.",
     "assertionUuid" : "959e11e7-9ff9-40b9-b833-387495e320d0",
@@ -1125,7 +1125,7 @@
       "conceptId" : "703672002",
       "detail" : "Definition: id=3008913022 is in SNAPSHOT file, but not in FULL file."
     } ],
-    "totalFailed" : 17
+    "totalFailed" : 18
   }, {
     "assertionName" : "The current data in the OWL Expression snapshot file are the same as the data in the current delta file. ",
     "assertionUuid" : "13d797e0-e67d-46a7-96e9-761c3c2c84d5",
@@ -1322,6 +1322,9 @@
     "assertionName" : "The current full language refset file consists of the previously published full file and the changes for the current release",
     "assertionUuid" : "28c3a31d-7a9d-48f6-8eb9-18c25b6306fb",
     "firstNInstances" : [ {
+      "conceptId" : "382428011",
+      "detail" : "Language refset: id=ffffdb90-39fb-5af1-a403-ebad2f592179 is in current full file, but not in prior full or current delta file."
+    }, {
       "conceptId" : "301829010",
       "detail" : "Language refset: id=ffffdbff-6035-53ec-89e2-dbf0524c6a99 is in current full file, but not in prior full or current delta file."
     }, {
@@ -1349,7 +1352,7 @@
       "conceptId" : "262258012",
       "detail" : "Language refset: id=ffffff00-a5d5-5d34-934c-42129ee00493 is in current full file, but not in prior full or current delta file."
     } ],
-    "totalFailed" : 9
+    "totalFailed" : 10
   }, {
     "assertionName" : "The current stated relationship delta file is an accurate derivative of the current full file",
     "assertionUuid" : "2a938c7e-0803-44a1-8358-339daa87ee39",

@@ -54,14 +54,17 @@ public class ManifestPatternTesterTest {
 		File manifestFile = new File(getClass().getResource(manifestFilename).toURI());
 		File releasePackage = File.createTempFile("TestRelease", ".zip");
 		try (ZipOutputStream outputStream = new ZipOutputStream(new FileOutputStream(releasePackage), Charset.forName("UTF-8"));
-			BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(outputStream));) {
-			outputStream.putNextEntry(new ZipEntry("Test/"));
-			ZipEntry fileEntry = new ZipEntry("Test/xder2_Refset_eestiKukkumisePõhjuseKlassifikaatorSimpleRefsetDelta_EE1000181_20190614.txt");
+			BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(outputStream))) {
+			outputStream.putNextEntry(new ZipEntry("SnomedCT_Test_EE_20190614T120000Z/"));
+			ZipEntry fileEntry = new ZipEntry("SnomedCT_Test_EE_20190614T120000Z/xder2_Refset_eestiKukkumisePõhjuseKlassifikaatorSimpleRefsetDelta_EE1000181_20190614.txt");
 			outputStream.putNextEntry(fileEntry);
-			
+
 			writer.write("id\teffectiveTime\tactive\tmoduleId\trefsetId\treferencedComponentId");
 			writer.newLine();
 			writer.flush();
+
+			ZipEntry readmeFile = new ZipEntry("SnomedCT_Test_EE_20190614T120000Z/Readme.txt");
+			outputStream.putNextEntry(readmeFile);
 			outputStream.closeEntry();
 		}
 		ManifestPatternTester tester = new ManifestPatternTester(new TestValidationLogImpl(ManifestPatternTester.class),

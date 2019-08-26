@@ -73,7 +73,7 @@ public class MRCMValidationService {
 				List<FailureDetail> failedDetails = new ArrayList(firstNCount);
 				for(int i = 0; i < firstNCount; i++) {
 					Long conceptId = assertion.getCurrentViolatedConceptIds().get(i);
-					failedDetails.add(new FailureDetail(String.valueOf(conceptId), assertion.getAssertionText()));
+					failedDetails.add(new FailureDetail(String.valueOf(conceptId), assertion.getAssertionText(), null));
 				}
 				testRunItem.setFirstNInstances(failedDetails);
 				failedAssertions.add(testRunItem);

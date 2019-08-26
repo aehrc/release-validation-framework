@@ -88,7 +88,7 @@ public class ManifestPatternTester {
 		}
 		if(!hasReadmeFile) {
 			validationLog.assertionError("In manifest configuration, there is no Readme file");
-			report.addError(MANIFEST, startTime, MANIFEST, MANIFEST,"", MANIFEST_STRUCTURE_TEST,"","In manifest configuration, there is no Readme file","There should be Readme file present in very package",null);
+			report.addError(MANIFEST, startTime, MANIFEST, MANIFEST,"", MANIFEST_STRUCTURE_TEST,"","In manifest configuration, there is no Readme file","There should be Readme file present in the package",null);
 		}
 		if(!isProductionVersion) {
 			for (String filepath : filesListInManifest) {

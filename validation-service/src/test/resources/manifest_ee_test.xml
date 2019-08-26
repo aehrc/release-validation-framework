@@ -1,5 +1,6 @@
 <listing xmlns="http://release.ihtsdo.org/manifest/1.0.0">
-	<folder Name="Test">
+	<folder Name="SnomedCT_Test_EE_20190614T120000Z">
 	<file Name="xder2_Refset_eestiKukkumisePõhjuseKlassifikaatorSimpleRefsetDelta_EE1000181_20190614.txt"/>
+	<file Name="Readme.txt"/>
 	</folder>
 </listing>
