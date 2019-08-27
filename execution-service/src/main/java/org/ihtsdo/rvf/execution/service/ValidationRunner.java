@@ -139,6 +139,7 @@ public class ValidationRunner {
 		State state = statusReport.getFailureMessages().isEmpty() ? State.COMPLETE : State.FAILED;
 		updateExecutionSummary(statusReport, validationConfig);
 		reportService.writeResults(statusReport, state, validationConfig.getStorageLocation());
+		addJiraLinkToReport(validationConfig, statusReport.getResultReport(), validationConfig.getEffectiveTime());
 	}
 
 	private void mergeValidationStatusReports(ValidationStatusReport mainValidationReport, ValidationStatusReport validationTaskReport) {
@@ -189,6 +190,7 @@ public class ValidationRunner {
 
 	private void addJiraLinkToReport(ValidationRunConfig validationRunConfig, ValidationReport report, String effectiveTime) {
 		if(validationRunConfig.isJiraIssueCreationFlag()) {
+			logger.info("Start creating Jira tickets for failures");
 			String reportingStage = validationRunConfig.getReportingStage();
 			if(StringUtils.isBlank(reportingStage)) {
 				logger.error("Reporting stage is required for creating JIRA ticket");
