@@ -138,8 +138,8 @@ public class ValidationRunner {
 		report.setTimeTakenInSeconds(timeTaken*60);
 		State state = statusReport.getFailureMessages().isEmpty() ? State.COMPLETE : State.FAILED;
 		updateExecutionSummary(statusReport, validationConfig);
-		reportService.writeResults(statusReport, state, validationConfig.getStorageLocation());
 		addJiraLinkToReport(validationConfig, statusReport.getResultReport(), validationConfig.getEffectiveTime());
+		reportService.writeResults(statusReport, state, validationConfig.getStorageLocation());
 	}
 
 	private void mergeValidationStatusReports(ValidationStatusReport mainValidationReport, ValidationStatusReport validationTaskReport) {
