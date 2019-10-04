@@ -58,11 +58,8 @@
     }, {
       "conceptId" : "0",
       "detail" : "Warning: RefsetDescriptor:ca083ad0-bc5b-5b7b-9641-e3c016af290a is not found in last release RefsetDescriptor Snapshot file"
-    }, {
-      "conceptId" : "0",
-      "detail" : "Warning: RefsetDescriptor:ca083ad0-bc5b-5b7b-9641-e3c016af290e is not found in last release RefsetDescriptor Full file"
     } ],
-    "totalFailed" : 4
+    "totalFailed" : 3
   }, {
     "assertionName" : "New inactive states follow active states in the SIMPLE MAP REFSET snapshot.",
     "assertionUuid" : "88315a11-4e71-49d2-977f-a5d5ac2a4dc4",
