@@ -143,9 +143,10 @@ public class ManifestRefsetTester {
     }
 
     private boolean runTestForRefsetFileWithManifest(String fileName) {
-        String keyName = fileName.replace("Delta","###")
-                .replace("Snapshot","###")
-                .replace("Full","###");
+        // Ignore historical records in Snapshot and Full as this might report false positives for Edition releases
+        if(fileName.contains("Snapshot") || fileName.contains("Full")) return true;
+        // Only check Delta records
+        String keyName = fileName.replace("Delta","###");
         Set<String> refsetForFile = refsetMap.get(keyName);
         String expectedRefsetIds = StringUtils.join(refsetForFile,",");
         if(refsetForFile != null && !refsetForFile.isEmpty()) {
