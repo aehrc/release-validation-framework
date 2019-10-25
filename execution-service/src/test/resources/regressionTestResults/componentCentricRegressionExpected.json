@@ -1,7 +1,7 @@
 {
   "assertionType" : "component-centric-validation",
-  "totalAssertionsRun" : 123,
-  "totalAssertionsFailed" : 123,
+  "totalAssertionsRun" : 124,
+  "totalAssertionsFailed" : 124,
   "results" : [ {
     "assertionName" : "Case-sensitive terms that share initial words also share caseSignificanceId value.",
     "assertionUuid" : "805ab37c-33fa-45aa-876b-f86365a828c8",
@@ -369,8 +369,11 @@
     "firstNInstances" : [ {
       "conceptId" : "703860006",
       "detail" : "Active description id = 3008366010 and inactive description id = 2984057023 share the same term"
+    }, {
+      "conceptId" : "703860006",
+      "detail" : "Active description id = 3008366019 and inactive description id = 2984057023 share the same term"
     } ],
-    "totalFailed" : 1
+    "totalFailed" : 2
   }, {
     "assertionName" : "All active FSNs have a semantic tag.",
     "assertionUuid" : "a4ed3a89-170e-4d9c-995a-716447c4fe64",
@@ -459,8 +462,11 @@
     "firstNInstances" : [ {
       "conceptId" : "703860006",
       "detail" : "Active description id = 3008366010 and inactive description id = 2984057023 share the same term"
+    }, {
+      "conceptId" : "703860006",
+      "detail" : "Active description id = 3008366019 and inactive description id = 2984057023 share the same term"
     } ],
-    "totalFailed" : 1
+    "totalFailed" : 2
   }, {
     "assertionName" : "Terms that contain en-us specific words are in the en-us language refset.",
     "assertionUuid" : "c3249e80-84f0-11e1-b0c4-0800200c9a66",
@@ -772,6 +778,14 @@
     } ],
     "totalFailed" : 1
   }, {
+    "assertionName" : "Core module concepts have core module parents.",
+    "assertionUuid" : "f55ed5ec-fc57-429c-8190-bbd5cbb8343a",
+    "firstNInstances" : [ {
+      "conceptId" : "338875005",
+      "detail" : "Core module concept 338875005 has Model module parent "
+    } ],
+    "totalFailed" : 1
+  }, {
     "assertionName" : "Members are active for active descriptions in the language refset snapshot file.",
     "assertionUuid" : "f636b7b0-7e9a-11e1-b0c4-0800200c9a66",
     "firstNInstances" : [ {
@@ -805,7 +819,7 @@
       "conceptId" : "700132006",
       "detail" : "Active description id=3008862015 has no langrefset member"
     } ],
-    "totalFailed" : 22
+    "totalFailed" : 24
   }, {
     "assertionName" : "Active historical association refset members have inactive concepts as reference components.",
     "assertionUuid" : "f7117eb0-7cd6-11e1-b0c4-0800200c9a66",
@@ -1095,7 +1109,7 @@
       "conceptId" : "700132006",
       "detail" : "CONCEPT: id=700132006: Concept does not have an inferred is-a relationship."
     } ],
-    "totalFailed" : 12
+    "totalFailed" : 13
   }, {
     "assertionName" : "All part-of relationships have relationship group of 0.",
     "assertionUuid" : "3c2a0ca7-2ffc-492b-b430-46b629fded9a",
@@ -1215,7 +1229,7 @@
       "conceptId" : "72500224",
       "detail" : "CONCEPT: id=72500224: Concept does not have a stated is-a relationship."
     } ],
-    "totalFailed" : 12
+    "totalFailed" : 14
   }, {
     "assertionName" : "MrcmRuleRefsetId in MRCM MODULE SCOPE SNAPSHOT exists in the RefsetId values of MRCM DOMAIN SNAPSHOT or MRCM ATTRIBUTE DOMAIN SNAPSHOT or MRCM ATTRIBUTE RANGE SNAPSHOT",
     "assertionUuid" : "57ae69cd-26f0-4001-ba2f-ae56129e2e28",

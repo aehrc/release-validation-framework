@@ -87,7 +87,7 @@ public class MRCMValidationService {
 
 			int maxFailureExports = validationConfig.getFailureExportMax() != null ? validationConfig.getFailureExportMax() : 10;
 			final List<TestRunItem> warnedAssertions = new ArrayList<>();
-			for(Assertion assertion : validationRun.getFailedAssertions()){
+			for(Assertion assertion : validationRun.getAssertionsWithWarning()){
 				testRunItem = createTestRunItemWithFailures(assertion, maxFailureExports);
 				if(testRunItem != null) {
 					warnedAssertions.add(testRunItem);
@@ -139,7 +139,7 @@ public class MRCMValidationService {
 		List<FailureDetail> failedDetails = new ArrayList(firstNCount);
 		for(int i = 0; i < firstNCount; i++) {
 			Long conceptId = mrcmAssertion.getCurrentViolatedConceptIds().get(i);
-			failedDetails.add(new FailureDetail(String.valueOf(conceptId), mrcmAssertion.getAssertionText()));
+			failedDetails.add(new FailureDetail(String.valueOf(conceptId), mrcmAssertion.getAssertionText(), null));
 		}
 		testRunItem.setFirstNInstances(failedDetails);
 		return testRunItem;

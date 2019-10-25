@@ -277,7 +277,7 @@
       "conceptId" : "700132006",
       "detail" : "Concept: id=700132006: has no active preferred term in the Swiss French language refset"
     } ],
-    "totalFailed" : 14
+    "totalFailed" : 16
   }, {
     "assertionName" : "All source ids found in the Stated Relationship snapshot file exist in the Concept snapshot file.",
     "assertionUuid" : "9f84d9a0-79b9-11e1-b0c4-0800200c9a66",
@@ -397,7 +397,7 @@
       "conceptId" : "700132006",
       "detail" : "Concept: id=700132006: has no active preferred term in the Swiss German language refset"
     } ],
-    "totalFailed" : 14
+    "totalFailed" : 16
   }, {
     "assertionName" : "ContentTypeId value refers to valid concept identifier in the MRCM ATTRIBUTE RANGE REFSET snapshot",
     "assertionUuid" : "b110b8de-53df-4387-b0ac-aecfbc01ed0d",
@@ -467,7 +467,7 @@
       "conceptId" : "700132006",
       "detail" : "Concept: id=700132006: has no active preferred term in the en-GB language refset"
     } ],
-    "totalFailed" : 14
+    "totalFailed" : 16
   }, {
     "assertionName" : "ID is unique in the LOINC ExpressionAssociationRefset snapshot.",
     "assertionUuid" : "b9b535f0-5b68-4192-81f6-115dea2f49c0",
@@ -650,7 +650,7 @@
       "conceptId" : "700132006",
       "detail" : "Concept: id=700132006: has no active preferred term in the Belgian French language refset"
     } ],
-    "totalFailed" : 14
+    "totalFailed" : 16
   }, {
     "assertionName" : "There is a 1:1 relationship between the id and the key values in the SIMPLE REFSET snapshot.",
     "assertionUuid" : "c779d282-3c4d-4c16-a8a6-8d1a621b247d",
@@ -957,7 +957,7 @@
       "conceptId" : "700132006",
       "detail" : "Concept: id=700132006: has no active preferred term in the Danish language refset"
     } ],
-    "totalFailed" : 14
+    "totalFailed" : 16
   }, {
     "assertionName" : "ModuleId value refers to valid concept identifier in the MRCM ATTRIBUTE DOMAIN REFSET snapshot",
     "assertionUuid" : "e968c5d1-e06b-4351-9e96-3f62208d27d4",
@@ -1177,7 +1177,7 @@
       "conceptId" : "702411003",
       "detail" : "Concept: id=702411003 does not have an active FSN in any refset."
     } ],
-    "totalFailed" : 33
+    "totalFailed" : 37
   }, {
     "assertionName" : "The module id of components should be in module dependency list",
     "assertionUuid" : "0145fbad-f067-41ff-b700-cf54fc639e21",
@@ -1189,6 +1189,9 @@
       "detail" : "concept ::id= 72500225 ::module id: 900000000000012004 is not in module dependency list"
     }, {
       "conceptId" : "0",
+      "detail" : "concept ::id= 238875005 ::module id: 900000000000012004 is not in module dependency list"
+    }, {
+      "conceptId" : "0",
       "detail" : "description ::id= 3494181019 ::module id: 900000000000012004 is not in module dependency list"
     }, {
       "conceptId" : "0",
@@ -1198,6 +1201,9 @@
       "detail" : "description ::id= 130700233 ::module id: 715515008 is not in module dependency list"
     }, {
       "conceptId" : "0",
+      "detail" : "description ::id= 218588011 ::module id: 900000000000012004 is not in module dependency list"
+    }, {
+      "conceptId" : "0",
       "detail" : "expressionAssociationRefset ::id= 1ca0b461-66a6-45c8-b01e-5a227c1fc27a ::module id: 705115006 is not in module dependency list"
     }, {
       "conceptId" : "0",
@@ -1205,14 +1211,8 @@
     }, {
       "conceptId" : "0",
       "detail" : "expressionAssociationRefset ::id= 210ffde0-105e-4825-9501-ae49a28ffa0d ::module id: 705115006 is not in module dependency list"
-    }, {
-      "conceptId" : "0",
-      "detail" : "expressionAssociationRefset ::id= 9568f7f7-cf6f-4d6d-98f0-59d7ec447504 ::module id: 705115006 is not in module dependency list"
-    }, {
-      "conceptId" : "0",
-      "detail" : "expressionAssociationRefset ::id= d01509a6-02a2-419a-9b68-ab77e21864c2 ::module id: 705115006 is not in module dependency list"
     } ],
-    "totalFailed" : 225
+    "totalFailed" : 227
   }, {
     "assertionName" : "Preferred Term exists exactly once in each language refset for each concept.",
     "assertionUuid" : "03cf9850-7857-11e1-b0c4-0800200c9a66",
@@ -1322,7 +1322,7 @@
       "conceptId" : "700132006",
       "detail" : "Concept: id=700132006 does not have an FSN preferred in the en-GB language refset."
     } ],
-    "totalFailed" : 13
+    "totalFailed" : 15
   }, {
     "assertionName" : "RuleStrengthId value refers to valid concept identifier in the MRCM ATTRIBUTE DOMAIN REFSET snapshot",
     "assertionUuid" : "0e8e3549-e704-41a2-a853-fd91a60116ee",
@@ -1542,7 +1542,7 @@
       "conceptId" : "700132006",
       "detail" : "Concept: id=700132006: has no active preferred term in the Norwegian language refset"
     } ],
-    "totalFailed" : 14
+    "totalFailed" : 16
   }, {
     "assertionName" : "In RefsetDescriptor files, the values of referencedComponentId, attributeDescription, attributeType must be valid",
     "assertionUuid" : "28a809c5-7e3f-45b8-b8b4-b29e231ed532",
@@ -1773,7 +1773,7 @@
       "conceptId" : "700132006",
       "detail" : "Concept: id=700132006: has no active preferred term in the Belgian Dutch language refset"
     } ],
-    "totalFailed" : 14
+    "totalFailed" : 16
   }, {
     "assertionName" : "Every active concept has one active preferred term in the Norwegian language refset.",
     "assertionUuid" : "3539253a-5143-4945-a16c-800e66c6d836",
@@ -1820,8 +1820,11 @@
     "firstNInstances" : [ {
       "conceptId" : "72500226",
       "detail" : "Child concept id= 72500226 of core module has parent concept id= 72500225 of model module."
+    }, {
+      "conceptId" : "338875005",
+      "detail" : "Child concept id= 338875005 of core module has parent concept id= 238875005 of model module."
     } ],
-    "totalFailed" : 1
+    "totalFailed" : 2
   }, {
     "assertionName" : "Every active concept defined in the Swiss extension has a preferred FSN in the en-US language refset.",
     "assertionUuid" : "3ad55905-01fa-4b82-8612-fabfa8603dc7",
@@ -1894,7 +1897,7 @@
       "conceptId" : "700132006",
       "detail" : "Concept: id=700132006: has no active preferred term in the Estonian language refset"
     } ],
-    "totalFailed" : 14
+    "totalFailed" : 16
   }, {
     "assertionName" : "RefsetId value refers to valid concept identifier in the MRCM ATTRIBUTE RANGE REFSET snapshot",
     "assertionUuid" : "40b0b1f3-7ed0-4074-ab0e-c5abd19f70b8",
@@ -2004,7 +2007,7 @@
       "conceptId" : "700132006",
       "detail" : "Concept: id=700132006: has no active preferred term in the Irish language refset"
     } ],
-    "totalFailed" : 14
+    "totalFailed" : 16
   }, {
     "assertionName" : "There is a 1:1 relationship between the id and the immutable values in the description snapshot.",
     "assertionUuid" : "48118153-d32a-4d1c-bfbc-23ed953e9991",
@@ -2243,7 +2246,7 @@
       "conceptId" : "700132006",
       "detail" : "Concept: id=700132006: has no active preferred term in the Swiss Italian language refset"
     } ],
-    "totalFailed" : 14
+    "totalFailed" : 16
   }, {
     "assertionName" : "Every active concept from the international release is recommended to have one active preferred term in the Swedish language refset.",
     "assertionUuid" : "69500336-2cde-45a5-93b3-1e262069f136",
@@ -2278,7 +2281,7 @@
       "conceptId" : "700132006",
       "detail" : "Concept: id=700132006: has no active preferred term in the Swedish language refset"
     } ],
-    "totalFailed" : 14
+    "totalFailed" : 16
   }, {
     "assertionName" : "Referencedcomponentid refers to valid concepts in the SIMPLE REFSET snapshot.",
     "assertionUuid" : "6a407415-8415-4870-a6ef-b5bc22f73c1f",
@@ -2438,7 +2441,7 @@
       "conceptId" : "703649004",
       "detail" : "RELATIONSHIP: id=1000006026: Inferred Relationship contains type id that does not exist in the Concept snapshot file."
     } ],
-    "totalFailed" : 27
+    "totalFailed" : 28
   }, {
     "assertionName" : "There is a 1-to-1 relationship between the id and the immutable values in STATED RELATIONSHIP snapshot.",
     "assertionUuid" : "7e453140-79b9-11e1-b0c4-0800200c9a66",
