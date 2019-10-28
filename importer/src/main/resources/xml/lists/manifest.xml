@@ -790,11 +790,6 @@
 			<keywords>Grouped value is in (0,1) in MRCM ATTRIBUTE DOMAIN snapshot file</keywords>
 		</script>
 
-		<script uuid="9de8d069-2055-4c21-87bc-2fc9363045dc" category="component-centric-validation,INT"
-				  sqlFile="component-centric-full-mrcm-attribute-domain-valid-grouped.sql" text="Grouped value is in (0,1) in MRCM ATTRIBUTE DOMAIN full file" >
-			<keywords>Grouped value is in (0,1) in MRCM ATTRIBUTE DOMAIN full file</keywords>
-		</script>
-
 		<script uuid="d7c78573-8e02-4eab-88ba-f9e628fe2c53" category="component-centric-validation,INT"
 				  sqlFile="component-centric-delta-mrcm-attribute-domain-valid-grouped.sql" text="Grouped value is in (0,1) in MRCM ATTRIBUTE DOMAIN delta file" >
 			<keywords>Grouped value is in (0,1) in MRCM ATTRIBUTE DOMAIN delta file</keywords>
@@ -808,11 +803,6 @@
 		<script uuid="f47d1537-41dc-4cb5-ad0a-ed4caf993801" category="component-centric-validation,INT"
 				  sqlFile="component-centric-snapshot-mrcm-attribute-domain-valid-attributeingroupcardinality.sql" text="AttributeInGroupCardinality value is in ('0..0', '0..1', '0..*') in MRCM ATTRIBUTE DOMAIN snapshot file"  >
 			<keywords>AttributeInGroupCardinality value is in ('0..0', '0..1', '0..*') in MRCM ATTRIBUTE DOMAIN snapshot file</keywords>
-		</script>
-
-		<script uuid="36c983cc-e355-4c5a-b14e-548959072fb4" category="component-centric-validation,INT"
-				  sqlFile="component-centric-full-mrcm-attribute-domain-valid-attributeingroupcardinality.sql" text="AttributeInGroupCardinality value is in ('0..0', '0..1', '0..*') in MRCM ATTRIBUTE DOMAIN full file" >
-			<keywords>AttributeInGroupCardinality value is in ('0..0', '0..1', '0..*') in MRCM ATTRIBUTE DOMAIN full file</keywords>
 		</script>
 
 		<script uuid="1f6a9168-534a-4ebe-b0e7-3f424e56a7d1" category="component-centric-validation,INT"

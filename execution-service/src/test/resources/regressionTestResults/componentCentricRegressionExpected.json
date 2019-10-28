@@ -1,7 +1,7 @@
 {
   "assertionType" : "component-centric-validation",
-  "totalAssertionsRun" : 124,
-  "totalAssertionsFailed" : 124,
+  "totalAssertionsRun" : 122,
+  "totalAssertionsFailed" : 122,
   "results" : [ {
     "assertionName" : "Case-sensitive terms that share initial words also share caseSignificanceId value.",
     "assertionUuid" : "805ab37c-33fa-45aa-876b-f86365a828c8",
@@ -259,14 +259,6 @@
     "firstNInstances" : [ {
       "conceptId" : "703649004",
       "detail" : "Simple refset: id=74d0e838-34eb-5a9a-8f02-5584487d55db is an active VTM but refers to an inactive component."
-    } ],
-    "totalFailed" : 1
-  }, {
-    "assertionName" : "Grouped value is in (0,1) in MRCM ATTRIBUTE DOMAIN full file",
-    "assertionUuid" : "9de8d069-2055-4c21-87bc-2fc9363045dc",
-    "firstNInstances" : [ {
-      "conceptId" : "370129004",
-      "detail" : "MRCM ATTRIBUTE DOMAIN REFSET: id=8038688b-80f5-49b3-b3d8-c6fe13f8fb1e Grouped value is not in (0,1) in MRCM ATTRIBUTE DOMAIN full file"
     } ],
     "totalFailed" : 1
   }, {
@@ -1054,14 +1046,6 @@
     "firstNInstances" : [ {
       "conceptId" : "707688001",
       "detail" : "LOINC part:20608-3 is not correctly formated in the MapCorrelationOrigin refset snapshot."
-    } ],
-    "totalFailed" : 1
-  }, {
-    "assertionName" : "AttributeInGroupCardinality value is in ('0..0', '0..1', '0..*') in MRCM ATTRIBUTE DOMAIN full file",
-    "assertionUuid" : "36c983cc-e355-4c5a-b14e-548959072fb4",
-    "firstNInstances" : [ {
-      "conceptId" : "370129004",
-      "detail" : "MRCM ATTRIBUTE DOMAIN REFSET: id=8038688b-80f5-49b3-b3d8-c6fe13f8fb1e AttributeInGroupCardinality value is not in (\"0..0\", \"0..1\", \"0..*\") in MRCM ATTRIBUTE DOMAIN full file"
     } ],
     "totalFailed" : 1
   }, {
