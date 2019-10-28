@@ -1,7 +1,7 @@
 {
   "assertionType" : "component-centric-validation",
-  "totalAssertionsRun" : 122,
-  "totalAssertionsFailed" : 122,
+  "totalAssertionsRun" : 123,
+  "totalAssertionsFailed" : 123,
   "results" : [ {
     "assertionName" : "Case-sensitive terms that share initial words also share caseSignificanceId value.",
     "assertionUuid" : "805ab37c-33fa-45aa-876b-f86365a828c8",
@@ -493,40 +493,75 @@
     } ],
     "totalFailed" : 2
   }, {
-    "assertionName" : "Verify that simple map, extended map, complex map have valid, active SNOMED CT concepts in the referencedComponentId field",
+    "assertionName" : "Verify that extended map has valid, active SNOMED CT concepts in the referencedComponentId field",
     "assertionUuid" : "cc565f6b-a681-4f98-b129-36b42d0ae02e",
     "firstNInstances" : [ {
       "conceptId" : "449080006",
-      "detail" : "EXTENDED MAP REFSET SNAPSHOT: id=1d507f04-26a6-5a9d-8f3c-abb34b971a61 has invalid concept in ReferencedComponentId field = 127009"
+      "detail" : "EXTENDED MAP REFSET SNAPSHOT: id=1d507f04-26a6-5a9d-8f3c-abb34b971a61 has inactive concept without at lease 1 active descriptions in ReferencedComponentId = 127009"
     }, {
       "conceptId" : "449080006",
-      "detail" : "EXTENDED MAP REFSET SNAPSHOT: id=49361643-765b-54e7-8033-9b8f8426f081 has invalid concept in ReferencedComponentId field = 127009"
+      "detail" : "EXTENDED MAP REFSET SNAPSHOT: id=49361643-765b-54e7-8033-9b8f8426f081 has inactive concept without at lease 1 active descriptions in ReferencedComponentId = 127009"
     }, {
       "conceptId" : "449080006",
-      "detail" : "EXTENDED MAP REFSET SNAPSHOT: id=217a9bea-0b4e-5499-8a61-e4d661e722b0 has invalid concept in ReferencedComponentId field = 140004"
+      "detail" : "EXTENDED MAP REFSET SNAPSHOT: id=217a9bea-0b4e-5499-8a61-e4d661e722b0 has inactive concept without at lease 1 active descriptions in ReferencedComponentId = 140004"
     }, {
       "conceptId" : "449080006",
-      "detail" : "EXTENDED MAP REFSET SNAPSHOT: id=69703317-411e-5d4d-b853-eef523f0109b has invalid concept in ReferencedComponentId field = 140004"
+      "detail" : "EXTENDED MAP REFSET SNAPSHOT: id=69703317-411e-5d4d-b853-eef523f0109b has inactive concept without at lease 1 active descriptions in ReferencedComponentId = 140004"
     }, {
       "conceptId" : "449080006",
-      "detail" : "EXTENDED MAP REFSET SNAPSHOT: id=174a7931-88f1-5fc7-99fc-f0fc8f104f87 has invalid concept in ReferencedComponentId field = 140004"
+      "detail" : "EXTENDED MAP REFSET SNAPSHOT: id=174a7931-88f1-5fc7-99fc-f0fc8f104f87 has inactive concept without at lease 1 active descriptions in ReferencedComponentId = 140004"
     }, {
       "conceptId" : "449080006",
-      "detail" : "EXTENDED MAP REFSET SNAPSHOT: id=02dc8b54-b1ce-5fbb-8b2c-9f84140426ff has invalid concept in ReferencedComponentId field = 162004"
+      "detail" : "EXTENDED MAP REFSET SNAPSHOT: id=02dc8b54-b1ce-5fbb-8b2c-9f84140426ff has inactive concept without at lease 1 active descriptions in ReferencedComponentId = 162004"
     }, {
       "conceptId" : "449080006",
-      "detail" : "EXTENDED MAP REFSET SNAPSHOT: id=eb06f231-de00-53a1-901b-f016aa4d2e65 has invalid concept in ReferencedComponentId field = 171008"
+      "detail" : "EXTENDED MAP REFSET SNAPSHOT: id=eb06f231-de00-53a1-901b-f016aa4d2e65 has inactive concept without at lease 1 active descriptions in ReferencedComponentId = 171008"
     }, {
       "conceptId" : "449080006",
-      "detail" : "EXTENDED MAP REFSET SNAPSHOT: id=a80af01d-cb02-58b0-a267-123144076f48 has invalid concept in ReferencedComponentId field = 177007"
+      "detail" : "EXTENDED MAP REFSET SNAPSHOT: id=a80af01d-cb02-58b0-a267-123144076f48 has inactive concept without at lease 1 active descriptions in ReferencedComponentId = 177007"
     }, {
       "conceptId" : "449080006",
-      "detail" : "EXTENDED MAP REFSET SNAPSHOT: id=9d7c45ee-5a0d-5a3c-95dd-30b8b4853550 has invalid concept in ReferencedComponentId field = 177007"
+      "detail" : "EXTENDED MAP REFSET SNAPSHOT: id=9d7c45ee-5a0d-5a3c-95dd-30b8b4853550 has inactive concept without at lease 1 active descriptions in ReferencedComponentId = 177007"
     }, {
       "conceptId" : "449080006",
-      "detail" : "EXTENDED MAP REFSET SNAPSHOT: id=9d7c45ee-5a0d-5a3c-95dd-30b8b4853550 has invalid concept in ReferencedComponentId field = 177007"
+      "detail" : "EXTENDED MAP REFSET SNAPSHOT: id=9d7c45ee-5a0d-5a3c-95dd-30b8b4853550 has inactive concept without at lease 1 active descriptions in ReferencedComponentId = 177007"
     } ],
-    "totalFailed" : 52
+    "totalFailed" : 54
+  }, {
+    "assertionName" : "Verify that simple map has valid, active SNOMED CT concepts in the referencedComponentId field",
+    "assertionUuid" : "cc565f6b-a681-4f98-b129-36b42d0ae02f",
+    "firstNInstances" : [ {
+      "conceptId" : "900000000000207008",
+      "detail" : "SIMPLE MAP REFSET SNAPSHOT: id=e855c4de-407c-56f7-865e-7423580dd95c has inactive concept without at lease 1 active descriptions in ReferencedComponentId = 703615007"
+    }, {
+      "conceptId" : "900000000000207008",
+      "detail" : "SIMPLE MAP REFSET SNAPSHOT: id=f4203391-3431-5822-bada-026ff1d45c33 has inactive concept without at lease 1 active descriptions in ReferencedComponentId = 703711007"
+    }, {
+      "conceptId" : "900000000000207008",
+      "detail" : "SIMPLE MAP REFSET SNAPSHOT: id=dcfb5554-b50f-5ca0-8684-29b1b1b2ecd6 has inactive concept without at lease 1 active descriptions in ReferencedComponentId = 703815005"
+    }, {
+      "conceptId" : "900000000000207008",
+      "detail" : "SIMPLE MAP REFSET SNAPSHOT: id=1cb64068-effb-5e1d-b9d4-a861f45a29d2 has inactive concept without at lease 1 active descriptions in ReferencedComponentId = 703605001"
+    }, {
+      "conceptId" : "900000000000207008",
+      "detail" : "SIMPLE MAP REFSET SNAPSHOT: id=dc853820-0f73-539a-811a-e28db48e430f has inactive concept without at lease 1 active descriptions in ReferencedComponentId = 703634007"
+    }, {
+      "conceptId" : "900000000000207008",
+      "detail" : "SIMPLE MAP REFSET SNAPSHOT: id=f2e60ac2-6370-533d-921d-15ed46d0f22e has inactive concept without at lease 1 active descriptions in ReferencedComponentId = 703828003"
+    }, {
+      "conceptId" : "900000000000207008",
+      "detail" : "SIMPLE MAP REFSET SNAPSHOT: id=34e48b38-b6fc-5929-96bb-87330b833af1 has inactive concept without at lease 1 active descriptions in ReferencedComponentId = 703607009"
+    }, {
+      "conceptId" : "900000000000207008",
+      "detail" : "SIMPLE MAP REFSET SNAPSHOT: id=cff7ca5c-286c-52b3-9322-e489c65c8de4 has inactive concept without at lease 1 active descriptions in ReferencedComponentId = 703568007"
+    }, {
+      "conceptId" : "900000000000207008",
+      "detail" : "SIMPLE MAP REFSET SNAPSHOT: id=cff7ca5c-286c-52b3-9322-e489c65c8de4 has inactive concept without at lease 1 active descriptions in ReferencedComponentId = 703568007"
+    }, {
+      "conceptId" : "900000000000207008",
+      "detail" : "SIMPLE MAP REFSET SNAPSHOT: id=cff7ca5c-286c-52b3-9322-e489c65c8ab5 has inactive concept without at lease 1 active descriptions in ReferencedComponentId = 703568007"
+    } ],
+    "totalFailed" : 22
   }, {
     "assertionName" : "Terms that contain en-gb specific words are in the en-gb language refset.",
     "assertionUuid" : "cc9c5340-84f0-11e1-b0c4-0800200c9a66",

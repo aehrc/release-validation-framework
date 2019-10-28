@@ -168,20 +168,20 @@ public class RVFAssertionsRegressionTestHarnesss {
 				releaseTypeAssertions.add(assertion);
 			}
 		}
-		assertEquals(273, assertions.size());
+		assertEquals(274, assertions.size());
 		assertEquals(107, releaseTypeAssertions.size());
 	}
 	
 	@Test
 	public void testGetAssertionsForIntAuthoring() {
 		AssertionGroup group = assertionService.getAssertionGroupByName("int-authoring");
-		assertEquals(70, group.getAssertions().size());
+		assertEquals(71, group.getAssertions().size());
 	}
 	
 	
 	@Test
 	public void testTotalAssertions() {
-		assertEquals(386, assertionService.count().longValue());
+		assertEquals(387, assertionService.count().longValue());
 	}
 	
 	@Test
