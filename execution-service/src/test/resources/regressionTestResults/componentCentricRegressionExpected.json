@@ -1,7 +1,7 @@
 {
   "assertionType" : "component-centric-validation",
-  "totalAssertionsRun" : 123,
-  "totalAssertionsFailed" : 123,
+  "totalAssertionsRun" : 121,
+  "totalAssertionsFailed" : 121,
   "results" : [ {
     "assertionName" : "Case-sensitive terms that share initial words also share caseSignificanceId value.",
     "assertionUuid" : "805ab37c-33fa-45aa-876b-f86365a828c8",
@@ -598,14 +598,6 @@
     } ],
     "totalFailed" : 2
   }, {
-    "assertionName" : "Grouped value is in (0,1) in MRCM ATTRIBUTE DOMAIN delta file",
-    "assertionUuid" : "d7c78573-8e02-4eab-88ba-f9e628fe2c53",
-    "firstNInstances" : [ {
-      "conceptId" : "370129004",
-      "detail" : "MRCM ATTRIBUTE DOMAIN REFSET: id=8038688b-80f5-49b3-b3d8-c6fe13f8fb1e Grouped value is not in (0,1) in MRCM ATTRIBUTE DOMAIN delta file"
-    } ],
-    "totalFailed" : 1
-  }, {
     "assertionName" : "The FSN term should be unique in active content when case sensitivity is ignored.",
     "assertionUuid" : "d9f8a8d6-2c02-11e7-b0e7-3c15c2c6e32e",
     "firstNInstances" : [ {
@@ -932,14 +924,6 @@
       "detail" : "700132006 |Proglumetacin, different semantic tag (procedure)|"
     } ],
     "totalFailed" : 4
-  }, {
-    "assertionName" : "AttributeInGroupCardinality value is in ('0..0', '0..1', '0..*') in MRCM ATTRIBUTE DOMAIN delta file",
-    "assertionUuid" : "1f6a9168-534a-4ebe-b0e7-3f424e56a7d1",
-    "firstNInstances" : [ {
-      "conceptId" : "370129004",
-      "detail" : "MRCM ATTRIBUTE DOMAIN REFSET: id=8038688b-80f5-49b3-b3d8-c6fe13f8fb1e AttributeInGroupCardinality value is not in (\"0..0\", \"0..1\", \"0..*\") in MRCM ATTRIBUTE DOMAIN delta file"
-    } ],
-    "totalFailed" : 1
   }, {
     "assertionName" : "Newly inactive concepts must have an active historical association to an active concept - unless indicator NCEP.",
     "assertionUuid" : "22d3065c-98d3-458e-b020-35eec49b4be3",
