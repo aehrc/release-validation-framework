@@ -1,6 +1,6 @@
-	package org.ihtsdo.rvf.importer;
+package org.ihtsdo.rvf.importer;
 
-	import java.io.File;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.StringTokenizer;
 import java.util.UUID;
 
+import org.ihtsdo.otf.resourcemanager.ResourceManager;
 import org.ihtsdo.rvf.entity.Assertion;
 import org.ihtsdo.rvf.entity.ExecutionCommand;
 import org.ihtsdo.rvf.entity.SimpleAssertion;
@@ -48,7 +49,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 		private static final Logger logger = LoggerFactory.getLogger(AssertionsDatabaseImporter.class);
 		private static final String RESOURCE_PATH_SEPARATOR = "/";
 	
-		protected ObjectMapper objectMapper = new ObjectMapper();
 		private Map<String, String> lookupMap = new HashMap<>();
 		@Autowired
 		AssertionService assertionService;
@@ -61,7 +61,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 			return false;
 		}
 		
-		public void importAssertionsFromFile(final InputStream manifestInputStream, final String sqlResourcesFolderLocation){
+		public void importAssertionsFromFile(final InputStream manifestInputStream, final String sqlResourcesFolderLocation, ResourceManager resourceManager){
 			// get JDOM document from given manifest file
 			final Document xmlDocument = getJDomDocumentFromFile(manifestInputStream);
 			if(xmlDocument != null)
@@ -95,8 +95,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 								}
 								logger.info("category = " + category);
 
-								String sqlResourceFileName = sqlResourcesFolderLocation+ RESOURCE_PATH_SEPARATOR + category + RESOURCE_PATH_SEPARATOR + sqlFileName;
-								InputStream sqlInputStream = getClass().getResourceAsStream( sqlResourceFileName);
+								String sqlResourceFileName = sqlResourcesFolderLocation + RESOURCE_PATH_SEPARATOR + category + RESOURCE_PATH_SEPARATOR + sqlFileName;
+								InputStream sqlInputStream = null;
+								if (resourceManager != null) {
+									sqlInputStream = resourceManager.readResourceStream(sqlResourceFileName);
+								} else {
+									sqlInputStream = getClass().getResourceAsStream( sqlResourceFileName);
+								}
 								if (sqlInputStream != null) {
 									final String sqlString = readStream(sqlInputStream);
 									// add test to assertion
