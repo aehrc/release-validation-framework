@@ -1,15 +1,13 @@
 package org.ihtsdo.rvf.service;
 
-import java.io.IOException;
-import java.util.Collection;
-import java.util.List;
-import java.util.UUID;
-
 import org.ihtsdo.rvf.entity.Assertion;
 import org.ihtsdo.rvf.entity.AssertionGroup;
 import org.ihtsdo.rvf.entity.AssertionTest;
 import org.ihtsdo.rvf.entity.Test;
-import org.ihtsdo.rvf.model.AssertionGroupConfiguration;
+
+import java.util.Collection;
+import java.util.List;
+import java.util.UUID;
 
 public interface AssertionService {
 	//Assertion
@@ -62,6 +60,5 @@ public interface AssertionService {
 	List<Assertion> getAssertionsByKeyWords(String keyWord, boolean exactMatch);
 
 	AssertionGroup createAssertionGroup(AssertionGroup group);
-
-	AssertionGroupConfiguration getAssertionGroupConfigurationByName(String name) throws IOException;
+	
 }

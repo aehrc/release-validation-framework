@@ -38,6 +38,7 @@ public class AssertionsConfiguration {
     public static class InclusionExclusionConfiguration {
         private Set<String> uuids;
         private Set<String> categories;
+        private Set<String> texts;
         private Set<String> groups;
 
         public Set<String> getUuids() {
@@ -54,6 +55,14 @@ public class AssertionsConfiguration {
 
         public void setCategories(Set<String> categories) {
             this.categories = categories;
+        }
+
+        public Set<String> getTexts() {
+            return texts;
+        }
+
+        public void setTexts(Set<String> texts) {
+            this.texts = texts;
         }
 
         public Set<String> getGroups() {

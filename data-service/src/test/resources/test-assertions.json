@@ -1,0 +1,34 @@
+{
+  "assertions" : [
+    {
+      "uuid" : "0c560f77-93ba-4f41-a817-26d872c24c3f",
+      "keywords" : "component-centric-validation",
+      "assertionText": "Component Centric Validation 1"
+    },
+    {
+      "uuid" : "e52b001d-f288-44d1-a666-f4a3c2fd4bc5",
+      "keywords" : "file-centric-validation",
+      "assertionText": "File Centric Validation 1"
+    },
+    {
+      "uuid" : "c05c5623-1eca-42d5-9627-5957a04b243b",
+      "keywords" : "release-type-validation",
+      "assertionText": "Release Type Validation 1"
+    },
+    {
+      "uuid" : "2e7d1286-f131-4d5a-856c-ed64e74d877e",
+      "keywords" : "component-centric-validation,INT",
+      "assertionText": "Component Centric Validation For INT"
+    },
+    {
+      "uuid" : "d1d043a0-797e-411d-9ac9-c90b4a2e7c78",
+      "keywords" : "release-type-validation,US",
+      "assertionText": "Release Type Validation For US"
+    },
+    {
+      "uuid" : "448f0091-e4ba-4252-9739-56c3bf1713e2",
+      "keywords" : "resource",
+      "assertionText": "Resource 1"
+    }
+  ]
+}

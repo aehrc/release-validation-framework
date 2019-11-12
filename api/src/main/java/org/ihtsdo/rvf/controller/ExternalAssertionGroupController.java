@@ -9,6 +9,7 @@ import org.ihtsdo.rvf.entity.AssertionGroup;
 import org.ihtsdo.rvf.helper.AssertionHelper;
 import org.ihtsdo.rvf.model.AssertionGroupConfiguration;
 import org.ihtsdo.rvf.service.AssertionService;
+import org.ihtsdo.rvf.service.ExternalAssertionGroupService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,7 +32,7 @@ import java.util.Set;
 public class ExternalAssertionGroupController {
 
 	@Autowired
-	private AssertionService assertionService;
+	private ExternalAssertionGroupService externalAssertionGroupService;
 	
 	@Autowired
 	private AssertionHelper assertionHelper;
@@ -43,7 +44,7 @@ public class ExternalAssertionGroupController {
 	@ResponseStatus(HttpStatus.OK)
 	@ApiOperation(value = "Get all assertion groups", notes = "Retrieves all assertion groups defined in the system.")
 	public List<AssertionGroup> getGroups() {
-		List<AssertionGroup> result = assertionService.getAllAssertionGroups();
+		List<AssertionGroup> result = null;
 		if (result == null) {
 			result = new ArrayList<>();
 		}
@@ -56,15 +57,15 @@ public class ExternalAssertionGroupController {
 	@ResponseStatus(HttpStatus.OK)
 	@ApiOperation(value = "Get an assertion group", notes = "Retrieves an assertion group configurations for a given name")
 	public AssertionGroupConfiguration getAssertionGroupConfigurations(@PathVariable final String name) throws IOException {
-		return assertionService.getAssertionGroupConfigurationByName(name);
+		return externalAssertionGroupService.loadConfigurationsByAssertionGroupName(name);
 	}
 
 	@RequestMapping(value = "{name}", method = RequestMethod.GET)
 	@ResponseBody
 	@ResponseStatus(HttpStatus.OK)
 	@ApiOperation(value = "Get an assertion group", notes = "Retrieves an assertion group configurations for a given name")
-	public ExternalAssertionGroupDTO getAssertionGroup(@PathVariable final String name) throws IOException {
-		AssertionGroup assertionGroup =  assertionService.getAssertionGroupByName(name);
+	public ExternalAssertionGroupDTO getAssertionGroup(@PathVariable final String name) {
+		AssertionGroup assertionGroup =  externalAssertionGroupService.findByName(name);
 		ExternalAssertionGroupDTO groupDTO = new ExternalAssertionGroupDTO();
 		groupDTO.setName(assertionGroup.getName());
 		groupDTO.setAssertions(assertionGroup.getAssertions());

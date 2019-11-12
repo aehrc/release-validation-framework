@@ -1,0 +1,12 @@
+{
+  "name" : "case-include-by-categories",
+  "assertions" : {
+    "includes" : {
+      "categories" : [
+        "component-centric-validation",
+        "file-centric-validation",
+        "US"
+      ]
+    }
+  }
+}

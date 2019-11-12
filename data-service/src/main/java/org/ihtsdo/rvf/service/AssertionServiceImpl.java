@@ -1,16 +1,9 @@
 package org.ihtsdo.rvf.service;
 
-import com.fasterxml.jackson.core.util.DefaultIndenter;
-import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.commons.lang.StringUtils;
-import org.ihtsdo.otf.resourcemanager.ResourceManager;
 import org.ihtsdo.rvf.entity.Assertion;
 import org.ihtsdo.rvf.entity.AssertionGroup;
 import org.ihtsdo.rvf.entity.AssertionTest;
 import org.ihtsdo.rvf.entity.Test;
-import org.ihtsdo.rvf.model.AssertionGroupConfiguration;
-import org.ihtsdo.rvf.model.AssertionsConfiguration;
 import org.ihtsdo.rvf.repository.AssertionGroupRepository;
 import org.ihtsdo.rvf.repository.AssertionRepository;
 import org.ihtsdo.rvf.repository.AssertionTestRepository;
@@ -19,16 +12,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import javax.annotation.PostConstruct;
-import java.io.IOException;
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -43,28 +30,12 @@ public class AssertionServiceImpl implements AssertionService {
 	@Autowired
 	private AssertionTestRepository assertionTestRepo;
 
+	@Autowired
+	private ExternalAssertionGroupService externalAssertionGroupService;
+
 	@Value("${rvf.assertion.externalConfig}")
 	private Boolean useAssertionExternalConfig;
 
-	@Autowired
-	private ResourceManager assertionResourceManager;
-
-	private ObjectMapper objectMapper;
-
-	private static final String ASSERTION_GROUPS = "assertion-groups/";
-	private static final String JSON_FILE_EXT = ".json";
-
-	private static final String EXCLUDES = "excludes";
-	private static final String INCLUDES = "includes";
-
-
-	@PostConstruct
-	public void init() {
-		DefaultPrettyPrinter prettyPrinter = new DefaultPrettyPrinter();
-		prettyPrinter.indentArraysWith(DefaultIndenter.SYSTEM_LINEFEED_INSTANCE);
-		objectMapper = new ObjectMapper();
-		objectMapper.setDefaultPrettyPrinter(prettyPrinter);
-	}
 
 	@Override
 	public void delete(final Assertion assertion) {
@@ -190,19 +161,7 @@ public class AssertionServiceImpl implements AssertionService {
 	@Override
 	public AssertionGroup getAssertionGroupByName(final String groupName) {
 		if (useAssertionExternalConfig) {
-			try {
-				InputStream inputStream = assertionResourceManager.readResourceStreamOrNullIfNotExists("/assertion-groups/" + groupName + ".json");
-				if (inputStream != null) {
-					AssertionGroup assertionGroup = new AssertionGroup();
-					assertionGroup.setName(groupName);
-					assertionGroup.setAssertions(getAssertionsFromCloudConfig(groupName));
-					return assertionGroup;
-				}
-
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
-			return null;
+			return externalAssertionGroupService.findByName(groupName);
 		} else {
 			return assertionGroupRepo.findByName(groupName);
 		}
@@ -279,102 +238,5 @@ public class AssertionServiceImpl implements AssertionService {
 		return assertionGroupRepo.save(group);
 	}
 
-	@Override
-	public AssertionGroupConfiguration getAssertionGroupConfigurationByName(String name) throws IOException {
-		String fileName = ASSERTION_GROUPS + name + JSON_FILE_EXT;
-		InputStream inputStream = assertionResourceManager.readResourceStreamOrNullIfNotExists(fileName);
-		if (inputStream != null) {
-			AssertionGroupConfiguration assertionGroupConfiguration = objectMapper.readValue(inputStream, AssertionGroupConfiguration.class);
-			return assertionGroupConfiguration;
-		}
-		return null;
-	}
 
-	private Set<Assertion> getAssertionsFromCloudConfig(String groupName) {
-		Set<Assertion> assertions = new HashSet<>();
-		Set<String> includedUUIDs = new HashSet<>();
-		Set<String> excludedUUIDs = new HashSet<>();
-		List<Assertion> allAssertions = findAll();
-		ObjectMapper objectMapper = new ObjectMapper();
-		String pathToConfig = ASSERTION_GROUPS + groupName + JSON_FILE_EXT;
-		try {
-			InputStream inputStream = assertionResourceManager.readResourceStream(pathToConfig);
-			AssertionGroupConfiguration assertionGroupConfiguration = objectMapper.readValue(inputStream, AssertionGroupConfiguration.class);
-			if (assertionGroupConfiguration != null && assertionGroupConfiguration.getAssertions() != null) {
-				if (assertionGroupConfiguration.getAssertions().getIncludes() != null) {
-					includedUUIDs.addAll(getAssertionUUIDsInAssertionsConfig(groupName, assertionGroupConfiguration.getAssertions().getIncludes(), allAssertions, INCLUDES));
-				}
-				if (assertionGroupConfiguration.getAssertions().getExcludes() != null) {
-					excludedUUIDs.addAll(getAssertionUUIDsInAssertionsConfig(groupName, assertionGroupConfiguration.getAssertions().getExcludes(), allAssertions, EXCLUDES));
-				}
-				includedUUIDs.removeAll(excludedUUIDs);
-				assertions = allAssertions.stream().filter(assertion -> includedUUIDs.contains(assertion.getUuid().toString())).collect(Collectors.toSet());
-			}
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
-		return assertions;
-	}
-
-	private Set<String> getAssertionUUIDsInAssertionsConfig(String groupName, AssertionsConfiguration.InclusionExclusionConfiguration configuration
-			, List<Assertion> allAssertions, String field) throws IOException {
-		Set<String> uuids = new HashSet<>();
-		if (configuration.getUuids() != null) {
-			uuids.addAll(configuration.getUuids());
-		}
-		if (configuration.getCategories() != null) {
-			for (Assertion assertion : allAssertions) {
-				for (String category : configuration.getCategories()) {
-					if (assertion.getKeywords().contains("," + category)) {
-						uuids.add(assertion.getUuid().toString());
-					}
-				}
-			}
-		}
-		if (configuration.getGroups() != null) {
-			for (String group : configuration.getGroups()) {
-				loadAssertionUUIDsFromGroupConfig(groupName, allAssertions, uuids, group, field, new ArrayList<>());
-			}
-		}
-		return uuids;
-	}
-
-	private void loadAssertionUUIDsFromGroupConfig(String originGroup, List<Assertion> allAssertions, Set<String> uuids, String referencedGroup, String field, List<String> referencedGroupChain) throws IOException {
-		referencedGroupChain.add(referencedGroup);
-		if (originGroup.equals(referencedGroup)) {
-			String referecedGroupChainAsString = StringUtils.join(referencedGroupChain, " -> ");
-			throw new IllegalArgumentException("Cycling dependency on assertion group detected for: " + referecedGroupChainAsString);
-		}
-		String pathToConfig = ASSERTION_GROUPS + referencedGroup + JSON_FILE_EXT;
-		InputStream inputStream = assertionResourceManager.readResourceStream(pathToConfig);
-		ObjectMapper objectMapper = new ObjectMapper();
-		AssertionGroupConfiguration assertionGroupConfiguration = objectMapper.readValue(inputStream, AssertionGroupConfiguration.class);
-		AssertionsConfiguration assertionsConfiguration = assertionGroupConfiguration.getAssertions();
-		AssertionsConfiguration.InclusionExclusionConfiguration configuration = null;
-		if (INCLUDES.equals(field)) {
-			configuration = assertionsConfiguration.getIncludes();
-		} else if (EXCLUDES.equals(field)) {
-			configuration = assertionsConfiguration.getExcludes();
-		}
-		if (configuration != null) {
-			if (configuration.getUuids() != null) {
-				uuids.addAll(configuration.getUuids());
-			}
-			if (configuration.getCategories() != null) {
-				for (Assertion assertion : allAssertions) {
-					for (String category : configuration.getCategories()) {
-						if (assertion.getKeywords().contains("," + category)) {
-							uuids.add(assertion.getUuid().toString());
-						}
-					}
-				}
-			}
-			if (configuration.getGroups() != null) {
-				for (String group : configuration.getGroups()) {
-					loadAssertionUUIDsFromGroupConfig(originGroup, allAssertions, uuids, group, field, referencedGroupChain);
-				}
-			}
-		}
-
-	}
 }

@@ -1,0 +1,12 @@
+{
+  "name" : "case-include-by-uuids",
+  "assertions" : {
+    "includes" : {
+      "uuids" : [
+        "0c560f77-93ba-4f41-a817-26d872c24c3f",
+        "e52b001d-f288-44d1-a666-f4a3c2fd4bc5",
+        "d1d043a0-797e-411d-9ac9-c90b4a2e7c78"
+      ]
+    }
+  }
+}

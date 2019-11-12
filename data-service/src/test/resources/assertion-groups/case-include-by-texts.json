@@ -1,0 +1,10 @@
+{
+  "name" : "case-include-by-texts",
+  "assertions" : {
+    "includes" : {
+      "texts" : [
+        "Release Type Validation"
+      ]
+    }
+  }
+}
