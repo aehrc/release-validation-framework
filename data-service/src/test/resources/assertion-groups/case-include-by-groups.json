@@ -1,0 +1,11 @@
+{
+  "name" : "case-include-by-groups",
+  "assertions" : {
+    "includes" : {
+      "groups" : [
+        "case-include-by-categories",
+        "case-include-by-uuids"
+      ]
+    }
+  }
+}

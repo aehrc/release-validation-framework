@@ -1,0 +1,20 @@
+{
+  "name" : "case-include-by-categories",
+  "assertions" : {
+    "includes" : {
+      "categories" : [
+        "component-centric-validation",
+        "file-centric-validation",
+        "release-type-validation"
+      ]
+    },
+    "excludes" : {
+      "uuids" : [
+        "2e7d1286-f131-4d5a-856c-ed64e74d877e"
+      ],
+      "categories" : [
+        "US"
+      ]
+    }
+  }
+}

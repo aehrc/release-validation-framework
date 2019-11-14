@@ -93,9 +93,7 @@ public class ExternalAssertionGroupServiceImpl implements ExternalAssertionGroup
         return assertions;
     }
 
-    private Set<String> getAssertionUUIDsInAssertionsConfig(String groupName, AssertionsConfiguration.InclusionExclusionConfiguration configuration
-            , List<Assertion> allAssertions, String field) throws IOException {
-        Set<String> uuids = new HashSet<>();
+    private void findMatchingAssertionUUIDsFromConfiguration(AssertionsConfiguration.InclusionExclusionConfiguration configuration, Set<String> uuids, List<Assertion> allAssertions) {
         if (configuration.getUuids() != null) {
             uuids.addAll(configuration.getUuids());
         }
@@ -125,6 +123,12 @@ public class ExternalAssertionGroupServiceImpl implements ExternalAssertionGroup
                 }
             }
         }
+    }
+
+    private Set<String> getAssertionUUIDsInAssertionsConfig(String groupName, AssertionsConfiguration.InclusionExclusionConfiguration configuration
+            , List<Assertion> allAssertions, String field) throws IOException {
+        Set<String> uuids = new HashSet<>();
+        findMatchingAssertionUUIDsFromConfiguration(configuration, uuids, allAssertions);
         if (configuration.getGroups() != null) {
             for (String group : configuration.getGroups()) {
                 loadAssertionUUIDsFromGroupConfig(groupName, allAssertions, uuids, group, field, new ArrayList<>());
@@ -140,47 +144,27 @@ public class ExternalAssertionGroupServiceImpl implements ExternalAssertionGroup
             throw new IllegalArgumentException("Cycling dependency on assertion group detected for: " + referencedGroupChainAsString);
         }
         String pathToConfig = ASSERTION_GROUPS + referencedGroup + JSON_FILE_EXT;
-        InputStream inputStream = assertionResourceManager.readResourceStream(pathToConfig);
-        ObjectMapper objectMapper = new ObjectMapper();
-        AssertionGroupConfiguration assertionGroupConfiguration = objectMapper.readValue(inputStream, AssertionGroupConfiguration.class);
-        AssertionsConfiguration assertionsConfiguration = assertionGroupConfiguration.getAssertions();
-        AssertionsConfiguration.InclusionExclusionConfiguration configuration = null;
-        if (INCLUDES.equals(field)) {
-            configuration = assertionsConfiguration.getIncludes();
-        } else if (EXCLUDES.equals(field)) {
-            configuration = assertionsConfiguration.getExcludes();
-        }
-        if (configuration != null) {
-            if (configuration.getUuids() != null) {
-                uuids.addAll(configuration.getUuids());
+        InputStream inputStream = assertionResourceManager.readResourceStreamOrNullIfNotExists(pathToConfig);
+        if (inputStream != null) {
+            ObjectMapper objectMapper = new ObjectMapper();
+            AssertionGroupConfiguration assertionGroupConfiguration = objectMapper.readValue(inputStream, AssertionGroupConfiguration.class);
+            AssertionsConfiguration assertionsConfiguration = assertionGroupConfiguration.getAssertions();
+            AssertionsConfiguration.InclusionExclusionConfiguration configuration = null;
+            if (INCLUDES.equals(field)) {
+                configuration = assertionsConfiguration.getIncludes();
+            } else if (EXCLUDES.equals(field)) {
+                configuration = assertionsConfiguration.getExcludes();
             }
-            if (configuration.getCategories() != null) {
-                for (Assertion assertion : allAssertions) {
-                    for (String category : configuration.getCategories()) {
-                        if (assertion.getKeywords().contains("," + category)) {
-                            uuids.add(assertion.getUuid().toString());
-                        }
+            if (configuration != null) {
+                findMatchingAssertionUUIDsFromConfiguration(configuration, uuids, allAssertions);
+                if (configuration.getGroups() != null) {
+                    for (String group : configuration.getGroups()) {
+                        loadAssertionUUIDsFromGroupConfig(originGroup, allAssertions, uuids, group, field, referencedGroupChain);
                     }
                 }
             }
-            if (configuration.getTexts() != null) {
-                for (Assertion assertion : allAssertions) {
-                    for (String keyword : configuration.getTexts()) {
-                        if (StringUtils.isBlank(keyword.trim())) {
-                            break;
-                        }
-                        if (StringUtils.containsIgnoreCase(assertion.getAssertionText(), keyword)) {
-                            uuids.add(assertion.getUuid().toString());
-                        }
-                    }
-                }
-            }
-            if (configuration.getGroups() != null) {
-                for (String group : configuration.getGroups()) {
-                    loadAssertionUUIDsFromGroupConfig(originGroup, allAssertions, uuids, group, field, referencedGroupChain);
-                }
-            }
         }
+
 
     }
 }

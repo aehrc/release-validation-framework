@@ -25,7 +25,9 @@ import java.util.stream.Collectors;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.when;
 
 @RunWith(SpringRunner.class)
@@ -107,21 +109,46 @@ public class ExternalAssertionGroupServiceImplTest {
 
         mockAssertionGroupConfiguration(group);
         AssertionGroupConfiguration configuration = externalAssertionGroupService.loadConfigurationsByAssertionGroupName(group);
-        Set<String> keywordsInConfigurations = configuration.getAssertions().getIncludes().getTexts();
+        Set<String> textsInConfigurations = configuration.getAssertions().getIncludes().getTexts();
 
         for (Assertion assertion : assertionSet) {
             String textInAssertion = assertion.getAssertionText();
             assertTrue("Assertion text of assertion " + assertion.getUuid() + " must contains 1 of the texts specified in configurations",
-                    keywordsInConfigurations.stream().anyMatch(textInAssertion::contains));
+                    textsInConfigurations.stream().anyMatch(textInAssertion::contains));
         }
+    }
 
+    @Test
+    public void testIncludesAssertionsWithOnlyGroups() throws IOException {
+        String group = "case-include-by-groups";
+        mockAssertionGroupConfiguration(group);
+
+        String subgroup1 = "case-include-by-uuid";
+        mockAssertionGroupConfiguration(subgroup1);
+
+        String subgroup2 = "case-include-by-categories";
+        mockAssertionGroupConfiguration(subgroup2);
+
+        Set<Assertion> assertionSet = externalAssertionGroupService.loadAssertionsByAssertionGroupName(group);
+        assertEquals(4, assertionSet.size());
+
+    }
+
+    @Test
+    public void testExcludeAssertionsConfigurations() throws IOException {
+        String group = "case-exclude";
+        mockAssertionGroupConfiguration(group);
+
+        Set<Assertion> assertionSet = externalAssertionGroupService.loadAssertionsByAssertionGroupName(group);
+        assertEquals(3, assertionSet.size());
     }
 
     private void mockAssertionGroupConfiguration(String groupName) throws IOException {
         String path = ExternalAssertionGroupServiceImpl.ASSERTION_GROUPS + groupName + ExternalAssertionGroupServiceImpl.JSON_FILE_EXT;
         InputStream assertionGroupConfigStream = getClass().getClassLoader().getResourceAsStream(path);
-        when(resourceManager.readResourceStreamOrNullIfNotExists(anyString())).thenReturn(assertionGroupConfigStream);
+        doReturn(assertionGroupConfigStream).when(resourceManager).readResourceStreamOrNullIfNotExists(path);
     }
+    
 
 
     public static class TestAssertions {
