@@ -251,7 +251,7 @@ public List<TestRunItem> executeAssertionsConcurrently(List<Assertion> assertion
 		String defaultCatalog = dataSource.getDefaultCatalog();
 		String prospectiveSchema = config.getProspectiveVersion();
 		final String[] nameParts = config.getProspectiveVersion().split("_");
-		String moduleId = ProductName.toModuleId(nameParts[2]);
+		String moduleId = ProductName.toModuleId(nameParts[1]);
 		String version = nameParts[2];
 		String previousReleaseSchema = config.getPreviousVersion();
 
