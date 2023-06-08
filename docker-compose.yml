@@ -39,6 +39,11 @@ services:
       - rvf_net
     volumes:
       - rvf-store:/app/store
+      - ./rvf-store/manifest.xml:/app//snomed-release-validation-assertions/manifest.xml
+      - ./rvf-store/scripts/resource/00-active-tables.sql:/app//snomed-release-validation-assertions/scripts/resource/00-active-tables.sql
+      - ./rvf-store/scripts/resource/10-helper-funcs.sql:/app//snomed-release-validation-assertions/scripts/resource/10-helper-funcs.sql
+      - ./rvf-store/scripts/resource/20-helper-procs.sql:/app//snomed-release-validation-assertions/scripts/resource/20-helper-procs.sql
+      - ./rvf-store/scripts/amtv4:/app//snomed-release-validation-assertions/scripts/amtv4
     restart: always
 
 networks:
