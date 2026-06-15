@@ -9,23 +9,23 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import javax.naming.ConfigurationException;
 import java.sql.*;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 
 @Service
 public class AssertionExecutionService {
 
 	private static final String FAILED_TO_FIND_RVF_DB_SCHEMA = "Failed to find rvf db schema for ";
+	private static final String NOT_SUPPLIED = "NOT_SUPPLIED";
+
 	@Autowired
 	private AssertionService assertionService;
 	@Resource(name = "dataSource")
@@ -34,9 +34,11 @@ public class AssertionExecutionService {
 	private RvfDynamicDataSource rvfDynamicDataSource;
 	@Value("${rvf.qa.result.table.name}")
 	private String qaResulTableName;
-	private final String deltaTableSuffix = "d";
-	private final String snapshotTableSuffix = "s";
-	private final String fullTableSuffix = "f";
+	@Value("${rvf.validation.international.modules}")
+	private String internationalModules;
+	private static final String DELTA_TABLE_SUFFIX = "d";
+	private static final String SNAPSHOT_TABLE_SUFFIX = "s";
+	private static final String FULL_TABLE_SUFFIX = "f";
 
 	private final ExecutorService executorService = Executors.newCachedThreadPool();
 
@@ -90,9 +92,9 @@ public List<TestRunItem> executeAssertionsConcurrently(List<Assertion> assertion
 			batch.add(assertion);
 			if (counter % 10 == 0 || counter == assertions.size()) {
 				final List<Assertion> work = batch;
-				logger.info(String.format("Started executing assertion [%1s] of [%2s]", counter, assertions.size()));
+				logger.info("Started executing assertion [{}] of [{}]", counter, assertions.size());
 				final Future<Collection<TestRunItem>> future = executorService.submit(() -> executeAssertions(work, executionConfig));
-				logger.info(String.format("Finished executing assertion [%1s] of [%2s]", counter, assertions.size()));
+				logger.info("Finished executing assertion [{}] of [{}]", counter, assertions.size());
 				//reporting every 10 assertions
 				concurrentTasks.add(future);
 				batch = null;
@@ -106,27 +108,33 @@ public List<TestRunItem> executeAssertionsConcurrently(List<Assertion> assertion
 				results.addAll(concurrentTask.get());
 			} catch (ExecutionException | InterruptedException e) {
 				logger.error("Thread interrupted while waiting for future result.", e);
+				Thread.currentThread().interrupt();
 			}
 		}
 		return results;
 	}
 	/** Executes an update using statement sql and logs the time taken **/
-	private int executeUpdateStatement (final Connection connection, final String sql) throws SQLException{
+	private void executeUpdateStatement (final Connection connection, final String sql) throws SQLException{
 		final long startTime = System.currentTimeMillis();
-		logger.info("Executing {} statement:", sql.replaceAll("\n", " " ).replaceAll("\t", ""));
+		if (sql == null) {
+			logger.warn("SQL statement is null, skipping execution");
+			return;
+		}
 		try (Statement statement = connection.createStatement()) {
-			//try block will close statement in all circumstances
+			if (logger.isInfoEnabled()) {
+				logger.info("Executing statement: {}", sql.replace("\n", " ").replace("\t", ""));
+			}
+			// try block will close statement in all circumstances
 			final int result = statement.executeUpdate(sql);
 			final long timeTaken = System.currentTimeMillis() - startTime;
 			logger.info("Completed in {}ms, result = {}", timeTaken, result);
-			return result;
 		}
 	}
 
 	public TestRunItem executeTest(final Assertion assertion, final Test test, final MysqlExecutionConfig config) {
 
 		long timeStart = System.currentTimeMillis();
-		logger.debug("Start executing assertion:" + assertion.getUuid());
+		logger.debug("Start executing assertion: {}", assertion.getUuid());
 		final TestRunItem runItem = new TestRunItem();
 		runItem.setTestCategory(assertion.getKeywords());
 		runItem.setAssertionText(assertion.getAssertionText());
@@ -140,7 +148,8 @@ public List<TestRunItem> executeAssertionsConcurrently(List<Assertion> assertion
 			// execute sql and get result
 			// create a single connection for entire test and close it after running test - avoid creating too many connections
 			try (Connection connection = rvfDynamicDataSource.getConnection(config.getProspectiveVersion())) {
-				executeCommand(assertion, config, command, connection);
+				Long failureCount = executeCommand(assertion, config, command, connection);
+				runItem.setFailureCount(failureCount);
 				long timeEnd = System.currentTimeMillis();
 				runItem.setRunTime((timeEnd - timeStart));
 			} catch (final Exception e) {
@@ -152,129 +161,129 @@ public List<TestRunItem> executeAssertionsConcurrently(List<Assertion> assertion
 			runItem.setFailureMessage("Test does not have any associated execution command:" + test);
 			return runItem;
 		}
-		logger.info(runItem.toString());
+		logger.info("Executed {}", runItem);
 		return runItem;
 	}
 
-	private void executeCommand(final Assertion assertion, final MysqlExecutionConfig config,
+	private Long executeCommand(final Assertion assertion, final MysqlExecutionConfig config,
 			final ExecutionCommand command, final Connection connection)
 			throws SQLException, ConfigurationException {
-		String[] parts = {""};
-		if (command.getStatements().size() == 0)
-		{
-			final String sql = command.getTemplate();
-			if (sql != null) {
-				parts = sql.split(";");
-			}
-		}else {
-			parts = command.getStatements().toArray(new String[command.getStatements().size()]);
-		}
+		long failureCount = 0L;
+		String[] parts = splitCommand(command);
 		// parse sql to get select statement
-		final List<String> sqlStatements = transformSql(parts, assertion, config);
-		for (String sqlStatement: sqlStatements)
-		{
+		final List<String> sqlStatements = transformSql(Arrays.asList(parts), assertion, config);
+		for (String sqlStatement: sqlStatements) {
 			// remove any leading and train white space
 			sqlStatement = sqlStatement.trim();
 			if (sqlStatement.startsWith("call")) {
-				logger.info("Start calling stored proecure {}", sqlStatement);
+				logger.info("Start calling stored procedure {}", sqlStatement);
 				try ( CallableStatement cs = connection.prepareCall(sqlStatement)) {
 					cs.execute();
 				}
-				logger.info("End of calling stored proecure {}", sqlStatement);
+				logger.info("End of calling stored procedure {}", sqlStatement);
 			} else if (sqlStatement.toLowerCase().startsWith("select")){
-				//TODO need to verify this is required.
-				logger.info("Select query found:" + sqlStatement);
-				final Long executionId = config.getExecutionId();
+				logger.info("Select query found: {}", sqlStatement);
 				try (PreparedStatement preparedStatement = connection.prepareStatement(sqlStatement)) {
 					try (ResultSet execResult = preparedStatement.executeQuery()) {
-						final String insertSQL = "insert into " + qaResulTableName + " (run_id, assertion_id, details) values (?, ?, ?)";
-						try (Connection qaDbConnecion = dataSource.getConnection()) {
-							try (PreparedStatement insertStatement = qaDbConnecion.prepareStatement(insertSQL)) {
-								while(execResult.next())
-								{
-									insertStatement.setLong(1, executionId);
-									insertStatement.setLong(2, assertion.getAssertionId());
-									insertStatement.setString(3, execResult.getString(3));
+						try (Connection qaDbConnection = dataSource.getConnection()) {
+							final String insertSQL = "insert into ? (run_id, assertion_id, details) values (?, ?, ?)";
+							try(PreparedStatement insertStatement = qaDbConnection.prepareStatement(insertSQL)) {
+								while (execResult.next()) {
+									insertStatement.setString(1, qaResulTableName);
+									insertStatement.setLong(2, config.getExecutionId());
+									insertStatement.setLong(3, assertion.getAssertionId());
+									insertStatement.setString(4, execResult.getString(3));
 									insertStatement.addBatch();
+
+									failureCount++;
 								}
 								// execute insert statement
 								insertStatement.executeBatch();
-								logger.debug("batch insert completed for assertion:" + assertion.getAssertionText());
+								logger.debug("batch insert completed for assertion: {}", assertion.getAssertionText());
 							}
 						}
 					}
 				}
 			}
 			else {
-				if (sqlStatement.startsWith("create table")){
+				if (sqlStatement.startsWith("create table")
 					// only add engine if we do not create using a like statement
-					if (!(sqlStatement.contains("like") || sqlStatement.contains("as"))) {
-						sqlStatement = sqlStatement + " ENGINE = MyISAM";
-					}
+					&& (!(sqlStatement.contains("like") || sqlStatement.contains("as")))){
+					sqlStatement = sqlStatement + " ENGINE = MyISAM";
 				}
 				executeUpdateStatement(connection, sqlStatement);
 			}
 		}
+
+		return failureCount;
 	}
 
-	private List<String> transformSql(String[] parts, Assertion assertion, MysqlExecutionConfig config) throws ConfigurationException {
+
+	private String[] splitCommand(ExecutionCommand command) {
+		String[] parts = {""};
+		if (command.getStatements().isEmpty()) {
+			final String sql = command.getTemplate();
+			if (sql != null) {
+				parts = sql.split(";");
+			}
+		} else {
+			parts = command.getStatements().toArray(new String[0]);
+		}
+		return parts;
+	}
+
+	private List<String> transformSql(List<String> parts, Assertion assertion, MysqlExecutionConfig config) throws ConfigurationException {
 		List<String> result = new ArrayList<>();
 		String defaultCatalog = dataSource.getDefaultCatalog();
 		String prospectiveSchema = config.getProspectiveVersion();
 		final String[] nameParts = config.getProspectiveVersion().split("_");
-		String defaultModuleId = StringUtils.hasLength(config.getDefaultModuleId()) ? config.getDefaultModuleId() : (nameParts.length >= 2 ? ProductName.toModuleId(nameParts[1]) : "NOT_SUPPLIED");
-		String includedModules = config.getIncludedModules().stream().collect(Collectors.joining(","));
-		String version = (nameParts.length >= 3 ? nameParts[2] : "NOT_SUPPLIED");
+		String defaultModuleId = StringUtils.hasLength(config.getDefaultModuleId()) ? config.getDefaultModuleId() : getModuleId(nameParts);
+		String includedModules = CollectionUtils.isEmpty(config.getIncludedModules()) ? "NULL" : String.join(",", config.getIncludedModules());
+		String version = (nameParts.length >= 3 ? nameParts[2] : NOT_SUPPLIED);
 
 		String previousReleaseSchema = config.getPreviousVersion();
-		String dependencyReleaseSchema = config.getExtensionDependencyVersion();
+		String dependencyReleaseSchema = config.getExtensionDependencyVersion() == null ? "NULL" : config.getExtensionDependencyVersion();
+		validateSchemas(config, prospectiveSchema, previousReleaseSchema);
 
-		//We need both these schemas to exist
-		if (prospectiveSchema == null) {
-			throw new ConfigurationException (FAILED_TO_FIND_RVF_DB_SCHEMA + prospectiveSchema);
-		}
-
-		if (config.isReleaseValidation() && !config.isFirstTimeRelease() && previousReleaseSchema == null) {
-			throw new ConfigurationException (FAILED_TO_FIND_RVF_DB_SCHEMA + previousReleaseSchema);
-		}
-		for( String part : parts) {
-			if ((part.contains("<PREVIOUS>") && previousReleaseSchema == null)
-				|| (part.contains("<DEPENDENCY>") && dependencyReleaseSchema == null)) {
-				continue;
-			}
-
+		for ( String part : parts) {
 			logger.debug("Original sql statement: {}", part);
-			// remove all SQL comments - //TODO might throw errors for -- style comments
 			final Pattern commentPattern = Pattern.compile("/\\*.*?\\*/", Pattern.DOTALL);
 			part = commentPattern.matcher(part).replaceAll("");
 			// replace all substitutions for exec
-			part = part.replaceAll("<RUNID>", String.valueOf(config.getExecutionId()));
-			part = part.replaceAll("<ASSERTIONUUID>", String.valueOf(assertion.getAssertionId()));
-			part = part.replaceAll("<MODULEID>", defaultModuleId);
-			part = part.replaceAll("<MODULEIDS>", includedModules);
-			part = part.replaceAll("<VERSION>", version);
+			part = part.replace("<RUNID>", String.valueOf(config.getExecutionId()));
+			part = part.replace("<ASSERTIONUUID>", String.valueOf(assertion.getAssertionId()));
+			part = part.replace("<MODULEID>", defaultModuleId);
+			part = part.replace("<INCLUDED_MODULES>", includedModules);
+			part = part.replace("<VERSION>", version);
 			// watch out for any 's that users might have introduced
-			part = part.replaceAll("qa_result", defaultCatalog+ "." + qaResulTableName);
-			part = part.replaceAll("<PROSPECTIVE>", prospectiveSchema);
-			part = part.replaceAll("<TEMP>", prospectiveSchema);
-			if (previousReleaseSchema != null) {
-				part = part.replaceAll("<PREVIOUS>", previousReleaseSchema);
-			}
-			if (dependencyReleaseSchema != null) {
-				part = part.replaceAll("<DEPENDENCY>", dependencyReleaseSchema);
-			}
-			part = part.replaceAll("<DELTA>", deltaTableSuffix);
-			part = part.replaceAll("<SNAPSHOT>", snapshotTableSuffix);
-			part = part.replaceAll("<FULL>", fullTableSuffix);
-			part.trim();
+			part = part.replace("qa_result", defaultCatalog+ "." + qaResulTableName);
+			part = part.replace("<PROSPECTIVE>", prospectiveSchema);
+			part = part.replace("<TEMP>", prospectiveSchema);
+			part = part.replace("<INTERNATIONAL_MODULES>", internationalModules);
+			part = part.replace("<PREVIOUS>", previousReleaseSchema);
+			part = part.replace("<DEPENDENCY>", dependencyReleaseSchema);
+			part = part.replace("<DELTA>", DELTA_TABLE_SUFFIX);
+			part = part.replace("<SNAPSHOT>", SNAPSHOT_TABLE_SUFFIX);
+			part = part.replace("<FULL>", FULL_TABLE_SUFFIX);
+			part = part.trim();
 			logger.debug("Transformed sql statement: {}", part);
 			result.add(part);
 		}
 		return result;
 	}
 
+	private static String getModuleId(String[] nameParts) {
+		return nameParts.length >= 2 ? ProductName.toModuleId(nameParts[1]) : NOT_SUPPLIED;
+	}
 
-	public void setQaResulTableName(final String qaResulTableName) {
-		this.qaResulTableName = qaResulTableName;
+	private static void validateSchemas(MysqlExecutionConfig config, String prospectiveSchema, String previousReleaseSchema) throws ConfigurationException {
+		//We need both these schemas to exist
+		if (prospectiveSchema == null) {
+			throw new ConfigurationException (FAILED_TO_FIND_RVF_DB_SCHEMA + "prospective release");
+		}
+
+		if (config.isRf2DeltaOnly() && !config.isFirstTimeRelease() && previousReleaseSchema == null) {
+			throw new ConfigurationException (FAILED_TO_FIND_RVF_DB_SCHEMA + "previous release");
+		}
 	}
 }

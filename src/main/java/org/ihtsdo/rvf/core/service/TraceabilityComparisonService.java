@@ -281,6 +281,11 @@ public class TraceabilityComparisonService {
 
 			final ComponentFactory componentFactory = new ComponentFactory() {
 				@Override
+				public LoadingProfile getLoadingProfile() {
+					return null;
+				}
+
+				@Override
 				public void preprocessingContent() {
 					// Not needed
 				}
@@ -328,7 +333,7 @@ public class TraceabilityComparisonService {
 				}
 
 				@Override
-				public void newReferenceSetMemberState(String[] strings, String id, String effectiveTime, String active, String moduleId, String refsetId, String referencedComponentId, String... strings1) {
+				public void newReferenceSetMemberState(String filename, String[] fieldNames, String id, String effectiveTime, String active, String moduleId, String refsetId, String referencedComponentId, String... otherValues) {
 					if (effectiveTimePredicate.test(effectiveTime) && !Arrays.asList(refsetsToIgnore).contains(refsetId)) {
 						refsetMembers.add(id);
 						componentIdToConceptIdMap.put(id, referencedComponentId);

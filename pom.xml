@@ -5,19 +5,24 @@
 
     <groupId>org.ihtsdo.snomed.rvf</groupId>
     <artifactId>release-validation-framework</artifactId>
-    <version>5.0.1</version>
+    <version>8.3.1</version>
     <packaging>jar</packaging>
     <description>SNOMED Release Validation Framework</description>
 
     <parent>
         <groupId>org.snomed</groupId>
         <artifactId>snomed-parent-bom</artifactId>
-        <version>2.0.0</version>
+        <version>3.14.0</version>
     </parent>
 
     <properties>
-        <skip.integration.tests>true</skip.integration.tests>
         <packageName>rvf-api</packageName>
+        <docker.registry>docker.io</docker.registry>
+        <docker.allowInsecureRegistries>false</docker.allowInsecureRegistries>
+        <docker.image.prefix>snomedinternational</docker.image.prefix>
+        <docker.image.tag>latest</docker.image.tag>
+        <docker.base-image>amazoncorretto:17</docker.base-image>
+        <jib-maven-plugin.version>3.4.0</jib-maven-plugin.version>
     </properties>
 
     <scm>
@@ -61,10 +66,7 @@
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.mangofactory</groupId>
-            <artifactId>swagger-springmvc</artifactId>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>commons-dbcp</groupId>
@@ -79,14 +81,6 @@
             <artifactId>commons-lang</artifactId>
         </dependency>
         <dependency>
-            <groupId>javax.jms</groupId>
-            <artifactId>javax.jms-api</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>javax.persistence</groupId>
-            <artifactId>javax.persistence-api</artifactId>
-        </dependency>
-        <dependency>
             <groupId>javax.xml.bind</groupId>
             <artifactId>jaxb-api</artifactId>
         </dependency>
@@ -95,8 +89,8 @@
             <artifactId>jaxen</artifactId>
         </dependency>
         <dependency>
-            <groupId>mysql</groupId>
-            <artifactId>mysql-connector-java</artifactId>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
         </dependency>
         <dependency>
             <groupId>org.apache.commons</groupId>
@@ -107,16 +101,18 @@
             <artifactId>commons-lang3</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.hibernate</groupId>
-            <artifactId>hibernate-core</artifactId>
-        </dependency>
-        <dependency>
             <groupId>org.ihtsdo.drools</groupId>
             <artifactId>snomed-drools-engine</artifactId>
         </dependency>
         <dependency>
             <groupId>org.ihtsdo.drools</groupId>
             <artifactId>snomed-drools-rf2-validator</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-reload4j</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.ihtsdo.otf.common</groupId>
@@ -129,6 +125,12 @@
         <dependency>
             <groupId>org.ihtsdo.snomed.util</groupId>
             <artifactId>snomed-utilities</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-reload4j</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.javassist</groupId>
@@ -149,6 +151,12 @@
         <dependency>
             <groupId>org.snomed.quality</groupId>
             <artifactId>mrcm-validator</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-reload4j</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -159,8 +167,12 @@
             <artifactId>spring-boot-autoconfigure</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-activemq</artifactId>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-jms</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.activemq</groupId>
+            <artifactId>activemq-broker</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -175,18 +187,8 @@
             <artifactId>spring-boot-starter-json</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-aws-autoconfigure</artifactId>
-        </dependency>
-        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter</artifactId>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.springframework.boot</groupId>
-                    <artifactId>spring-boot-starter-logging</artifactId>
-                </exclusion>
-            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -219,7 +221,15 @@
         <!-- API Documentation -->
         <dependency>
             <groupId>org.springdoc</groupId>
-            <artifactId>springdoc-openapi-ui</artifactId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-mysql</artifactId>
         </dependency>
     </dependencies>
 
@@ -250,51 +260,101 @@
                     </execution>
                 </executions>
             </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-surefire-plugin</artifactId>
-                <version>2.22.1</version>
-                <configuration>
-                    <excludes>
-                        <exclude>**/*IT.java</exclude>
-                        <exclude>**/*HarnessForTest.java</exclude>
-                        <exclude>**/*IntegrationTest.java</exclude>
-                        <exclude>**/*IntegrationSpec.java</exclude>
-                    </excludes>
-                </configuration>
-            </plugin>
 
+            <!-- Exec Maven Plugin to run Git commands -->
             <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-failsafe-plugin</artifactId>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.0.0</version>
                 <executions>
                     <execution>
-                        <id>integration-test</id>
-                        <phase>test</phase>
+                        <id>git-checkout-resources</id>
+                        <phase>generate-resources</phase>
                         <goals>
-                            <goal>integration-test</goal>
-                            <goal>verify</goal>
+                            <goal>exec</goal>
                         </goals>
+                        <configuration>
+                            <executable>bash</executable>
+                            <arguments>
+                                <argument>checkout-resources.sh</argument>
+                            </arguments>
+                        </configuration>
                     </execution>
                 </executions>
-                <configuration>
-                    <includes>
-                        <include>**/*IT.java</include>
-                        <include>**/*IntegrationTest.java</include>
-                    </includes>
-                    <skipTests>${skip.integration.tests}</skipTests>
-                </configuration>
             </plugin>
+
             <!-- Docker Image Build -->
             <plugin>
-                <groupId>com.spotify</groupId>
-                <artifactId>dockerfile-maven-plugin</artifactId>
-                <version>1.4.13</version>
+                <groupId>com.google.cloud.tools</groupId>
+                <artifactId>jib-maven-plugin</artifactId>
+                <version>${jib-maven-plugin.version}</version>
                 <configuration>
-                    <repository>${docker.image.prefix}/${project.artifactId}</repository>
-                    <buildArgs>
-                        <JAR_FILE>target/${project.build.finalName}.jar</JAR_FILE>
-                    </buildArgs>
+                    <container>
+                        <labels>
+                            <author>SNOMED International &lt;tooling@snomed.org&gt;</author>
+                        </labels>
+                        <mainClass>org.ihtsdo.rvf.App</mainClass>
+                        <environment>
+                            <application.title>${project.name}</application.title>
+                            <application.version>${project.version}</application.version>
+                        </environment>
+                        <jvmFlags>
+                            <jvmFlag>-Djava.security.egd=file:/dev/./urandom</jvmFlag>
+                            <jvmFlag>--add-opens=java.base/java.lang=ALL-UNNAMED</jvmFlag>
+                            <jvmFlag>-Xms512m</jvmFlag>
+                            <jvmFlag>-Xmx8g</jvmFlag>
+                        </jvmFlags>
+                        <ports>
+                            <port>8080</port>
+                        </ports>
+                        <volumes>
+                            <volume>/tmp</volume>
+                        </volumes>
+                        <workingDirectory>/app</workingDirectory>
+                    </container>
+                    <extraDirectories>
+                        <paths>
+                            <path>
+                                <from>${project.basedir}/snomed-drools-rules</from>
+                                <into>/app/snomed-drools-rules</into>
+                            </path>
+                            <path>
+                                <from>${project.basedir}/snomed-release-validation-assertions</from>
+                                <into>/app/snomed-release-validation-assertions</into>
+                            </path>
+                        </paths>
+                        <permissions>
+                            <permission>
+                                <file>/snomed-drools-rules</file>
+                                <mode>757</mode>
+                            </permission>
+                            <permission>
+                                <file>/snomed-release-validation-assertions</file>
+                                <mode>757</mode>
+                            </permission>
+                        </permissions>
+                    </extraDirectories>
+                    <from>
+                        <image>${docker.base-image}</image>
+                        <platforms>
+                            <platform>
+                                <architecture>arm64</architecture>
+                                <os>linux</os>
+                            </platform>
+                            <platform>
+                                <architecture>amd64</architecture>
+                                <os>linux</os>
+                            </platform>
+                        </platforms>
+                    </from>
+                    <to>
+                        <image>${docker.registry}/${docker.image.prefix}/${project.artifactId}</image>
+                        <tags>
+                            <tag>${docker.image.tag}</tag>
+                            <tag>${project.version}</tag>
+                        </tags>
+                    </to>
+                    <allowInsecureRegistries>${docker.allowInsecureRegistries}</allowInsecureRegistries>
                 </configuration>
             </plugin>
 
@@ -354,6 +414,55 @@
         </plugins>
     </build>
 
+    <profiles>
+        <profile>
+            <id>docker-amd64</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>com.google.cloud.tools</groupId>
+                        <artifactId>jib-maven-plugin</artifactId>
+                        <version>${jib-maven-plugin.version}</version>
+                        <configuration>
+                            <!-- Override the architecture to linux/amd64 -->
+                            <from>
+                                <image>${docker.base-image}</image>
+                                <platforms>
+                                    <platform>
+                                        <architecture>amd64</architecture>
+                                        <os>linux</os>
+                                    </platform>
+                                </platforms>
+                            </from>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <id>docker-arm64</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>com.google.cloud.tools</groupId>
+                        <artifactId>jib-maven-plugin</artifactId>
+                        <version>${jib-maven-plugin.version}</version>
+                        <configuration>
+                            <from>
+                                <image>${docker.base-image}</image>
+                                <platforms>
+                                    <platform>
+                                        <architecture>arm64</architecture>
+                                        <os>linux</os>
+                                    </platform>
+                                </platforms>
+                            </from>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
     <repositories>
         <repository>
             <id>ihtsdo-releases</id>
@@ -366,18 +475,4 @@
             <url>https://nexus3.ihtsdotools.org/repository/maven-snapshots/</url>
         </repository>
     </repositories>
-
-    <distributionManagement>
-        <repository>
-            <id>ihtsdo-public-nexus</id>
-            <name>IHTSDO Public Nexus Releases</name>
-            <url>https://nexus3.ihtsdotools.org/repository/maven-releases/</url>
-        </repository>
-        <snapshotRepository>
-            <id>ihtsdo-public-nexus</id>
-            <name>IHTSDO Public Nexus Snapshots</name>
-            <url>https://nexus3.ihtsdotools.org/repository/maven-snapshots/</url>
-        </snapshotRepository>
-    </distributionManagement>
-
 </project>
