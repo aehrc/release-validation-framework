@@ -16,7 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.PostConstruct;
+import jakarta.annotation.PostConstruct;
 import java.io.*;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -27,6 +27,8 @@ public class StructuralTestRunner {
 	private final Logger logger = LoggerFactory.getLogger(StructuralTestRunner.class);
 
 	private static final String FILE_SIZE_TEST_TYPE = "FileSizeTest";
+
+    private static final String THE_FILE_TXT = "The file ";
 	
 	protected String reportFolderLocation;
 	
@@ -63,56 +65,99 @@ public class StructuralTestRunner {
 		testReport.getResult();
 		final String summary = testReport.writeSummary();
 		validationLog.info(summary);
-		logger.debug(("Time taken for structure validation:" + (System.currentTimeMillis() - start)));
+		logger.debug("Time taken for structure validation: {}", (System.currentTimeMillis() - start));
 		return testReport;
 	}
 
-	private void runFileSizeTest(ResourceProvider prospectiveFileResourceProvider, ResourceProvider previousFileResourceProvider, StreamTestReport testReport) {
-		if (prospectiveFileResourceProvider != null && previousFileResourceProvider != null) {
-			try {
-				File prospectiveSnapshotDirectory = new ReleaseImporter().unzipRelease(new FileInputStream(prospectiveFileResourceProvider.getFilePath()), ReleaseImporter.ImportType.SNAPSHOT);
-				File prospectiveFullDirectory = new ReleaseImporter().unzipRelease(new FileInputStream(prospectiveFileResourceProvider.getFilePath()), ReleaseImporter.ImportType.FULL);
-				File previousSnapshotDirectory = new ReleaseImporter().unzipRelease(new FileInputStream(previousFileResourceProvider.getFilePath()), ReleaseImporter.ImportType.SNAPSHOT);
-				File previousFullDirectory = new ReleaseImporter().unzipRelease(new FileInputStream(previousFileResourceProvider.getFilePath()), ReleaseImporter.ImportType.FULL);
-				for (File prospectiveFile : prospectiveSnapshotDirectory.listFiles()) {
-					for (File previousFile : previousSnapshotDirectory.listFiles()) {
-						String prospectiveFilename = prospectiveFile.getName();
-						String previousFilename = previousFile.getName();
+    private void runFileSizeTest(ResourceProvider prospectiveFileResourceProvider, ResourceProvider previousFileResourceProvider, StreamTestReport testReport) {
+        if (prospectiveFileResourceProvider != null && previousFileResourceProvider != null) {
+            runSnapshotFileSizeTest(prospectiveFileResourceProvider, previousFileResourceProvider, testReport);
+            runFullFileSizeTest(prospectiveFileResourceProvider, previousFileResourceProvider, testReport);
+        }
+    }
 
-						if (prospectiveFilename.endsWith(".txt") && previousFilename.endsWith(".txt")
-							&& prospectiveFilename.substring(0, prospectiveFilename.lastIndexOf("_")).equals(previousFilename.substring(0, previousFilename.lastIndexOf("_")))) {
-							if (prospectiveFile.length() < previousFile.length()) {
-								testReport.addError("0-0", new Date(), prospectiveFilename, prospectiveSnapshotDirectory.getPath(), "File Size", FILE_SIZE_TEST_TYPE, "Snapshot files must be equal to or greater in size than previous release",
-										"The file " + prospectiveFilename + " (" + (prospectiveFile.length() / 1024) + " KB) is less than previous release file " + previousFilename + " (" + (previousFile.length() / 1024) + " KB)",
-									"The file " + prospectiveFilename + " must be equal to or greater in size than previous release file " + previousFilename,null);
-							}
-							break;
-						}
-					}
-				}
-				for (File prospectiveFile : prospectiveFullDirectory.listFiles()) {
-					for (File previousFile : previousFullDirectory.listFiles()) {
-						String prospectiveFilename = prospectiveFile.getName();
-						String previousFilename = previousFile.getName();
+    private void runSnapshotFileSizeTest(ResourceProvider prospectiveFileResourceProvider, ResourceProvider previousFileResourceProvider, StreamTestReport testReport) {
+        File prospectiveSnapshotDirectory = null;
+        File previousSnapshotDirectory = null;
+        try (FileInputStream prospectiveFileInputStream = new FileInputStream(prospectiveFileResourceProvider.getFilePath());
+             FileInputStream previousFileInputStream = new FileInputStream(previousFileResourceProvider.getFilePath())) {
+            prospectiveSnapshotDirectory = new ReleaseImporter().unzipRelease(prospectiveFileInputStream, ReleaseImporter.ImportType.SNAPSHOT);
+            previousSnapshotDirectory = new ReleaseImporter().unzipRelease(previousFileInputStream, ReleaseImporter.ImportType.SNAPSHOT);
+            for (File prospectiveFile : Objects.requireNonNull(prospectiveSnapshotDirectory.listFiles())) {
+                for (File previousFile : Objects.requireNonNull(previousSnapshotDirectory.listFiles())) {
+                    String prospectiveFilename = prospectiveFile.getName();
+                    String previousFilename = previousFile.getName();
 
-						if (prospectiveFilename.endsWith(".txt") && previousFilename.endsWith(".txt")
-							&& prospectiveFilename.substring(0, prospectiveFilename.lastIndexOf("_")).equals(previousFilename.substring(0, previousFilename.lastIndexOf("_")))) {
-							if (prospectiveFile.length() < previousFile.length()) {
-								testReport.addError("0-0", new Date(), prospectiveFilename, prospectiveFullDirectory.getPath(), "File Size", FILE_SIZE_TEST_TYPE, "Full files must be equal to or greater in size than previous release",
-											"The file " + prospectiveFilename + " (" + (prospectiveFile.length() / 1024) + " KB) is less than previous release file " + previousFilename + " (" + (previousFile.length() / 1024) + " KB)",
-										"The file " + prospectiveFilename + " must be equal to or greater in size than previous release file " + previousFilename,null);
-							}
-							break;
-						}
-					}
-				}
-			} catch (FileNotFoundException e) {
-				logger.error("File not found", e);
-			}  catch (ReleaseImportException e) {
-				logger.error("Failed to unzip the release files", e);
-			}
-		}
-	}
+                    if (prospectiveFilename.endsWith(".txt") && previousFilename.endsWith(".txt")
+                            && prospectiveFilename.substring(0, prospectiveFilename.lastIndexOf("_")).equals(previousFilename.substring(0, previousFilename.lastIndexOf("_")))) {
+                        if (prospectiveFile.length() < previousFile.length()) {
+                            testReport.addError("0-0", new Date(), prospectiveFilename, prospectiveSnapshotDirectory.getPath(), "File Size", FILE_SIZE_TEST_TYPE, "Snapshot files must be equal to or greater in size than previous release",
+                                    THE_FILE_TXT + prospectiveFilename + " (" + (prospectiveFile.length() / 1024) + " KB) is less than previous release file " + previousFilename + " (" + (previousFile.length() / 1024) + " KB)",
+                                    THE_FILE_TXT + prospectiveFilename + " must be equal to or greater in size than previous release file " + previousFilename, null);
+                        }
+                        break;
+                    }
+                }
+            }
+
+
+        } catch (FileNotFoundException e) {
+            logger.error("File not found", e);
+        } catch (ReleaseImportException | IOException e) {
+            logger.error("Failed to unzip the release files", e);
+        } finally {
+            deleteDirectory(prospectiveSnapshotDirectory);
+            deleteDirectory(previousSnapshotDirectory);
+        }
+    }
+
+    private void runFullFileSizeTest(ResourceProvider prospectiveFileResourceProvider, ResourceProvider previousFileResourceProvider, StreamTestReport testReport) {
+        File prospectiveFullDirectory = null;
+        File previousFullDirectory = null;
+        try {
+            try (FileInputStream fis = new FileInputStream(prospectiveFileResourceProvider.getFilePath())) {
+                prospectiveFullDirectory = new ReleaseImporter().unzipRelease(fis, ReleaseImporter.ImportType.FULL);
+            } catch (Exception e) {
+                logger.warn("No Full files found in prospective version");
+                return;
+            }
+            try (FileInputStream fis = new FileInputStream(previousFileResourceProvider.getFilePath())) {
+                previousFullDirectory = new ReleaseImporter().unzipRelease(fis, ReleaseImporter.ImportType.FULL);
+            } catch (Exception e) {
+                logger.warn("No Full files found in previous version");
+                return;
+            }
+            if (prospectiveFullDirectory == null || previousFullDirectory == null) return;
+            for (File prospectiveFile : Objects.requireNonNull(prospectiveFullDirectory.listFiles())) {
+                for (File previousFile : Objects.requireNonNull(previousFullDirectory.listFiles())) {
+                    String prospectiveFilename = prospectiveFile.getName();
+                    String previousFilename = previousFile.getName();
+
+                    if (prospectiveFilename.endsWith(".txt") && previousFilename.endsWith(".txt")
+                            && prospectiveFilename.substring(0, prospectiveFilename.lastIndexOf("_")).equals(previousFilename.substring(0, previousFilename.lastIndexOf("_")))) {
+                        if (prospectiveFile.length() < previousFile.length()) {
+                            testReport.addError("0-0", new Date(), prospectiveFilename, prospectiveFullDirectory.getPath(), "File Size", FILE_SIZE_TEST_TYPE, "Full files must be equal to or greater in size than previous release",
+                                    THE_FILE_TXT + prospectiveFilename + " (" + (prospectiveFile.length() / 1024) + " KB) is less than previous release file " + previousFilename + " (" + (previousFile.length() / 1024) + " KB)",
+                                    THE_FILE_TXT + prospectiveFilename + " must be equal to or greater in size than previous release file " + previousFilename, null);
+                        }
+                        break;
+                    }
+                }
+            }
+        } finally {
+            deleteDirectory(prospectiveFullDirectory);
+            deleteDirectory(previousFullDirectory);
+        }
+    }
+
+    private void deleteDirectory(File file) {
+        if (file == null) return;
+        try {
+            FileUtils.deleteDirectory(file);
+        } catch (IOException e) {
+            logger.warn("Failed to remove directory {}", file.getAbsolutePath());
+        }
+    }
 
 	private void runLineFeedTests(ResourceProvider resourceManager, StreamTestReport testReport) {
 		

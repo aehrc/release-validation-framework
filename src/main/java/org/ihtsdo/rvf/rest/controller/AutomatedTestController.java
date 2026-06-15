@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -50,10 +51,6 @@ public class AutomatedTestController {
     private static final String STORAGE_LOCATION = "storageLocation";
 
     private static final String FAILURE_EXPORT_MAX = "failureExportMax";
-
-    private static final String RUN_ID = "runId";
-
-    private static final String DEPENDENCY_RELEASE = "dependencyRelease";
 
     private static final String BRANCH_PATH = "branchPath";
 
@@ -121,7 +118,6 @@ public class AutomatedTestController {
             @Parameter(description = "Assertion group names separated by a comma.") @RequestParam(value = GROUPS) final List <String> groupsList,
             @Parameter(description = "Drools rules group names") @RequestParam(value = DROOLS_RULES_GROUPS, required = false) final List <String> droolsRulesGroupsList,
             @Parameter(description = "Required for non-first time international release testing") @RequestParam(value = PREVIOUS_RELEASE, required = false) final String previousRelease,
-            @Parameter(description = "Required for extension release testing") @RequestParam(value = DEPENDENCY_RELEASE, required = false) final String extensionDependency,
             @Parameter(description = "Defaults to 10 when not set") @RequestParam(value = FAILURE_EXPORT_MAX, required = false, defaultValue = "10") final Integer exportMax,
             @Parameter(description = "The sub folder for validation reports") @RequestParam(value = STORAGE_LOCATION) final String storageLocation,
             @Parameter(description = "Defaults to false") @RequestParam(value = ENABLE_DROOLS, required = false) final boolean enableDrools,
@@ -145,7 +141,6 @@ public class AutomatedTestController {
                 .addDroolsRulesGroupList(droolsRulesGroupsList)
                 .addManifestFile(manifestFile)
                 .addPreviousRelease(previousRelease)
-                .addDependencyRelease(extensionDependency)
                 .addRunId(runId)
                 .addStorageLocation(storageLocation)
                 .addFailureExportMax(exportMax)
@@ -153,6 +148,7 @@ public class AutomatedTestController {
                 .setEnableDrools(enableDrools)
                 .setEffectiveTime(effectiveTime)
                 .setReleaseAsAnEdition(releaseAsAnEdition)
+                .setFirstTimeRelease(!StringUtils.hasLength(previousRelease))
                 .setIncludedModules(includedModules)
                 .addUrl(urlPrefix)
                 .setEnableMRCMValidation(enableMrcmValidation)
@@ -185,7 +181,6 @@ public class AutomatedTestController {
             @Parameter(description = "Assertion group names") @RequestParam(value = GROUPS) final List <String> groupsList,
             @Parameter(description = "Drools rules group names") @RequestParam(value = DROOLS_RULES_GROUPS, required = false) final List <String> droolsRulesGroupsList,
             @Parameter(description = "Required for non-first time international release testing") @RequestParam(value = PREVIOUS_RELEASE, required = false) final String previousRelease,
-            @Parameter(description = "Required for extension release testing") @RequestParam(value = DEPENDENCY_RELEASE, required = false) final String extensionDependency,
             @Parameter(description = "Defaults to 10 when not set") @RequestParam(value = FAILURE_EXPORT_MAX, required = false, defaultValue = "10") final Integer exportMax,
             @Parameter(description = "The sub folder for validation reports") @RequestParam(value = STORAGE_LOCATION) final String storageLocation,
             @Parameter(description = "Defaults to false") @RequestParam(value = ENABLE_DROOLS, required = false) final boolean enableDrools,
@@ -211,12 +206,12 @@ public class AutomatedTestController {
                 .addDroolsRulesGroupList(droolsRulesGroupsList)
                 .addManifestFileFullPath(manifestFileS3Path)
                 .addPreviousRelease(previousRelease)
-                .addDependencyRelease(extensionDependency)
                 .addRunId(runId)
                 .addStorageLocation(storageLocation)
                 .addFailureExportMax(exportMax)
                 .addUrl(urlPrefix)
                 .addProspectiveFilesInS3(true)
+                .setFirstTimeRelease(!StringUtils.hasLength(previousRelease))
                 .setEnableDrools(enableDrools)
                 .setEffectiveTime(effectiveTime)
                 .setReleaseAsAnEdition(releaseAsAnEdition)

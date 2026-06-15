@@ -1,14 +1,15 @@
 package org.ihtsdo.rvf.core.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import jakarta.jms.JMSException;
 import org.apache.commons.codec.DecoderException;
+import org.apache.commons.io.FileUtils;
 import org.ihtsdo.otf.jms.MessagingHelper;
 import org.ihtsdo.otf.rest.exception.BusinessServiceException;
 import org.ihtsdo.rvf.core.data.model.TestRunItem;
 import org.ihtsdo.rvf.core.data.model.TestType;
 import org.ihtsdo.rvf.core.data.model.ValidationReport;
 import org.ihtsdo.rvf.core.service.ValidationReportService.State;
-import org.ihtsdo.rvf.core.service.config.MysqlExecutionConfig;
 import org.ihtsdo.rvf.core.service.config.ValidationRunConfig;
 import org.ihtsdo.rvf.core.service.pojo.ValidationStatusReport;
 import org.ihtsdo.rvf.core.service.pojo.ValidationStatusResponse;
@@ -17,8 +18,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.util.CollectionUtils;
 
-import javax.jms.JMSException;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -74,8 +75,8 @@ public class ValidationRunner {
 			statusReport.addFailureMessage(failureMsg);
 			logger.error("Exception thrown, writing as result",t);
 			try {
-				reportService.writeResults(statusReport, State.FAILED, validationConfig.getStorageLocation());
 				updateRvfState(validationConfig, State.FAILED);
+				reportService.writeResults(statusReport, State.FAILED, validationConfig.getStorageLocation());
 			} catch (final Exception e) {
 				throw new IllegalStateException("Failed to record failure (which was: " + failureMsg + ")", e);
 			}
@@ -83,44 +84,55 @@ public class ValidationRunner {
 	}
 	
 	private void runValidations(ValidationRunConfig validationConfig) throws Exception {
-		// Prepare to run validations
-		Calendar startTime = Calendar.getInstance();
-		MysqlExecutionConfig executionConfig = releaseVersionLoader.createExecutionConfig(validationConfig);
-		releaseVersionLoader.downloadProspectiveFiles(validationConfig);
-		releaseVersionLoader.downloadPreviousReleaseAndDependencyFiles(validationConfig);
-		if (validationConfig.getLocalProspectiveFile() == null) {
-			reportService.writeState(State.FAILED, validationConfig.getStorageLocation());
-			String errorMsg = "Prospective file can't be null " + validationConfig.getLocalProspectiveFile();
-			reportService.writeProgress(errorMsg, validationConfig.getStorageLocation());
-			logger.error(errorMsg);
+		try {
+			// Prepare to run validations
+			Calendar startTime = Calendar.getInstance();
+			releaseVersionLoader.downloadProspectiveFiles(validationConfig);
+			releaseVersionLoader.downloadPreviousRelease(validationConfig);
+			releaseVersionLoader.downloadDependencyReleases(validationConfig);
+
+			if (validationConfig.getLocalProspectiveFile() == null) {
+				reportService.writeState(State.FAILED, validationConfig.getStorageLocation());
+				String errorMsg = "Prospective file can't be null " + validationConfig.getLocalProspectiveFile();
+				reportService.writeProgress(errorMsg, validationConfig.getStorageLocation());
+				logger.error(errorMsg);
+			}
+			ValidationReport report = new ValidationReport();
+			report.setExecutionId(validationConfig.getRunId());
+			report.setReportUrl(validationConfig.getUrl());
+			ValidationStatusReport statusReport = new ValidationStatusReport(validationConfig);
+			statusReport.setResultReport(report);
+
+			if (!EMPTY_TEST_ASSERTION_GROUPS.equals(validationConfig.getGroupsList())) {
+				// Actually run validations
+				doRunValidations(validationConfig, statusReport);
+			}
+
+			// Update reports and status after validations run
+			report.sortAssertionLists();
+			final Calendar endTime = Calendar.getInstance();
+			final long timeTaken = (endTime.getTimeInMillis() - startTime.getTimeInMillis()) / 60000;
+			logger.info("Finished execution with runId : {} in {} minutes ", validationConfig.getRunId(), timeTaken);
+			statusReport.setStartTime(startTime.getTime());
+			statusReport.setEndTime(endTime.getTime());
+			report.setTimeTakenInSeconds(timeTaken*60);
+			State state = statusReport.getFailureMessages().isEmpty() ? State.COMPLETE : State.FAILED;
+			updateRvfState(validationConfig, state);
+			updateExecutionSummary(statusReport, validationConfig);
+
+			reportService.writeResults(statusReport, state, validationConfig.getStorageLocation());
+		} finally {
+			// Clean up release package file
+			if (validationConfig.getLocalProspectiveFile() != null) {
+				FileUtils.deleteQuietly(validationConfig.getLocalProspectiveFile());
+			}
+			if (validationConfig.getLocalManifestFile() != null) {
+				FileUtils.deleteQuietly(validationConfig.getLocalManifestFile());
+			}
+			if (validationConfig.getLocalReleaseFiles() != null) {
+				validationConfig.getLocalReleaseFiles().forEach(FileUtils::deleteQuietly);
+			}
 		}
-		ValidationReport report = new ValidationReport();
-		report.setExecutionId(executionConfig.getExecutionId());
-		report.setReportUrl(validationConfig.getUrl());
-		ValidationStatusReport statusReport = new ValidationStatusReport(validationConfig);
-		statusReport.setResultReport(report);
-
-		if (!EMPTY_TEST_ASSERTION_GROUPS.equals(validationConfig.getGroupsList())) {
-			// Actually run validations
-			doRunValidations(validationConfig, statusReport);
-		}
-
-		// Update reports and status after validations run
-		report.sortAssertionLists();
-		final Calendar endTime = Calendar.getInstance();
-		final long timeTaken = (endTime.getTimeInMillis() - startTime.getTimeInMillis()) / 60000;
-		logger.info("Finished execution with runId : {} in {} minutes ", validationConfig.getRunId(), timeTaken);
-		statusReport.setStartTime(startTime.getTime());
-		statusReport.setEndTime(endTime.getTime());
-		report.setTimeTakenInSeconds(timeTaken*60);
-		State state = statusReport.getFailureMessages().isEmpty() ? State.COMPLETE : State.FAILED;
-		updateRvfState(validationConfig, state);
-		updateExecutionSummary(statusReport, validationConfig);
-
-		// Ignore token and user name to be persisted to S3
-		statusReport.getValidationConfig().setAuthenticationToken(null);
-		statusReport.getValidationConfig().setUsername(null);
-		reportService.writeResults(statusReport, state, validationConfig.getStorageLocation());
 	}
 
 	private void doRunValidations(ValidationRunConfig validationConfig, ValidationStatusReport statusReport) throws Exception {
@@ -129,15 +141,17 @@ public class ValidationRunner {
 		Map<String, Future<ValidationStatusReport>> taskMap = new HashMap<>();
 		ExecutorService executorService = Executors.newFixedThreadPool(5);
 		StringBuilder statusMessages = new StringBuilder();
-		statusMessages.append("RVF assertions validation started");
-		reportService.writeProgress(statusMessages.toString(), validationConfig.getStorageLocation());
 
-		ValidationStatusReport mysqlValidationStatusReport = new ValidationStatusReport(validationConfig);
-		mysqlValidationStatusReport.setResultReport(new ValidationReport());
-		taskMap.put("SQL Assertions", executorService.submit(() -> mysqlValidationService.runRF2MysqlValidations(validationConfig, mysqlValidationStatusReport)));
+		if (!CollectionUtils.isEmpty(validationConfig.getGroupsList())) {
+			statusMessages.append("RVF assertions validation started");
+			reportService.writeProgress(statusMessages.toString(), validationConfig.getStorageLocation());
+			ValidationStatusReport mysqlValidationStatusReport = new ValidationStatusReport(validationConfig);
+			mysqlValidationStatusReport.setResultReport(new ValidationReport());
+			taskMap.put("SQL Assertions", executorService.submit(() -> mysqlValidationService.runRF2MysqlValidations(validationConfig, mysqlValidationStatusReport)));
+		}
 
 		if (validationConfig.isEnableDrools()) {
-			statusMessages.append("\nDrools rules validation started");
+			statusMessages.append(statusMessages.isEmpty() ? "" : "\n").append("Drools rules validation started");
 			reportService.writeProgress(statusMessages.toString(), validationConfig.getStorageLocation());
 			ValidationStatusReport droolsValidationStatusReport = new ValidationStatusReport(validationConfig);
 			droolsValidationStatusReport.setResultReport(new ValidationReport());
@@ -145,7 +159,7 @@ public class ValidationRunner {
 		}
 
 		if (validationConfig.isEnableMRCMValidation()) {
-			statusMessages.append("\nMRCM validation started");
+			statusMessages.append(statusMessages.isEmpty() ? "" : "\n").append("MRCM validation started");
 			reportService.writeProgress(statusMessages.toString(), validationConfig.getStorageLocation());
 			ValidationStatusReport mrcmValidationStatusReport = new ValidationStatusReport(validationConfig);
 			mrcmValidationStatusReport.setResultReport(new ValidationReport());
@@ -153,7 +167,7 @@ public class ValidationRunner {
 		}
 
 		if (validationConfig.isEnableTraceabilityValidation()) {
-			statusMessages.append("\nTraceability comparison validation started");
+			statusMessages.append(statusMessages.isEmpty() ? "" : "\n").append("Traceability comparison validation started");
 			reportService.writeProgress(statusMessages.toString(), validationConfig.getStorageLocation());
 			ValidationStatusReport traceabilityComparisonReport = new ValidationStatusReport(validationConfig);
 			traceabilityComparisonReport.setResultReport(new ValidationReport());
@@ -172,7 +186,7 @@ public class ValidationRunner {
 	private void updateRvfState(final ValidationRunConfig config, final State state) throws JsonProcessingException, JMSException {
 		final String responseQueue = config.getResponseQueue();
 		if (responseQueue != null) {
-			logger.info("Updating RVF state to {}}: {}", state, responseQueue);
+			logger.info("Updating RVF state to {}: {}", state, responseQueue);
 			messagingHelper.send(responseQueue, new ValidationStatusResponse(config, state));
 		}
 	}
@@ -208,10 +222,10 @@ public class ValidationRunner {
 		String reportStorage = validationConfig.getStorageLocation();
 		reportService.writeProgress(structureTestStartMsg, reportStorage);
 		reportService.writeState(State.RUNNING, reportStorage);
-
-		boolean isFailed = structuralTestRunner.verifyZipFileStructure(statusReport.getResultReport(), 
+		File localPrevousReleaseFile = validationConfig.getLocalReleaseFiles() != null ? validationConfig.getLocalReleaseFiles().stream().filter(file -> file.getName().equals(validationConfig.getPreviousRelease())).findFirst().orElse(null) : null;
+		boolean isFailed = structuralTestRunner.verifyZipFileStructure(statusReport.getResultReport(),
 																		validationConfig.getLocalProspectiveFile(),
-																		validationConfig.getLocalPreviousReleaseFile(),
+																		localPrevousReleaseFile,
 																		validationConfig.getRunId(),
 																		validationConfig.isRf2DeltaOnly(),
 																		validationConfig.getLocalManifestFile(),
@@ -230,7 +244,7 @@ public class ValidationRunner {
 		List<TestRunItem> failures = statusReport.getResultReport().getAssertionsFailed();
 		Map<TestType, Integer> testTypeFailuresCount = new EnumMap<>(TestType.class);
 		testTypeFailuresCount.put(TestType.ARCHIVE_STRUCTURAL, 0);
-		testTypeFailuresCount.put(TestType.SQL, 0);
+		testTypeFailuresCount.put(TestType.SQL, !CollectionUtils.isEmpty(validationRunConfig.getGroupsList()) ? 0 : -1);
 		testTypeFailuresCount.put(TestType.DROOL_RULES, validationRunConfig.isEnableDrools() ? 0 : -1);
 		testTypeFailuresCount.put(TestType.MRCM, validationRunConfig.isEnableMRCMValidation() ? 0 : -1);
 		testTypeFailuresCount.put(TestType.TRACEABILITY, validationRunConfig.isEnableTraceabilityValidation() ? 0 : -1);

@@ -16,7 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -101,7 +101,7 @@ public class MysqlFailuresExtractor {
                     // filter by the extension modules only
                     if (belongToCommonAuthoringOrCommonEditionGroup && config.isExtensionValidation() && !CollectionUtils.isEmpty(config.getIncludedModules())) {
                         int totalBatchFailures = failureDetails.size();
-                        failureDetails = failureDetails.stream().filter(failure -> config.getIncludedModules().contains(failure.getModuleId())).collect(Collectors.toList());
+                        failureDetails = failureDetails.stream().filter(failure -> config.getIncludedModules().contains(failure.getModuleId())).toList();
                         totalFilteredOutFailures += (totalBatchFailures - failureDetails.size());
                     }
 
@@ -109,7 +109,7 @@ public class MysqlFailuresExtractor {
                         // Convert to WhitelistItem
                         List<WhitelistItem> whitelistItems = failureDetails.stream()
                                 .map(failureDetail -> new WhitelistItem(item.getAssertionUuid().toString(), StringUtils.hasLength(failureDetail.getComponentId())? failureDetail.getComponentId() : "", failureDetail.getConceptId(), failureDetail.getFullComponent()))
-                                .collect(Collectors.toList());
+                                .toList();
 
                         // Send to Authoring acceptance gateway
                         List<WhitelistItem> whitelistedItems = whitelistService.checkComponentFailuresAgainstWhitelist(whitelistItems);
@@ -143,7 +143,7 @@ public class MysqlFailuresExtractor {
         if (!StringUtils.hasLength(failureDetail.getComponentId())) {
             return;
         }
-        String sql = "select * from " + failureDetail.getTableName()+ " where id = ?";
+        String sql = "select * from " + failureDetail.getTableName() + " where id = ?";
         try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
             preparedStatement.setString(1, failureDetail.getComponentId());
             try (ResultSet resultSet = preparedStatement.executeQuery()) {
@@ -174,7 +174,8 @@ public class MysqlFailuresExtractor {
 
     private Map<String, Integer> getAssertionIdToTotalFailureMap(Connection connection, MysqlExecutionConfig config) throws SQLException {
         Map<String, Integer> assertionIdToTotalFailureMap = new HashMap<>();
-        String totalSQL = "select assertion_id, count(*) total from " + dataSource.getDefaultCatalog() + "." + qaResultTableName + " where run_id = ? group by assertion_id";
+        String totalSQL = "select assertion_id, count(*) total from " + dataSource.getDefaultCatalog() + "." + qaResultTableName +
+                " where run_id = ? group by assertion_id";
         try (PreparedStatement preparedStatement = connection.prepareStatement(totalSQL)) {
             preparedStatement.setLong(1, config.getExecutionId());
             try (ResultSet resultSet = preparedStatement.executeQuery()) {
@@ -188,11 +189,11 @@ public class MysqlFailuresExtractor {
 
     private List<FailureDetail> fetchFailureDetails(Connection connection, Long executionId, Long assertionId, int failureExportMax, Integer offset, Integer rowCount)
             throws SQLException {
-        String resultSQL = "select concept_id, details, component_id, table_name from " + dataSource.getDefaultCatalog() + "." + qaResultTableName + " where assertion_id = ? and run_id = ?";
+        String resultSQL = "select concept_id, details, component_id, table_name from " + dataSource.getDefaultCatalog() + "." + qaResultTableName +
+                " where assertion_id = ? and run_id = ?";
         if (offset != null && rowCount != null) {
-            resultSQL += " limit " + offset + "," + rowCount;
-        }
-        else if (failureExportMax > 0) {
+            resultSQL += " limit ?,?";
+        } else if (failureExportMax > 0) {
             resultSQL += " limit ?";
         }
         List<FailureDetail> firstNInstances = new ArrayList<>();
@@ -201,10 +202,12 @@ public class MysqlFailuresExtractor {
             // select results that match execution
             preparedStatement.setLong(1, assertionId);
             preparedStatement.setLong(2, executionId);
-            if (failureExportMax > 0) {
+            if (offset != null && rowCount != null) {
+                preparedStatement.setInt(3, offset);
+                preparedStatement.setInt(4, rowCount);
+            } else if (failureExportMax > 0) {
                 preparedStatement.setLong(3, failureExportMax);
             }
-
             try (ResultSet resultSet = preparedStatement.executeQuery()) {
                 while (resultSet.next()) {
                     // only get first N failed results

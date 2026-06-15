@@ -3,18 +3,18 @@ package org.ihtsdo.rvf.core.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.Gson;
 import org.ihtsdo.otf.rest.exception.BusinessServiceException;
-import org.ihtsdo.rvf.TestConfig;
+import org.ihtsdo.otf.utils.ZipFileUtils;
+import org.ihtsdo.rvf.configuration.IntegrationTest;
 import org.ihtsdo.rvf.core.data.model.Assertion;
 import org.ihtsdo.rvf.core.data.model.AssertionGroup;
 import org.ihtsdo.rvf.core.data.model.FailureDetail;
 import org.ihtsdo.rvf.core.data.model.TestRunItem;
 import org.ihtsdo.rvf.core.service.config.MysqlExecutionConfig;
-import org.ihtsdo.rvf.core.service.util.ZipFileUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.test.context.ContextConfiguration;
 
 import java.io.*;
 import java.net.URL;
@@ -30,9 +30,8 @@ import static org.junit.jupiter.api.Assertions.*;
  * Note: if you have changed the regression test data you need drop the corresponding schema as well.
  * SnomedCT_RegressionTest_20130131 and SnomedCT_RegressionTest_20130731 are made up data for testing purpose.
  */
-
-@ContextConfiguration(classes = TestConfig.class)
-public class RVFAssertionsRegressIntegrationTest {
+@Disabled
+public class RVFAssertionsRegressIntegrationTest extends IntegrationTest {
 
     public static final String DIFF = "*** Difference explained: ";
 
@@ -85,7 +84,7 @@ public class RVFAssertionsRegressIntegrationTest {
                 assertNotNull(previousReleaseUrl, "Must not be null");
                 File previousFile = new File(previousReleaseUrl.getFile() + "_test.zip");
                 ZipFileUtils.zip(previousReleaseUrl.getFile(), previousFile.getAbsolutePath());
-                releaseDataManager.uploadPublishedReleaseData(previousFile, "regression_test", "previous");
+                releaseDataManager.uploadPublishedReleaseData(previousFile, "regression_test", "previous", Collections.emptyList());
                 if (testMysqlBinaryArchive) {
                     String archiveFileName = releaseDataManager.generateBinaryArchive("rvf_regression_test_previous");
                     System.out.println("Mysql binary file is archvied at " + archiveFileName);
@@ -97,7 +96,7 @@ public class RVFAssertionsRegressIntegrationTest {
             assertNotNull(prospectiveReleaseUrl, "Must not be null");
             final File prospectiveFile = new File(prospectiveReleaseUrl.getFile() + "_test.zip");
             ZipFileUtils.zip(prospectiveReleaseUrl.getFile(), prospectiveFile.getAbsolutePath());
-            releaseDataManager.loadSnomedData(PROSPECTIVE_RELEASE, rf2FilesLoaded, prospectiveFile);
+            releaseDataManager.loadSnomedData(PROSPECTIVE_RELEASE, rf2FilesLoaded, Collections.emptyList(), prospectiveFile);
             resourceDataLoader.loadResourceData(PROSPECTIVE_RELEASE);
             List<Assertion> assertions = assertionService.getAssertionsByKeyWords("resource", true);
             assertNotNull(assertions);

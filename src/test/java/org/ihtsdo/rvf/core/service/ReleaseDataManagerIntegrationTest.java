@@ -1,27 +1,23 @@
 package org.ihtsdo.rvf.core.service;
 
 import org.apache.commons.dbcp.BasicDataSource;
-import org.ihtsdo.rvf.TestConfig;
+import org.ihtsdo.rvf.configuration.IntegrationTest;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.test.context.ContextConfiguration;
-import org.springframework.test.context.junit.jupiter.SpringExtension;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.io.File;
 import java.net.URL;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@ExtendWith(SpringExtension.class)
-@ContextConfiguration(classes = {TestConfig.class})
-public class ReleaseDataManagerIntegrationTest {
+class ReleaseDataManagerIntegrationTest extends IntegrationTest {
 	@Resource(name = "dataSource")
 	private BasicDataSource dataSource;
 	@Autowired
@@ -37,7 +33,7 @@ public class ReleaseDataManagerIntegrationTest {
 		assertNotNull(inputFile);
 		final String versionName = "20140131";
 		List<String> rf2FilesLoaded = new ArrayList<>();
-		final String schemaName = releaseDataManager.loadSnomedData(versionName, rf2FilesLoaded, inputFile);
+		final String schemaName = releaseDataManager.loadSnomedData(versionName, rf2FilesLoaded, Collections.emptyList(), inputFile);
 		try (
 				Connection connection = dataSource.getConnection();
 				ResultSet catalogs = connection.getMetaData().getCatalogs()) {
@@ -61,7 +57,7 @@ public class ReleaseDataManagerIntegrationTest {
 		assertNotNull(url);
 		final File inputFile = new File(url.toURI());
 		assertNotNull(inputFile);
-		final boolean writeSucess =releaseDataManager.uploadPublishedReleaseData(inputFile, "int", "20140131");
+		final boolean writeSucess =releaseDataManager.uploadPublishedReleaseData(inputFile, "int", "20140131", Collections.emptyList());
 		assertTrue(writeSucess, "Upload must have been successful");
 
 		assertTrue(releaseDataManager.isKnownRelease("rvf_int_20140131"), "Schema name for release 20140131 must be known to data manager ");

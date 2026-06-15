@@ -1,25 +1,32 @@
 package org.ihtsdo.rvf.core.service.config;
 
-import java.util.Arrays;
+import java.io.File;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class MysqlExecutionConfig {
 
 	private String prospectiveVersion;
 	private String previousVersion;
+	private String extensionDependencyVersion;
 	private final Long executionId;
 	private List<String> groupNames;
+	private List<String> assertionExclusionList;
 	private String defaultModuleId;
 	private List<String> includedModules;
+	private List<String> excludedRF2Files;
 	private int failureExportMax = 10;
 	private boolean firstTimeRelease;
+	private boolean standAloneProduct;
 	private boolean extensionValidation;
-	private boolean isReleaseValidation;
-	private String extensionDependencyVersion;
+	private boolean isRf2DeltaOnly;
+	private boolean releaseAsAnEdition;
 	private String effectiveTime;
 	private String previousEffectiveTime;
-	private String dependencyEffectiveTime;
-	private String previousDependencyEffectiveTime;
+	private List<File> localReleaseFiles;
+	private Map<String, String> currentDependencyToSchemeMap;
+	private Map<String, String> currentDependencyToPreviousEffectiveTimeMap;
 
 	public MysqlExecutionConfig(final Long runId) {
 		this(runId,false);
@@ -28,6 +35,14 @@ public class MysqlExecutionConfig {
 	public MysqlExecutionConfig(Long runId, boolean firstTimeRelease) {
 		this.executionId = runId;
 		this.firstTimeRelease = firstTimeRelease;
+	}
+
+	public void setStandAloneProduct(boolean standAloneProduct) {
+		this.standAloneProduct = standAloneProduct;
+	}
+
+	public boolean isStandAloneProduct() {
+		return standAloneProduct;
 	}
 
 	public void setProspectiveVersion(final String prospectiveVersion) {
@@ -45,6 +60,22 @@ public class MysqlExecutionConfig {
 
 	public List<String> getGroupNames() {
 		return groupNames;
+	}
+
+	public void setAssertionExclusionList(List<String> assertionExclusionList) {
+		this.assertionExclusionList = assertionExclusionList;
+	}
+
+	public List<String> getAssertionExclusionList() {
+		return assertionExclusionList;
+	}
+
+	public void setExcludedRF2Files(List<String> excludedRF2Files) {
+		this.excludedRF2Files = excludedRF2Files;
+	}
+
+	public List<String> getExcludedRF2Files() {
+		return excludedRF2Files;
 	}
 
 	public List<String> getIncludedModules() {
@@ -99,12 +130,20 @@ public class MysqlExecutionConfig {
 		return this.extensionValidation;
 	}
 	
-	public void setReleaseValidation(boolean isReleaseValidation) {
-		this.isReleaseValidation = isReleaseValidation;
+	public void setRf2DeltaOnly(boolean isReleaseValidation) {
+		this.isRf2DeltaOnly = isReleaseValidation;
 	}
 
-	public boolean isReleaseValidation() {
-		return this.isReleaseValidation;
+	public boolean isRf2DeltaOnly() {
+		return this.isRf2DeltaOnly;
+	}
+
+	public void setReleaseAsAnEdition(boolean releaseAsAnEdition) {
+		this.releaseAsAnEdition = releaseAsAnEdition;
+	}
+
+	public boolean isReleaseAsAnEdition() {
+		return releaseAsAnEdition;
 	}
 
 	public String getExtensionDependencyVersion() {
@@ -131,20 +170,33 @@ public class MysqlExecutionConfig {
 		this.previousEffectiveTime = previousEffectiveTime;
 	}
 
-	public String getDependencyEffectiveTime() {
-		return dependencyEffectiveTime;
+	public void setLocalReleaseFiles(List<File> localReleaseFiles) {
+		this.localReleaseFiles = localReleaseFiles;
 	}
 
-	public void setDependencyEffectiveTime(String dependencyEffectiveTime) {
-		this.dependencyEffectiveTime = dependencyEffectiveTime;
+	public List<File> getLocalReleaseFiles() {
+		return localReleaseFiles;
 	}
 
-	public String getPreviousDependencyEffectiveTime() {
-		return previousDependencyEffectiveTime;
+	public void addCurrentDependencyRelease(String releaseFilename, String scheme) {
+		if (this.currentDependencyToSchemeMap == null) {
+			this.currentDependencyToSchemeMap = new HashMap<>();
+		}
+		this.currentDependencyToSchemeMap.put(releaseFilename, scheme);
 	}
 
-	public void setPreviousDependencyEffectiveTime(String previousDependencyEffectiveTime) {
-		this.previousDependencyEffectiveTime = previousDependencyEffectiveTime;
+	public Map<String, String> getCurrentDependencyToSchemeMap() {
+		return currentDependencyToSchemeMap;
+	}
+
+	public void addCurrentDependencyToPreviousEffectiveTime(String releaseFilename, String effectiveTime) {
+		if (this.currentDependencyToPreviousEffectiveTimeMap == null) {
+			this.currentDependencyToPreviousEffectiveTimeMap = new HashMap<>();
+		}
+		this.currentDependencyToPreviousEffectiveTimeMap.put(releaseFilename, effectiveTime);
+	}
+	public Map<String, String> getCurrentDependencyToPreviousEffectiveTimeMap() {
+		return currentDependencyToPreviousEffectiveTimeMap;
 	}
 
 	@Override
@@ -161,15 +213,13 @@ public class MysqlExecutionConfig {
 			builder.append("groupNames=").append(groupNames).append(", ");
 		builder.append("failureExportMax=").append(failureExportMax).append(", firstTimeRelease=")
 				.append(firstTimeRelease).append(", extensionValidation=").append(extensionValidation)
-				.append(", isReleaseValidation=").append(isReleaseValidation).append(", ");
+				.append(", isRf2DeltaOnly=").append(isRf2DeltaOnly).append(", ");
 		if (includedModules != null)
 			builder.append("includedModules=").append(includedModules).append(", ");
 		if (extensionDependencyVersion != null)
 			builder.append("extensionDependencyVersion=").append(extensionDependencyVersion).append(", ");
 		if (effectiveTime != null)
 			builder.append("effectiveTime=").append(effectiveTime).append(", ");
-		if (dependencyEffectiveTime != null)
-			builder.append("dependencyEffectiveTime=").append(dependencyEffectiveTime);
 		builder.append("]");
 		return builder.toString();
 	}

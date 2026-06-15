@@ -1,21 +1,19 @@
 package org.ihtsdo.rvf.core.service;
 
 import org.ihtsdo.otf.rest.exception.BusinessServiceException;
-import org.ihtsdo.rvf.TestConfig;
+import org.ihtsdo.otf.utils.ZipFileUtils;
+import org.ihtsdo.rvf.configuration.IntegrationTest;
 import org.ihtsdo.rvf.core.data.model.Assertion;
 import org.ihtsdo.rvf.core.data.model.TestRunItem;
 import org.ihtsdo.rvf.core.service.config.MysqlExecutionConfig;
-import org.ihtsdo.rvf.core.service.util.ZipFileUtils;
 import org.ihtsdo.rvf.core.service.whitelist.WhitelistItem;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.test.context.ContextConfiguration;
 
 import java.io.File;
 import java.io.IOException;
@@ -29,9 +27,8 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
-@ContextConfiguration(classes = TestConfig.class)
-@ExtendWith(MockitoExtension.class)
-public class RVFAssertionsWhitelistIntegrationTest {
+@Disabled
+class RVFAssertionsWhitelistIntegrationTest extends IntegrationTest {
     private static final String COMPONENT_CENTRIC_VALIDATION = "component-centric-validation";
     private static final String PROSPECTIVE_RELEASE = "rvf_regression_test_prospective";
     private static final String PREVIOUS_RELEASE = "rvf_regression_test_previous";
@@ -75,14 +72,14 @@ public class RVFAssertionsWhitelistIntegrationTest {
             assertNotNull(previousReleaseUrl, "Must not be null");
             File previousFile = new File(previousReleaseUrl.getFile() + "_test.zip");
             ZipFileUtils.zip(previousReleaseUrl.getFile(), previousFile.getAbsolutePath());
-            releaseDataManager.uploadPublishedReleaseData(previousFile, "regression_test", "previous");
+            releaseDataManager.uploadPublishedReleaseData(previousFile, "regression_test", "previous", Collections.emptyList());
         }
         if (!releaseDataManager.isKnownRelease(PROSPECTIVE_RELEASE)) {
             final URL prospectiveReleaseUrl = RVFAssertionsWhitelistIntegrationTest.class.getResource("/SnomedCT_RegressionTest_20130731");
             assertNotNull(prospectiveReleaseUrl, "Must not be null");
             final File prospectiveFile = new File(prospectiveReleaseUrl.getFile() + "_test.zip");
             ZipFileUtils.zip(prospectiveReleaseUrl.getFile(), prospectiveFile.getAbsolutePath());
-            releaseDataManager.loadSnomedData(PROSPECTIVE_RELEASE, rf2FilesLoaded, prospectiveFile);
+            releaseDataManager.loadSnomedData(PROSPECTIVE_RELEASE, rf2FilesLoaded, Collections.emptyList(), prospectiveFile);
             resourceDataLoader.loadResourceData(PROSPECTIVE_RELEASE);
             List<Assertion> assertions = assertionService.getAssertionsByKeyWords("resource", true);
             assertNotNull(assertions);

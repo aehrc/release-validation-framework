@@ -1,6 +1,6 @@
 package org.ihtsdo.rvf.core.data.model;
 
-import javax.persistence.*;
+import jakarta.persistence.*;
 import java.io.Serial;
 import java.io.Serializable;
 
@@ -26,9 +26,8 @@ public class QAResult implements Serializable {
 	
 	@Column(name = "concept_id")
 	private Long conceptId;
-	
-	@Lob
-	@Column(name ="details")
+
+	@Column(name ="details", columnDefinition = "TEXT")
 	private String details;
 
 	@Column(name = "component_id")
