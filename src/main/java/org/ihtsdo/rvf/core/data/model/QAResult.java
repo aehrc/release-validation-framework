@@ -1,6 +1,6 @@
 package org.ihtsdo.rvf.core.data.model;
 
-import javax.persistence.*;
+import jakarta.persistence.*;
 import java.io.Serial;
 import java.io.Serializable;
 
@@ -26,9 +26,8 @@ public class QAResult implements Serializable {
 	
 	@Column(name = "concept_id")
 	private Long conceptId;
-	
-	@Lob
-	@Column(name ="details")
+
+	@Column(name ="details", columnDefinition = "TEXT")
 	private String details;
 
 	@Column(name = "component_id")
@@ -36,6 +35,9 @@ public class QAResult implements Serializable {
 
 	@Column(name ="table_name")
 	private String tableName;
+
+	@Column(name ="skip_module_check")
+	private Boolean skipModuleCheck = false;
 
 	public String getDetails() {
 		return details;
@@ -83,5 +85,13 @@ public class QAResult implements Serializable {
 
 	public void setTableName(String tableName) {
 		this.tableName = tableName;
+	}
+
+	public Boolean getSkipModuleCheck() {
+		return skipModuleCheck;
+	}
+
+	public void setSkipModuleCheck(Boolean skipModuleCheck) {
+		this.skipModuleCheck = skipModuleCheck;
 	}
 }

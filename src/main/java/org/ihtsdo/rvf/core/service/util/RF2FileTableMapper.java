@@ -42,9 +42,9 @@ public class RF2FileTableMapper {
 	private static final String DELTA = ".*Delta.*_*_\\d{8}.txt";
 	private static final String SNAPSHOT = ".*Snapshot.*_*_\\d{8}.txt";
 	private static final String FULL = ".*Full.*_*_\\d{8}.txt";
-	//list of file name regex expressions with RVF table names
+	// list of file name regex expressions with RVF table names
 	static {
-		//Delta
+		// Delta
 		tableNameMap.put(CONCEPT_FILE_HEADER + DELTA, "concept_d");
 		tableNameMap.put(DESCRIPTION_FILE_HEADER + DELTA, "description_d");
 		tableNameMap.put(ASSOCIATION_REFERENCE_FILE_HEADER+ DELTA, "associationrefset_d");
@@ -140,12 +140,17 @@ public class RF2FileTableMapper {
 		tableNameMap.put(CCI_REFSET_FILE_HEADER + SNAPSHOT, "ccirefset_s");
 		tableNameMap.put(C_REFSET_FILE_HEADER + SNAPSHOT, "crefset_s");
 	}
-	
+
+	private RF2FileTableMapper () {
+		// private constructor
+	}
+
+
 	public static String getLegacyTableName(final String filename) {
 		final String fileName = filename.startsWith("x") ? filename.substring(1) : filename;
-		for(final String regex : tableNameMap.keySet()) {
-			if (Pattern.compile(regex).matcher(fileName).matches()) {
-				return tableNameMap.get(regex);
+		for (final Map.Entry<String, String> entry : tableNameMap.entrySet()) {
+			if (Pattern.compile(entry.getKey()).matcher(fileName).matches()) {
+				return entry.getValue();
 			}
 		}
 		return null;

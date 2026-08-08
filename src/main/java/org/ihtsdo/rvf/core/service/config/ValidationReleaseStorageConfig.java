@@ -9,5 +9,5 @@ import org.springframework.context.annotation.Configuration;
 @ConfigurationProperties(prefix="rvf.release.storage")
 @EnableAutoConfiguration
 public class ValidationReleaseStorageConfig extends ResourceConfiguration {
-	
+
 }

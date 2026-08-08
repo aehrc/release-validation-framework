@@ -10,7 +10,9 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.PostConstruct;
+import jakarta.annotation.PostConstruct;
+
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 
@@ -34,16 +36,25 @@ public class RvfAssertionsDatabasePrimerService {
 
 	@PostConstruct
 	public void importAssertionsAndGroups() throws IOException {
-		InputStream manifestInputStream = assertionResourceManager.readResourceStream("manifest.xml");
-		if (dbImporter.isAssertionImportRequired()) {
-			LOGGER.info("No assertions exist and start importing...");
-			// import content
-			dbImporter.importAssertionsFromManifest(manifestInputStream, scriptsDir);
-			LOGGER.info("Assertions imported");
-			// Create assertion group
-			assertionGroupImporter.importAssertionGroups();
-		} else {
-			LOGGER.info("Assertions and assertion groups exist already.");
+		try (InputStream manifestInputStream = assertionResourceManager.readResourceStream("manifest.xml")) {
+			if (dbImporter.isAssertionImportRequired()) {
+				LOGGER.info("No assertions exist and start importing...");
+				// import content
+				dbImporter.importAssertionsFromManifest(manifestInputStream, scriptsDir);
+				LOGGER.info("Assertions imported");
+				try (InputStream policiesStream = assertionResourceManager.readResourceStream(
+								AssertionGroupingXml.POLICIES_RESOURCE_FILENAME);
+						InputStream groupsStream = assertionResourceManager.readResourceStream(
+								AssertionGroupingXml.GROUPS_RESOURCE_FILENAME)) {
+					assertionGroupImporter.importAssertionGroups(groupsStream, policiesStream);
+				}
+			} else {
+				LOGGER.info("Assertions and assertion groups exist already.");
+			}
+		} catch (FileNotFoundException e) {
+			LOGGER.error("Failed to import assertions and assertion groups due to no manifest.xml found", e);
+			throw new IOException("No manifest.xml file found in the assertions directory.", e);
 		}
+
 	}
 }

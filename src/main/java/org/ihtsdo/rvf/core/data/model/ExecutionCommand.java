@@ -2,14 +2,13 @@ package org.ihtsdo.rvf.core.data.model;
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
 
-import javax.persistence.*;
+import jakarta.persistence.*;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * A class that encapsulate the logic/code that is used to run a {@link Test}.
  */
-@Embeddable
 @Entity(name = "command")
 @Table(name = "execution_command")
 public class ExecutionCommand {

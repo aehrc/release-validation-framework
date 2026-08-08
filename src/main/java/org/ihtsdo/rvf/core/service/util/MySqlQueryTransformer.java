@@ -4,6 +4,7 @@ import com.facebook.presto.sql.parser.StatementSplitter;
 import com.google.common.collect.ImmutableSet;
 import org.apache.commons.dbcp.BasicDataSource;
 import org.ihtsdo.otf.rest.exception.BusinessServiceException;
+import org.ihtsdo.otf.RF2Constants;
 import org.ihtsdo.rvf.core.data.model.Assertion;
 import org.ihtsdo.rvf.core.service.config.MysqlExecutionConfig;
 import org.ihtsdo.rvf.importer.AssertionGroupImporter;
@@ -66,7 +67,18 @@ public class MySqlQueryTransformer {
             part = part.replaceAll("<RUNID>", String.valueOf(config.getExecutionId()));
             part = part.replaceAll("<ASSERTIONUUID>", configMap.get("<ASSERTIONUUID>"));
             part = part.replaceAll("<MODULEID>", defaultModuleId);
+            // <MODULEIDS> and <INCLUDED_MODULES> are the same substitution under
+            // two names - this fork predates IHTSDO's rename. Both are applied so
+            // the transformer serves either corpus. As at 2026-08-08 <MODULEIDS>
+            // has zero uses in either corpus while <INCLUDED_MODULES> has three
+            // in IHTSDO's, so the rename is the live name; <MODULEIDS> is kept
+            // only because removing it is a separate cleanup with its own risk.
             part = part.replaceAll("<MODULEIDS>", includedModules);
+            part = part.replaceAll("<INCLUDED_MODULES>", includedModules);
+            // Added by IHTSDO after this fork diverged; used by one assertion in
+            // their corpus. Without it that assertion executes with the literal
+            // placeholder still in the SQL.
+            part = part.replaceAll("<INTERNATIONAL_MODULES>", RF2Constants.SCTID_CORE_MODULE);
             part = part.replaceAll("<VERSION>", version);
             // watch out for any 's that users might have introduced
             part = part.replaceAll("qa_result", configMap.get("qa_result"));

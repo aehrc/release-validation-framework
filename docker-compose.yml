@@ -1,4 +1,3 @@
-version: '2.1'
 volumes:
   mysql:
     driver: local
@@ -27,18 +26,25 @@ services:
     container_name: rvf
     depends_on:
       - db
-    entrypoint: java -Xms512m -Xmx4g -jar rvf-api.jar --server.port=8081 --server.servlet.context-path=/api
+    entrypoint: java -Xms512m -Xmx8g -Daws.region=us-east-1 --add-opens=java.base/java.lang=ALL-UNNAMED -cp @/app/jib-classpath-file org.ihtsdo.rvf.App --server.port=8081 --server.servlet.context-path=/api
     ports:
-      - 8081:8081
+      - "8081:8081"
     environment:
       - SPRING_DATASOURCE_URL=jdbc:mysql://db:3306/?useSSL=false&allowLoadLocalInfile=true&allowPublicKeyRetrieval=true
       - SPRING_DATASOURCE_USERNAME=root
       - SPRING_DATASOURCE_PASSWORD=snomed
-      - rvf.assertion.resource.local.path=./snomed-release-validation-assertions/
+      - rvf.assertion.resource.local.path=snomed-release-validation-assertions
+      - rvf.drools.rule.directory=snomed-drools-rules
+      - spring.security.user.name=rvf_user
+      - spring.security.user.password=snomed
     networks:
       - rvf_net
     volumes:
       - rvf-store:/app/store
+      - mysql:/var/lib/mysql
+      - type: bind
+        source: ./store/releases
+        target: /app/store/releases
     restart: always
 
 networks:
