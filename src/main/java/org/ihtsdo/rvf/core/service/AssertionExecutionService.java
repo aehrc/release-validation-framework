@@ -10,7 +10,6 @@ import java.util.concurrent.Future;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import javax.annotation.Resource;
 import javax.naming.ConfigurationException;
 import javax.naming.ConfigurationException;
 import org.apache.commons.dbcp.BasicDataSource;
@@ -18,7 +17,6 @@ import org.ihtsdo.otf.RF2Constants;
 import org.ihtsdo.rvf.core.data.model.*;
 import org.ihtsdo.rvf.core.service.config.MysqlExecutionConfig;
 import org.ihtsdo.rvf.core.service.util.MySqlQueryTransformer;
-import org.ihtsdo.rvf.importer.AssertionGroupImporter.ProductName;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -234,7 +232,20 @@ public List<TestRunItem> executeAssertionsConcurrently(List<Assertion> assertion
 		return failureCount;
 	}
 
-	private List<String> transformSql(String[] parts, Assertion assertion, MysqlExecutionConfig config) throws ConfigurationException {
+	private String[] splitCommand(ExecutionCommand command) {
+		String[] parts = {""};
+		if (command.getStatements().isEmpty()) {
+			final String sql = command.getTemplate();
+			if (sql != null) {
+				parts = sql.split(";");
+			}
+		} else {
+			parts = command.getStatements().toArray(new String[0]);
+		}
+		return parts;
+	}
+
+	private List<String> transformSql(List<String> parts, Assertion assertion, MysqlExecutionConfig config) throws ConfigurationException {
 		String qaResult = dataSource.getDefaultCatalog()+ "." + qaResulTableName;
 		MySqlQueryTransformer queryTransformer = new MySqlQueryTransformer();
 		Map configMap = Map.of("qa_result", qaResult, "<ASSERTIONUUID>", String.valueOf(assertion.getAssertionId()));

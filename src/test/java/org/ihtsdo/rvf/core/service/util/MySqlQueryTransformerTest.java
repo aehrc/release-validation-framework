@@ -9,6 +9,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import javax.naming.ConfigurationException;
 import java.util.Collections;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -141,7 +142,7 @@ public class MySqlQueryTransformerTest {
         when(config.getPreviousVersion()).thenReturn(String.valueOf(10));
         Map configMap = Map.of("qa_result",testQaResult,
                 "<ASSERTIONUUID>", String.valueOf(testAssertionId));
-        List<String> result = queryTransformer.transformSql(sqlParts,config, configMap);
+        List<String> result = queryTransformer.transformSql(Arrays.asList(sqlParts),config, configMap);
         assertEquals(1,result.size());
         assertTrue(!result.get(0).contains("<PROSPECTIVE>"));
         assertTrue(!result.get(0).contains("<ASSERTIONUUID>"));
@@ -158,7 +159,7 @@ public class MySqlQueryTransformerTest {
                 "DROP TABLE IF EXISTS concept_active;";
         String[] sqlParts = {sqlToTest};
         ConfigurationException exception = assertThrows(ConfigurationException.class, () -> {
-            queryTransformer.transformSql(sqlParts,config, Collections.emptyMap());
+            queryTransformer.transformSql(Arrays.asList(sqlParts),config, Collections.emptyMap());
         });
 
         String expectedMessagePattern = "Failed to find rvf db schema for null";
