@@ -17,6 +17,7 @@
 
     <properties>
         <skip.integration.tests>true</skip.integration.tests>
+        <docker.image.tag>latest</docker.image.tag>
         <packageName>rvf-api</packageName>
         <!-- Override snomed-parent-bom 2.0.0's pin of snomed-drools 4.0.0.
              The snomed-drools-rules content RVF loads at runtime calls methods
@@ -185,6 +186,35 @@
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-aws-autoconfigure</artifactId>
         </dependency>
+        <!-- AWS SDK v2, required at RUNTIME by snomed-drools 5.7.0.
+             It is compiled against resource-manager 7.7.0, whose ResourceManager
+             and RuleExecutor reference software.amazon.awssdk types (S3Client,
+             AwsCredentialsProvider). snomed-parent-bom 2.0.0 manages
+             otf-common - and with it resource-manager - down to 6.0.0, which is
+             the older spring-cloud-aws-core line and brings only AWS SDK v1, so
+             those types are absent and class loading fails:
+                 NoClassDefFoundError:
+                 software/amazon/awssdk/auth/credentials/AwsCredentialsProvider
+             That is thrown while ValidationRunner sets Drools up, so it fails
+             the ENTIRE validation - TestResult comes back null and no report is
+             produced. Before the 5.7.0 bump Drools never reached this code, so
+             the gap was invisible.
+             Declared explicitly rather than by letting otf-common resolve
+             forward to 7.7.0: that line is Jakarta + SDK v2 throughout and
+             pulls javax.jms -> jakarta.jms and AmazonS3 -> S3Client migrations
+             into four files. That migration belongs in the IHTSDO catch-up,
+             which does it wholesale, not duplicated on this Java 17 branch.
+             Version tracks what the resource-manager 7.7.0 chain resolves. -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>auth</artifactId>
+            <version>2.20.63</version>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>2.20.63</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter</artifactId>
@@ -299,6 +329,13 @@
                 <version>1.4.13</version>
                 <configuration>
                     <repository>${docker.image.prefix}/${project.artifactId}</repository>
+                    <!-- Defaults to latest so the normal groups-api-fix build is
+                         unchanged. Override for anything experimental:
+                             -Ddocker.image.tag=drools-test
+                         :latest is what the deployed helm chart pulls, with no
+                         imagePullPolicy, so Kubernetes defaults to Always -
+                         an untested push to it reaches the next nightly. -->
+                    <tag>${docker.image.tag}</tag>
                     <buildArgs>
                         <JAR_FILE>target/${project.build.finalName}.jar</JAR_FILE>
                     </buildArgs>
