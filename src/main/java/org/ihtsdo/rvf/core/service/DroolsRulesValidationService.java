@@ -13,6 +13,7 @@ import org.ihtsdo.drools.response.InvalidContent;
 import org.ihtsdo.drools.response.Severity;
 import org.ihtsdo.drools.validator.rf2.DroolsRF2Validator;
 import org.ihtsdo.otf.resourcemanager.ResourceManager;
+import org.ihtsdo.otf.snomedboot.ReleaseImportException;
 import org.ihtsdo.otf.snomedboot.ReleaseImporter;
 import org.ihtsdo.rvf.core.data.model.*;
 import org.ihtsdo.rvf.core.service.config.ValidationResourceConfig;
@@ -30,11 +31,13 @@ import org.springframework.util.CollectionUtils;
 import javax.annotation.PostConstruct;
 import java.io.*;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Service
 public class DroolsRulesValidationService {
@@ -146,6 +149,37 @@ public class DroolsRulesValidationService {
 		return assertions;
 	}
 
+	/**
+	 * Extract the DELTA files from a full-edition archive, or return null if it carries none.
+	 *
+	 * Mirrors ValidationVersionLoader.checkDeltaFilesExist, and for the same two reasons: snomed-boot
+	 * signals "no delta in this archive" by throwing rather than by returning an empty directory, and
+	 * the presence of delta directories is not sufficient - a release can ship those with no concept
+	 * delta inside them, which would put Drools on the delta path with nothing to validate.
+	 */
+	private String unzipDeltaIfPresent(File localProspectiveFile) throws ReleaseImportException, IOException {
+		String deltaDirectoryPath;
+		try {
+			deltaDirectoryPath = new ReleaseImporter()
+					.unzipRelease(new FileInputStream(localProspectiveFile), ReleaseImporter.ImportType.DELTA)
+					.getAbsolutePath();
+		} catch (IOException | IllegalStateException e) {
+			if (e.getMessage() != null && e.getMessage().contains("No Delta files found")) {
+				return null;
+			}
+			throw e;
+		}
+		try (Stream<Path> pathStream = Files.find(new File(deltaDirectoryPath).toPath(), 50,
+				(path, basicFileAttributes) -> path.toFile().getName().matches("x?(sct|rel)2_Concept_[^_]*Delta_.*.txt"))) {
+			if (pathStream.findFirst().isPresent()) {
+				return deltaDirectoryPath;
+			}
+		}
+		// Not registered in extractedRF2FilesDirectories, so the finally block will not reach it.
+		FileUtils.deleteQuietly(new File(deltaDirectoryPath));
+		return null;
+	}
+
 	public ValidationStatusReport runDroolsAssertions(ValidationRunConfig validationConfig, ValidationStatusReport statusReport) {
 		Set<String> extractedRF2FilesDirectories = new HashSet<>();
 		Set<String> previousReleaseDirectories = new HashSet<>();
@@ -200,6 +234,24 @@ public class DroolsRulesValidationService {
 				}
 				if(deltaInputStream != null) {
 					extractedRF2FilesDirectories.add(new ReleaseImporter().unzipRelease(deltaInputStream, ReleaseImporter.ImportType.DELTA).getAbsolutePath());
+				} else {
+					// A full-edition archive carries Snapshot, Delta AND Full, but the branch above hands
+					// Drools the SNAPSHOT only. snomed-drools then finds no delta
+					// (RF2ReleaseFilesUtil.anyDeltaFilesPresent) and takes loadEffectiveSnapshotReleaseFiles,
+					// which makes every published component a candidate for validation instead of the ones
+					// that actually changed. The delta path was unreachable for full releases even though the
+					// archive contains the delta.
+					//
+					// Measured on the AU daily build (custom-rvf 15841): Drools ran for 3h28m without
+					// finishing and the agent was killed at its 240-minute cap, while the SQL assertions
+					// completed normally in 161 minutes.
+					String deltaDirectory = unzipDeltaIfPresent(validationConfig.getLocalProspectiveFile());
+					if (deltaDirectory != null) {
+						extractedRF2FilesDirectories.add(deltaDirectory);
+						LOGGER.info("Prospective archive contains delta files - Drools will validate the delta against the snapshot.");
+					} else {
+						LOGGER.info("Prospective archive has no delta files - Drools will validate the whole snapshot.");
+					}
 				}
 
 				if(StringUtils.isNotBlank(validationConfig.getPreviousRelease()) && validationConfig.getPreviousRelease().endsWith(EXT_ZIP)) {
