@@ -1,5 +1,16 @@
 name: rvf-$(Date:yyyyMMdd)$(Rev:.r)
 
+parameters:
+  # Which tag to publish. Defaults to empty, which means "decide from the
+  # branch" - see the imageTag variable below.
+  #
+  # Set this for a manual run to publish somewhere harmless, e.g. drools-test,
+  # and test an image without it reaching production.
+  - name: imageTag
+    type: string
+    default: ''
+    displayName: 'Image tag (blank = latest on groups-api-fix, branch name otherwise)'
+
 trigger:
   branches:
     include:
@@ -11,6 +22,19 @@ pool:
 variables:
   mavenCache: $(Pipeline.Workspace)/.m2/repository
   mavenOptions: '-Dmaven.repo.local=$(mavenCache)'
+  # ONLY groups-api-fix may publish :latest.
+  #
+  # :latest is what the deployed helm chart pulls, and job.yaml sets no
+  # imagePullPolicy, so Kubernetes defaults to Always for it - anything pushed
+  # there is in the next nightly. Two production incidents in three days came
+  # through that path, so a branch build now publishes under its own branch
+  # name unless it is the branch production actually builds from.
+  ${{ if ne(parameters.imageTag, '') }}:
+    imageTag: ${{ parameters.imageTag }}
+  ${{ elseif eq(variables['Build.SourceBranch'], 'refs/heads/groups-api-fix') }}:
+    imageTag: 'latest'
+  ${{ else }}:
+    imageTag: $[ replace(variables['Build.SourceBranchName'], '/', '-') ]
 
 stages:
   - stage: build
@@ -38,7 +62,7 @@ stages:
             displayName: Build and verify
             inputs:
               mavenPomFile: 'pom.xml'
-              options: '-Ddocker.image.prefix=$(acr_repo)'
+              options: '-Ddocker.image.prefix=$(acr_repo) -Ddocker.image.tag=$(imageTag)'
               mavenOptions: '$(mavenOptions)'
               javaHomeOption: 'JDKVersion'
               jdkVersionOption: '1.17'
