@@ -6,7 +6,11 @@ volumes:
 
 services:
   db:
-    image: mysql:8.0.28
+    # Parameterised so a deployment can match whatever MySQL it runs in
+    # production. Default is upstream's. NOTE: innodb_redo_log_capacity
+    # below exists only in MySQL 8.0.30+, so pinning to an older image
+    # means overriding RVF_MYSQL_EXTRA_ARGS too or mysqld will not start.
+    image: ${RVF_MYSQL_IMAGE:-mysql:8.0}
     restart: always
     environment:
       - MYSQL_ROOT_PASSWORD=snomed
@@ -20,7 +24,7 @@ services:
     volumes:
       - mysql:/var/lib/mysql
     command:
-      mysqld --local-infile=ON --sql_mode="NO_ENGINE_SUBSTITUTION,STRICT_TRANS_TABLES" --lower_case_table_names=1
+     mysqld --sql_mode="NO_ENGINE_SUBSTITUTION,STRICT_TRANS_TABLES" --lower_case_table_names=1 --local_infile=1 ${RVF_MYSQL_EXTRA_ARGS:---innodb_redo_log_capacity=4G}
   rvf:
     image: snomedinternational/release-validation-framework:latest
     container_name: rvf
@@ -35,6 +39,9 @@ services:
       - SPRING_DATASOURCE_PASSWORD=snomed
       - rvf.assertion.resource.local.path=snomed-release-validation-assertions
       - rvf.drools.rule.directory=snomed-drools-rules
+      # heap (default) or duckdb; and for duckdb, snapshot (default) or authored
+      - rvf.drools.engine=${RVF_DROOLS_ENGINE:-heap}
+      - rvf.drools.scope=${RVF_DROOLS_SCOPE:-snapshot}
       - spring.security.user.name=rvf_user
       - spring.security.user.password=snomed
     networks:
