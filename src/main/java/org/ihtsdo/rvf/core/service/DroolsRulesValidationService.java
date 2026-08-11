@@ -5,6 +5,10 @@ import com.google.common.collect.Sets;
 import jakarta.annotation.PostConstruct;
 import org.apache.commons.io.FileUtils;
 import org.ihtsdo.drools.domain.*;
+import org.ihtsdo.rvf.core.service.drools.duck.DuckRelationshipService;
+import org.ihtsdo.rvf.core.service.drools.duck.DuckDroolsDataset;
+import org.ihtsdo.rvf.core.service.drools.duck.DuckDescriptionService;
+import org.ihtsdo.rvf.core.service.drools.duck.DuckConceptService;
 import org.ihtsdo.drools.response.InvalidContent;
 import org.ihtsdo.drools.response.Severity;
 import org.ihtsdo.drools.validator.rf2.DroolsRF2Validator;
@@ -31,6 +35,7 @@ import software.amazon.awssdk.services.s3.S3Client;
 
 import java.io.*;
 import java.nio.file.Files;
+import java.sql.SQLException;
 import java.util.*;
 import java.util.function.Function;
 import java.util.regex.Matcher;
@@ -57,6 +62,33 @@ public class DroolsRulesValidationService {
 
 	@Value("${rvf.empty-release-file}")
 	private String emptyRf2Filename;
+
+	/**
+	 * Which backend answers the Drools service layer: {@code heap} (the default,
+	 * snomed-drools' own in-memory SnomedDroolsComponentRepository) or
+	 * {@code duckdb}, which resolves lazily against DuckDB.
+	 *
+	 * <p>Defaults to {@code heap} so turning this on is always deliberate. The
+	 * DuckDB backend exists because the heap one materialises the whole release
+	 * as Java objects plus an in-memory Lucene index over every term, which
+	 * exhausted a 16 GB heap on the AU daily build.
+	 */
+	@Value("${rvf.drools.engine:heap}")
+	private String droolsEngine;
+
+	/**
+	 * What the DuckDB backend validates: {@code authored} - only what this
+	 * edition stamped with its own effectiveTime, per the Module Dependency
+	 * refset - or {@code snapshot}, everything.
+	 *
+	 * <p>Defaults to {@code snapshot}: a validator that silently checks less
+	 * looks exactly like a clean release, so the scope must only ever narrow on
+	 * purpose. Ignored for the heap engine, where {@code validateRF2Files}
+	 * populates the concept collection itself and the only ways to intervene are
+	 * package-private.
+	 */
+	@Value("${rvf.drools.scope:snapshot}")
+	private String droolsScope;
 
 	@Autowired
 	private ValidationResourceConfig testResourceConfig;
@@ -171,6 +203,64 @@ public class DroolsRulesValidationService {
 
 	public List<Assertion> getAssertions() {
 		return assertions;
+	}
+
+	/** Value of {@code rvf.drools.engine} selecting the DuckDB service layer. */
+	private static final String DUCKDB_ENGINE = "duckdb";
+
+	/** Value of {@code rvf.drools.scope} validating only what this edition authored. */
+	private static final String SCOPE_AUTHORED = "authored";
+
+	/**
+	 * Run the Drools rules with DuckDB answering the service layer instead of
+	 * snomed-drools' in-heap {@code SnomedDroolsComponentRepository}.
+	 *
+	 * <p>Same rules, same {@link org.ihtsdo.drools.RuleExecutor}; only the source
+	 * of the three services changes. No fork of snomed-drools is required -
+	 * {@code execute} is public and takes the services as arguments.
+	 *
+	 * <p>Two reasons this exists. First, {@code validateRF2Files} has no
+	 * constructor accepting services, so it always materialises the entire
+	 * release as Java objects plus an in-memory Lucene index over every term;
+	 * that exhausted a 16 GB heap on the AU daily build. Second, it fills the
+	 * validated concept collection from the whole repository, and the only ways
+	 * to populate that repository ({@code SnomedDroolsComponentFactory}'s
+	 * constructor, {@code loadComponentsFromRF2}) are package-private and
+	 * private respectively - so scoping the validated set is not reachable from
+	 * outside the package at all.
+	 */
+	private List<InvalidContent> runRulesOverDuckDb(DroolsRF2Validator validator,
+			Set<String> extractedRF2FilesDirectories, Set<String> droolsRulesSets, String effectiveDate) {
+		long start = System.currentTimeMillis();
+		// SQLException is wrapped rather than declared so the surrounding
+		// upstream code keeps its own exception handling untouched - the smaller
+		// the diff against IHTSDO master, the easier this is to contribute back.
+		try (DuckDroolsDataset dataset = new DuckDroolsDataset(extractedRF2FilesDirectories, effectiveDate)) {
+			DuckConceptService conceptService = new DuckConceptService(dataset);
+			DuckDescriptionService descriptionService = new DuckDescriptionService(dataset, conceptService,
+					validator.getRuleExecutor().newTestResourceProvider(testResourceManager));
+			DuckRelationshipService relationshipService = new DuckRelationshipService(dataset);
+
+			// A null edition effectiveTime means there was no module dependency
+			// refset to read. Fall back to validating everything: validating
+			// nothing would be indistinguishable from a clean release.
+			String editionEffectiveTime = SCOPE_AUTHORED.equalsIgnoreCase(droolsScope)
+					? dataset.editionEffectiveTime() : null;
+			Collection<Concept> toValidate = editionEffectiveTime == null
+					? conceptService.allConcepts()
+					: conceptService.authoredConcepts(editionEffectiveTime);
+			LOGGER.info("Drools over DuckDB: scope {} - {} concepts",
+					editionEffectiveTime == null ? "whole snapshot" : "authored@" + editionEffectiveTime,
+					toValidate.size());
+
+			List<InvalidContent> found = validator.getRuleExecutor().execute(droolsRulesSets, null,
+					toValidate, conceptService, descriptionService, relationshipService, true, true);
+			LOGGER.info("Drools over DuckDB produced {} violations in {}ms",
+					found.size(), System.currentTimeMillis() - start);
+			return found;
+		} catch (SQLException e) {
+			throw new IllegalStateException("Drools validation over DuckDB failed", e);
+		}
 	}
 
 	public ValidationStatusReport runDroolsAssertions(ValidationRunConfig validationConfig, ValidationStatusReport statusReport) {
@@ -294,7 +384,12 @@ public class DroolsRulesValidationService {
 			}
 			// Run validation
 			DroolsRF2Validator droolsRF2Validator = new DroolsRF2Validator(droolsRuleDirectoryPath, testResourceManager);
-			invalidContents = droolsRF2Validator.validateRF2Files(extractedRF2FilesDirectories, CollectionUtils.isEmpty(previousReleaseDirectories) ? null : previousReleaseDirectories, droolsRulesSets, assertionExclusionList, effectiveDate, modules, true);
+			if (DUCKDB_ENGINE.equalsIgnoreCase(droolsEngine)) {
+				invalidContents = runRulesOverDuckDb(droolsRF2Validator, extractedRF2FilesDirectories,
+						droolsRulesSets, effectiveDate);
+			} else {
+				invalidContents = droolsRF2Validator.validateRF2Files(extractedRF2FilesDirectories, CollectionUtils.isEmpty(previousReleaseDirectories) ? null : previousReleaseDirectories, droolsRulesSets, assertionExclusionList, effectiveDate, modules, true);
+			}
 
 			// Checking whether the failures are whitelisted
 			if (!invalidContents.isEmpty() && !whitelistService.isWhitelistDisabled()) {

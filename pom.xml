@@ -231,6 +231,15 @@
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers-mysql</artifactId>
         </dependency>
+
+        <!-- Backs the Drools service layer with DuckDB instead of the in-heap
+             SnomedDroolsComponentRepository. See
+             org.ihtsdo.rvf.core.service.drools.duck. -->
+        <dependency>
+            <groupId>org.duckdb</groupId>
+            <artifactId>duckdb_jdbc</artifactId>
+            <version>1.5.5.1</version>
+        </dependency>
     </dependencies>
 
     <build>
