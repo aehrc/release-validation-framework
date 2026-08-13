@@ -47,10 +47,25 @@ set -euo pipefail
 # branch, which must stay on 45e0d9e2 - the last commit before Annotation.
 DROOLS_RULES_REF="${DROOLS_RULES_REF:-55795d5d19b1db99d2f5757e6aa397014aaaf268}"
 
-# snomed-release-validation-assertions @ 2026-07-27 (master HEAD at time of
-# pinning). Current, deliberately: this branch exists to run the latest upstream
-# assertions alongside the CSIRO ones.
-ASSERTIONS_REF="${ASSERTIONS_REF:-0160dd2ee830cf77e10678de753c8fc06de671d6}"
+# snomed-release-validation-assertions @ 2024-05-23 - the SAME pin production
+# runs. Deliberately NOT moved forward, for two reasons.
+#
+# 1. It does not start. The mounted manifest.xml and this repository are a
+#    matched pair; at 0160dd2e (2026-07-27 master HEAD) 19 of the manifest's 376
+#    sqlFile references do not resolve, and RVF throws during Spring startup on
+#    the first one. Measured with ManifestResolveProbe - 0 unresolved here, 19
+#    there. `manifest-edition-rename` does not fix it: it repairs 3 and breaks a
+#    4th, since file-centric-delta-changes-are-not-in-expected-modules_EDITION
+#    is the one script upstream KEPT the suffix on. Net 17.
+#
+# 2. Even if it started, it would answer the wrong question. This branch exists
+#    to establish that catching RVF up to upstream changed nothing we rely on.
+#    Moving the assertions at the same time changes two variables at once, and
+#    no difference in the results could be attributed to either.
+#
+# Move it forward as its own change, with all 17 manifest fixes in the SAME
+# commit, once the engine comparison is banked.
+ASSERTIONS_REF="${ASSERTIONS_REF:-fad36466277ca633e0bc6844a3b4a83d3698ea97}"
 
 DROOLS_RULES_DIR=snomed-drools-rules
 ASSERTIONS_DIR=snomed-release-validation-assertions
