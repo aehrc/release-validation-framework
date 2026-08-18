@@ -54,3 +54,45 @@ stages:
               publishJUnitResults: true
               testResultsFiles: '**/surefire-reports/TEST-*.xml'
               goals: 'clean install dockerfile:build dockerfile:push'
+          - script: |
+              set -euo pipefail
+              IMAGE="$(acr_repo)/release-validation-framework"
+              BUILD_TAG="build-$(Build.BuildId)"
+
+              # `$(imageTag)` above is mutable by design: the next build of this
+              # branch takes it over. That is fine for convenience, but it means
+              # the digest we actually deploy has no durable name, and an
+              # untagged manifest is a garbage-collection candidate. Publish a
+              # second tag that is never reused, so every build stays findable
+              # and any prior build is a rollback target by construction.
+              #
+              # Named after the BUILD, not the commit: builds 15968 and 15969
+              # both built a19843d9 and produced DIFFERENT digests, so a
+              # commit-SHA tag would be silently overwritten by a rebuild.
+              #
+              # Not named after $(Build.BuildNumber) either - tags beginning
+              # `rvf-` (which is the build-number prefix) were observed on
+              # 2026-08-18 failing to be created in this registry while the
+              # command reported success.
+              docker tag  "$IMAGE:$(imageTag)" "$IMAGE:$BUILD_TAG"
+              docker push "$IMAGE:$BUILD_TAG"
+
+              # Read the tag back. A publish that reports success without
+              # creating anything is the precise failure this step exists to
+              # engineer around, so do not trust the exit status. RepoDigests is
+              # populated only once the registry has accepted the manifest.
+              DIGEST=$(docker image inspect "$IMAGE:$BUILD_TAG" \
+                         --format '{{index .RepoDigests 0}}')
+              if [ -z "$DIGEST" ]; then
+                echo "##vso[task.logissue type=error]$IMAGE:$BUILD_TAG was not published"
+                exit 1
+              fi
+
+              echo "##[section]Immutable image published"
+              echo "  tag:    $IMAGE:$BUILD_TAG"
+              echo "  digest: $DIGEST"
+              echo ""
+              echo "  To deploy this build, pin it by DIGEST in the chart's values.yaml:"
+              echo "    imageName: $DIGEST"
+              echo "  (a tag is a mutable pointer; the digest is the guarantee)"
+            displayName: Publish immutable build tag
