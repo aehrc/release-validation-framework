@@ -2,7 +2,9 @@ package org.ihtsdo.rvf.core.data.model;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 
-public class FailureDetail implements Comparable<FailureDetail>{
+import java.io.Serializable;
+
+public class FailureDetail implements Comparable<FailureDetail>, Serializable {
 
 	private  String conceptId;
 	@JsonInclude(JsonInclude.Include.NON_NULL)
@@ -11,6 +13,13 @@ public class FailureDetail implements Comparable<FailureDetail>{
 	private String componentId;
 	private String moduleId;
 	private String fullComponent;
+
+	/**
+	 * Carried from the qa_result row purely so the extension-module filter can
+	 * honour it; transient because it is an input to filtering, not part of the
+	 * failure reported to the caller.
+	 */
+	private transient Boolean skipModuleCheck;
 
 	private transient String tableName;
 
@@ -31,6 +40,11 @@ public class FailureDetail implements Comparable<FailureDetail>{
 		this(conceptId, detail);
 		this.componentId = componentId;
 		this.tableName = tableName;
+	}
+
+	public FailureDetail(String conceptId, String detail, String componentId, String tableName, Boolean skipModuleCheck) {
+		this(conceptId, detail, componentId, tableName);
+		this.skipModuleCheck = skipModuleCheck;
 	}
 
 	public String getConceptId() {
@@ -136,5 +150,9 @@ public class FailureDetail implements Comparable<FailureDetail>{
 
 	public String getModuleId() {
 		return moduleId;
+	}
+
+	public Boolean getSkipModuleCheck() {
+		return skipModuleCheck;
 	}
 }
