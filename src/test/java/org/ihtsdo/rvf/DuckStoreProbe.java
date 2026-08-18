@@ -128,6 +128,30 @@ public class DuckStoreProbe {
 					totalFindings = rs.getLong(1);
 				}
 			}
+			// Per-assertion counts, so this can be diffed against rvf_duck.py's
+			// report. A total alone cannot distinguish "same answer" from "two
+			// offsetting differences".
+			String out = System.getProperty("probe.out");
+			if (out != null) {
+				StringBuilder sb = new StringBuilder("{\n");
+				try (Statement st = con.createStatement();
+						ResultSet rs = st.executeQuery(
+								"SELECT assertion_id, count(*) FROM rvf_results.qa_result "
+								+ "GROUP BY assertion_id ORDER BY assertion_id")) {
+					boolean first = true;
+					while (rs.next()) {
+						if (!first) {
+							sb.append(",\n");
+						}
+						first = false;
+						sb.append(" \"").append(rs.getString(1)).append("\": ").append(rs.getLong(2));
+					}
+				}
+				sb.append("\n}\n");
+				Files.writeString(Path.of(out), sb.toString());
+				System.out.println("wrote        : " + out);
+			}
+
 			System.out.println();
 			System.out.println("EXECUTED     : " + ok);
 			System.out.println("FAILED       : " + failed);
@@ -167,6 +191,14 @@ public class DuckStoreProbe {
 			// rvf_duck.py sets the same thing, and notes it does not carry to a
 			// new cursor, so anything creating its own connection must repeat it.
 			st.execute("SET search_path='prospective'");
+			// MySQL casts freely between types; DuckDB does not. The amtv4 macro
+			// isValidComponentId_cr calls length() on its argument, and
+			// referencedcomponentid is BIGINT in the DDL and in the Parquet, so
+			// without this the call fails with "No function matches the given
+			// name and argument types 'length(BIGINT)'" - one assertion out of
+			// 200, which is easy to mistake for a content or macro problem.
+			// rvf_duck.py sets the same flag per cursor for the same reason.
+			st.execute("SET old_implicit_casting=true");
 			// Every DDL table the release does not ship gets an EMPTY
 			// placeholder, exactly as rvf_duck.py's attach() does. Most
 			// assertions over an absent table are "no bad rows in X" and pass
