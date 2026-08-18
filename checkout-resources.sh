@@ -50,22 +50,35 @@ DROOLS_RULES_REF="${DROOLS_RULES_REF:-55795d5d19b1db99d2f5757e6aa397014aaaf268}"
 # snomed-release-validation-assertions @ 2024-05-23 - the SAME pin production
 # runs. Deliberately NOT moved forward, for two reasons.
 #
-# 1. It does not start. The mounted manifest.xml and this repository are a
-#    matched pair; at 0160dd2e (2026-07-27 master HEAD) 19 of the manifest's 376
-#    sqlFile references do not resolve, and RVF throws during Spring startup on
-#    the first one. Measured with ManifestResolveProbe - 0 unresolved here, 19
-#    there. `manifest-edition-rename` does not fix it: it repairs 3 and breaks a
-#    4th, since file-centric-delta-changes-are-not-in-expected-modules_EDITION
-#    is the one script upstream KEPT the suffix on. Net 17.
+# CORRECTED 2026-08-18. The pin above was wrong, and so was the plan it
+# described ("move the assertions forward as its own change, once the engine
+# comparison is banked"). That sequence is not possible.
 #
-# 2. Even if it started, it would answer the wrong question. This branch exists
-#    to establish that catching RVF up to upstream changed nothing we rely on.
-#    Moving the assertions at the same time changes two variables at once, and
-#    no difference in the results could be attributed to either.
+# Upstream moved assertion-group membership out of Java and into the corpus:
+# AssertionGroupImporter now reads groups.xml and policies.xml from the
+# assertions directory (see AssertionGroupingXml). Neither file exists at
+# fad36466 - that corpus root is LICENSE.md, manifest.xml, README.md, scripts.
+# So the upgraded engine cannot start against the old corpus at all; every
+# Spring-context test fails with
+#     IOException: No manifest.xml file found in the assertions directory
+#     Caused by: FileNotFoundException: .../policies.xml
+# which is a misleading message - manifest.xml is present, policies.xml is not.
 #
-# Move it forward as its own change, with all 17 manifest fixes in the SAME
-# commit, once the engine comparison is banked.
-ASSERTIONS_REF="${ASSERTIONS_REF:-fad36466277ca633e0bc6844a3b4a83d3698ea97}"
+# The compatibility is therefore one-way, and it fixes the deployment order:
+#
+#   old engine + new corpus   WORKS      (measured as arm H, 2026-08-18)
+#   new engine + old corpus   IMPOSSIBLE (missing groups.xml/policies.xml)
+#
+# So the corpus must move FIRST and can ship on its own, and the engine upgrade
+# must carry the corpus with it. It is not two independent variables, and the
+# original concern - that moving both at once makes differences unattributable -
+# is answered by arm H having already measured the corpus change in isolation.
+#
+# The manifest remap that pairs with this ref lives on the chart side
+# (aehrc/rvf e94fa2f). It is not needed for `mvn test`, which reads the corpus's
+# own manifest.xml from the clone, but it IS needed for any containerised run
+# that mounts the chart's testscripts.
+ASSERTIONS_REF="${ASSERTIONS_REF:-0160dd2ee830cf77e10678de753c8fc06de671d6}"
 
 DROOLS_RULES_DIR=snomed-drools-rules
 ASSERTIONS_DIR=snomed-release-validation-assertions
