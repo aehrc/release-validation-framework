@@ -45,12 +45,55 @@ public class RulesCompileProbe {
 			System.out.println(t.getClass().getName() + ": "
 					+ String.valueOf(t.getMessage()).substring(0,
 							Math.min(3000, String.valueOf(t.getMessage()).length())));
+			// Print the trace. Without it a message like "Cannot read the array
+			// length because \"array\" is null" says nothing about WHICH of the
+			// three failure modes this is - a rule, the resource loader, or the
+			// probe's own configuration - and the whole point of a probe is to
+			// tell them apart.
+			t.printStackTrace(System.out);
+			for (Throwable c = t.getCause(); c != null; c = c.getCause()) {
+				System.out.println("CAUSED BY: " + c);
+			}
 			System.exit(1);
 		}
 	}
 
+	/**
+	 * The path MUST be relative to the working directory.
+	 *
+	 * <p>{@code ResourceConfiguration.Local} resolves an absolute path to a
+	 * directory whose {@code listFiles()} returns null, and the caller streams
+	 * that array unguarded - so an absolute path fails as
+	 * {@code NullPointerException: Cannot read the array length because "array"
+	 * is null}, five frames deep in TestResourceProvider, with nothing pointing
+	 * at the path. It reads exactly like missing or wrongly-shaped resources.
+	 * Relativise rather than pass through, so a caller supplying an absolute
+	 * path gets the working behaviour instead of that NPE.
+	 */
 	private static ResourceManager local(String path) {
 		return new ResourceManager(new ManualResourceConfiguration(
-				true, false, new ResourceConfiguration.Local(path), null), new DefaultResourceLoader());
+				true, false, new ResourceConfiguration.Local(relativise(path)), null),
+				new DefaultResourceLoader());
+	}
+
+	private static String relativise(String path) {
+		if (path.isEmpty()) {
+			return path;
+		}
+		java.nio.file.Path p = java.nio.file.Paths.get(path);
+		if (!p.isAbsolute()) {
+			return path.endsWith("/") ? path : path + "/";
+		}
+		java.nio.file.Path cwd = java.nio.file.Paths.get(System.getProperty("user.dir"));
+		try {
+			String rel = cwd.relativize(p).toString();
+			System.out.println("note     : relativised " + path + " -> " + rel);
+			return rel.endsWith("/") ? rel : rel + "/";
+		} catch (IllegalArgumentException e) {
+			// Different root - cannot relativise. Say so rather than hand back an
+			// absolute path that will NPE unhelpfully.
+			throw new IllegalArgumentException("resource path must be under the working "
+					+ "directory (" + cwd + "); got " + path, e);
+		}
 	}
 }

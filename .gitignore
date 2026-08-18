@@ -29,3 +29,7 @@ application-*.properties
 snomed-release-validation-assertions
 snomed-drools-rules
 /local*.env
+
+# Drools test resources are fetched from the canonical bucket by
+# fetch-test-resources.sh, not committed - they are IHTSDO's to version.
+/test-resources/
