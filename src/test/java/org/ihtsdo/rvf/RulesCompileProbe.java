@@ -40,6 +40,32 @@ public class RulesCompileProbe {
 			// KieBase build time.
 			validator.getRuleExecutor().newTestResourceProvider(local(resources));
 			System.out.println("RESULT   : rules compiled, executor built OK");
+
+			// Compiling is not running. A rule that builds can still fail the
+			// moment it touches a Concept/Description/Relationship, which is
+			// where the 4.0.0 domain-type and Lucene mismatches actually
+			// surfaced. Pass a release directory to exercise that path too.
+			if (args.length > 2) {
+				java.util.Set<String> dirs = new java.util.HashSet<>(
+						java.util.List.of(args[2]));
+				java.util.Set<String> ruleSets = args.length > 3
+						? new java.util.HashSet<>(java.util.List.of(args[3].split(",")))
+						: new java.util.HashSet<>(java.util.List.of("common-authoring"));
+				System.out.println("release  : " + args[2]);
+				System.out.println("ruleSets : " + ruleSets);
+				long t0 = System.currentTimeMillis();
+				var invalid = validator.validateRF2Files(dirs, null, ruleSets, null,
+						args.length > 4 ? args[4] : null, null, true);
+				System.out.println("RAN      : " + invalid.size() + " rule violations in "
+						+ ((System.currentTimeMillis() - t0) / 1000) + "s");
+				java.util.Map<String, Integer> byRule = new java.util.TreeMap<>();
+				invalid.forEach(i -> byRule.merge(String.valueOf(i.getMessage()), 1, Integer::sum));
+				byRule.entrySet().stream()
+						.sorted((a, b) -> b.getValue() - a.getValue())
+						.limit(10)
+						.forEach(e -> System.out.println(String.format("   %6d  %s",
+								e.getValue(), e.getKey().substring(0, Math.min(80, e.getKey().length())))));
+			}
 		} catch (Throwable t) {
 			System.out.println("RESULT   : FAILED");
 			System.out.println(t.getClass().getName() + ": "
