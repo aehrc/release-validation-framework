@@ -37,6 +37,16 @@ public class QAResult implements Serializable {
 	@Column(name ="table_name")
 	private String tableName;
 
+	/**
+	 * Set by an assertion that has already decided which modules its failures
+	 * concern, exempting those rows from the extension-module filter applied in
+	 * MysqlFailuresExtractor. Nullable: assertions that do not name this column
+	 * in their INSERT leave it NULL, which reads back as false and so preserves
+	 * the pre-existing filtering.
+	 */
+	@Column(name ="skip_module_check")
+	private Boolean skipModuleCheck = false;
+
 	public String getDetails() {
 		return details;
 	}
@@ -83,5 +93,13 @@ public class QAResult implements Serializable {
 
 	public void setTableName(String tableName) {
 		this.tableName = tableName;
+	}
+
+	public Boolean getSkipModuleCheck() {
+		return skipModuleCheck;
+	}
+
+	public void setSkipModuleCheck(Boolean skipModuleCheck) {
+		this.skipModuleCheck = skipModuleCheck;
 	}
 }
