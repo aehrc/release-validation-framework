@@ -1,0 +1,12 @@
+branded clinical drug
+branded clinical drug package
+branded physical object
+branded physical object package
+branded product
+branded product package
+clinical drug package
+containerized branded clinical drug package
+containerized branded physical object package
+containerized branded product package
+physical object package
+product package

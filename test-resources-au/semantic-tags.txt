@@ -1,0 +1,81 @@
+calculation
+metadata
+basic dose form
+occupation
+unit of presentation
+staging scale
+medicinal product
+namespace concept
+medicinal product form
+body structure
+state of matter
+physical force
+number
+linkage concept
+clinical drug
+physical object
+supplier
+cell structure
+link assertion
+release characteristic
+organism
+religion/philosophy
+real clinical drug
+valence
+finding
+administration method
+racial group
+person
+ethnic group
+core metadata concept
+packaged clinical drug
+theoretical entity
+role
+assessment scale
+tumor staging
+pattern
+observable entity
+cell
+social concept
+life style
+special concept
+real medicinal product
+specimen
+environment / location
+attribute
+event
+situation
+navigational concept
+regime/therapy
+intended site
+product
+product name
+substance
+procedure
+transformation
+qualifier value
+dose form
+foundation metadata concept
+disorder
+disposition
+environment
+vaccine
+administrative
+OWL metadata concept
+inactive concept
+morphologic abnormality
+real packaged clinical drug
+record artifact
+geographic location
+branded clinical drug
+branded clinical drug package
+branded physical object
+branded physical object package
+branded product
+branded product package
+clinical drug package
+containerized branded clinical drug package
+containerized branded physical object package
+containerized branded product package
+physical object package
+product package
