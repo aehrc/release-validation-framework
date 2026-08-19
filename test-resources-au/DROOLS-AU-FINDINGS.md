@@ -79,3 +79,61 @@ positive and should not be read as content.
 content findings and some will be further model mismatches of the same kind.
 Nothing here should be treated as a defect list until each is checked the way
 the three above were.
+
+---
+
+# Externalising the FSN-synonym exemption list
+
+**It is possible with no engine change**, reusing machinery that already exists.
+
+`DroolsDescriptionService.isSemanticTagCompatibleWithinHierarchy(term, tags)` is
+already a global available to every rule, and its implementation is simply:
+
+    tag = getTag(term)
+    for topLevel in tags:
+        if semanticHierarchyMap.get(topLevel).contains(tag): return true
+    return false
+
+`semanticHierarchyMap` is `semantic-tag-hierarchies.txt`, which is already an
+external, per-edition file. So an arbitrary named list of tags can be put in that
+file under its own key and queried from a rule - no new resource file, no new
+loader, no change to snomed-drools-engine.
+
+## The change
+
+`semantic-tag-hierarchies.txt` gains one line:
+
+    fsn-synonym-exempt=product,medicinal product,medicinal product form,clinical drug,substance,product name,packaged clinical drug,real clinical drug,real medicinal product,real packaged clinical drug,supplier,<extension tags>
+
+`FsnTermHavingASameSynonynTerm.drl` replaces the hardcoded literal:
+
+    && DescriptionHelper.getTag(term) not in ("product", "medicinal product", ...)
+
+with:
+
+    && !descriptionService.isSemanticTagCompatibleWithinHierarchy(
+           term, new HashSet(Arrays.asList("fsn-synonym-exempt")))
+
+plus `import java.util.Arrays` / `java.util.HashSet` and the
+`descriptionService` global, which this rule did not previously declare.
+
+## Why a new key rather than reusing `product=`
+
+The obvious move is to ask "is this tag under the product hierarchy?", since the
+exemption list looks like the drug model. It is not equivalent, and the
+difference is not academic:
+
+    in the exemption list, NOT under product=   substance, product name, supplier
+    under product=, NOT in the exemption list   physical object, medicinal product precisely
+
+Reusing `product=` would silently stop checking every `(physical object)`
+concept and start checking every `(substance)` one. A dedicated key keeps the
+rule's semantics exactly as they are today for the international edition, and
+lets an extension add its own names.
+
+## Status
+
+Implemented and compiling on this branch as a PROOF, not as a fork we intend to
+carry - `checkout-resources.sh` clones the rules at a pinned commit, so this
+patch is applied on top locally and would be lost on a re-clone. The right home
+is upstream in snomed-drools-rules.
