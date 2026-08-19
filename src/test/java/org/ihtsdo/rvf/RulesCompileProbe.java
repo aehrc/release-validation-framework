@@ -65,6 +65,25 @@ public class RulesCompileProbe {
 						.limit(10)
 						.forEach(e -> System.out.println(String.format("   %6d  %s",
 								e.getValue(), e.getKey().substring(0, Math.min(80, e.getKey().length())))));
+
+				// The top 10 is for reading; the full breakdown is for analysis.
+				// Without it a "remaining ~75k" is a number nobody can act on -
+				// it hides both the long tail of rules and which components they
+				// concern. Severity matters too: WARNING and ERROR are not the
+				// same finding, and the report treats them differently.
+				String dump = System.getProperty("drools.out");
+				if (dump != null) {
+					StringBuilder sb = new StringBuilder();
+					sb.append("count\tseverity\tconceptId\tcomponentId\tmessage\n");
+					invalid.forEach(i -> sb
+							.append("1\t").append(i.getSeverity())
+							.append("\t").append(i.getConceptId())
+							.append("\t").append(i.getComponentId())
+							.append("\t").append(String.valueOf(i.getMessage()).replace('\t', ' '))
+							.append("\n"));
+					java.nio.file.Files.writeString(java.nio.file.Path.of(dump), sb.toString());
+					System.out.println("wrote    : " + dump + " (" + invalid.size() + " rows)");
+				}
 			}
 		} catch (Throwable t) {
 			System.out.println("RESULT   : FAILED");

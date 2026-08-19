@@ -4,9 +4,11 @@ Measured on the AU daily build 20260831, rule sets `common-authoring` +
 `au-authoring`, engine = the upgraded RVF (snomed-drools 6.0.0, Drools 10.2.0,
 Lucene 9.12.0).
 
-    baseline                                               505,471 violations
-    after AU semantic tags + hierarchy (test-resources-au) 218,106
-    of which one rule                                      143,065
+    baseline                                                505,471 violations
+    after AU semantic tags + hierarchy (test-resources-au)  218,106
+    of which one rule                                       143,065
+    after externalising that rule's exemption list           75,496
+    that rule now                                               455
 
 ## Fixed by reference data (see README.md)
 
@@ -15,7 +17,7 @@ Lucene 9.12.0).
 | Active FSN should end with a valid semantic tag | 143,684 | 0 |
 | A concept's semantic tag should be compatible with those of the active parent(s) | 143,761 | 0 |
 
-## NOT fixable by reference data: 143,065
+## Not fixable by reference data alone: 143,065
 
 `For each active FSN there is a synonym that has the same text.`
 (`common-authoring/terms/fsn-term-having-a-same-synonym-term/FsnTermHavingASameSynonynTerm.drl`,
@@ -65,20 +67,92 @@ order of preference:
 Until one of those lands, this rule's output on an AU release is ~99% false
 positive and should not be read as content.
 
-## Remaining after the reference-data fix, excluding the above
+## The remaining 75,496, triaged
 
-    18,062  active term, case significance 'only initial character case insensitive'
-     5,147  active FSN contains one of & % $ @ #
-     1,347  FSN must be represented in at least one dialect
-       725  first letter of an active FSN should be capitalized
-       391  active concept has top level parents that are both (product) and (physical object)
-       299  active terms sharing first word with case-sensitive term should share case significance
-       147  active FSN should follow SEP naming conventions
+Counting by raw message hides most of this: the messages interpolate concept
+ids, `|Fully specified name|` text and `Type_<sctid>` tokens, so one rule splits
+into thousands of one-row buckets. An earlier top-10 accounted for 26,706 of
+75,496 and made the rest look absent rather than merely unaggregated. Normalised
+(`rvf-local-runs/triage-drools.py`), the whole 218,106 resolves to **30 rules**.
 
-~75,000 total across all remaining rules. NOT yet triaged - some will be real AU
-content findings and some will be further model mismatches of the same kind.
-Nothing here should be treated as a defect list until each is checked the way
-the three above were.
+Two discriminators do nearly all the work:
+
+* **the FSN semantic tag of the concept the rule fired on** - every model
+  mismatch found so far is a rule that names international drug-model tags in a
+  literal and therefore misfires on the AMT tags that mean the same thing;
+* **the module of the concept** - 5% of all findings are on international-module
+  concepts, but for some rules it is 100%. Those are not AU content at all.
+
+| rule | n | what it actually is |
+|---|---|---|
+| For each active FSN there is a synonym that has the same text | 143,065 | model mismatch. **Fixed** above: 455 remain |
+| Term already exists within this hierarchy | 29,990 | 29,480 (98%) are AMT package-level pairs - TPP/CTPP/TPUU sharing one preferred term by design. Every flagged description is a SYNONYM, not an FSN: the FSNs differ by tag, the preferred terms are deliberately identical. 510 same-tag residue |
+| cI term should contain a capital after the first character | 18,062 | 11,876 (66%) carry a case-sensitive unit (`mg`, `mL`, `IU`...) but sit at an AMT tag. The rule's `isDrugWithCaseSensitiveUnit` exemption is gated on `"clinical drug".equals(semanticTag)` - same defect class, same one-tag-literal cause. 6,186 residue |
+| Two relationships with same type, target and group (ERROR) | 7,908 | 5,015 (63%) on international-module concepts. 2,893 AU |
+| Redundantly stated IsA | 6,524 | 5,705 name an international drug top-parent (Medicinal product package, Medicinal product, Drug-device combination product) - AMT states both an international and an AMT parent. A content decision, not a rule bug. 819 other |
+| FSN contains &, %, $, @ or # | 5,147 | 3,613 contain `&` and 1,594 `%` - ARTG-registered product names (`Bausch & Lomb`, `Naphcon-A 0.025%`). Not AU-fixable: the term is the registered name |
+| Inferred relationship has a different module | 3,141 | 2,996 are an AU-module relationship on an international-module concept - which is what an extension IS. Written for a monolithic edition |
+| Stated relationship has a different module | 1,158 | 1,102 the same |
+| FSN must be in at least one dialect (ERROR) | 1,347 | 949 (70%) international content |
+| First letter of FSN should be capitalized | 725 | 678 (93%) international content |
+| Top parents both (product) and (physical object) | 391 | 374 AU, mostly (branded product). Needs content review |
+| Terms sharing first word should share case significance | 299 | 283 (94%) international content |
+| FSN should follow SEP naming conventions | 147 | 147 (100%) international content |
+| Semantic tag compatible with active parent(s) | 78 | reference-data gap. **Fixed** below |
+| FSN should not start with open parentheses | 55 | 55 (100%) international content |
+| Text definitions must be in at least one dialect (ERROR) | 34 | 34 (100%) international content |
+| 14 further rules | 35 | mostly singletons |
+
+### The 195 module mismatches that go the other way
+
+4,098 of the 4,299 module findings are AU relationships on international
+concepts and are by design. The other 195 are the reverse - an
+**international-module relationship on an AU-module concept** - which should not
+happen and is the one part of that rule's output worth reading.
+
+### Why so much international content appears at all
+
+RVF runs Drools over the **whole release snapshot**; the authoring platform runs
+the same rules over a **change set**. So rules that have never been applied
+retrospectively surface their entire historical backlog on the first full-snapshot
+run, and it lands in an AU report even though AU authored none of it. That is not
+a defect in either system - but it does mean a raw Drools count is not a measure
+of AU content quality, and the module column has to be read before the number is.
+
+### Second reference-data gap, fixed
+
+`A concept's semantic tag should be compatible with those of the active parent(s)`
+still fired 78 times after the AU tags were added. All 78 resolve to one
+top-level hierarchy that the international file has no line for:
+
+    32570731000036101 |Administrative value (administrative)|   77 concepts
+    900000000000441003 |SNOMED CT Model Component (metadata)|    1 concept
+
+`administrative` is already a recognised tag in `semantic-tags.txt`, but
+`isSemanticTagCompatibleWithinHierarchy` walks `semantic-tag-hierarchies.txt`,
+where it appeared under no key at all. Two lines fix it:
+
+    administrative=administrative
+    metadata=...,reference set        (appended)
+
+## What is left that is genuinely AU content
+
+Everything above that is neither a tag-model mismatch, nor an
+extension-by-design module difference, nor inherited international content:
+
+    ~6,186  cI terms with no capital and no unit                needs a case-significance review
+    ~5,705  AMT dual-parenting to an international top parent   a modelling decision, not a bug
+    ~5,147  &/% in ARTG-derived product names                   not fixable at our end
+    ~2,893  duplicate stated relationships on AU concepts       genuine, worth a defect list
+      ~819  other redundant IsA
+      ~510  duplicate terms at the same semantic tag            genuine
+      ~455  FSNs with no matching synonym, non-drug             genuine
+      ~398  FSNs not preferred in any dialect                   genuine, ERROR severity
+      ~374  concepts under both (product) and (physical object)
+      ~195  international-module relationships on AU concepts
+
+The only ERROR-severity items in that list are the duplicate relationships and
+the dialect findings; everything else is WARNING.
 
 ---
 
@@ -131,9 +205,30 @@ concept and start checking every `(substance)` one. A dedicated key keeps the
 rule's semantics exactly as they are today for the international edition, and
 lets an extension add its own names.
 
+## Measured effect
+
+    For each active FSN there is a synonym that has the same text
+        before   143,065
+        after        455    (0.3% - the remainder are genuine, i.e. non-drug)
+    total findings
+        before   218,106
+        after     75,496
+
+No other rule's count moves: the change is confined to one rule's guard, so the
+remaining-75k triage above is valid whether or not the patch is applied.
+
 ## Status
 
 Implemented and compiling on this branch as a PROOF, not as a fork we intend to
 carry - `checkout-resources.sh` clones the rules at a pinned commit, so this
-patch is applied on top locally and would be lost on a re-clone. The right home
-is upstream in snomed-drools-rules.
+patch is applied on top locally and is lost on every re-clone. It HAS been lost
+once already, silently, between two runs. Artefacts in `upstream-proposal/`:
+
+    FsnTermHavingASameSynonynTerm.drl.orig      pristine, at the pinned commit
+    FsnTermHavingASameSynonynTerm.drl.patched   the proposed rule
+    rule.patch                                  unified diff between the two
+    apply.sh                                    re-applies it after any re-clone
+
+Run `apply.sh` after `checkout-resources.sh`, or the next run silently reverts to
+143,065 and looks like a regression in the reference data. The right home is
+upstream in snomed-drools-rules.
