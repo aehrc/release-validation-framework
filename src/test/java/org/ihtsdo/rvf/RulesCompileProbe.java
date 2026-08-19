@@ -53,8 +53,18 @@ public class RulesCompileProbe {
 						: new java.util.HashSet<>(java.util.List.of("common-authoring"));
 				System.out.println("release  : " + args[2]);
 				System.out.println("ruleSets : " + ruleSets);
+				// RVF turns a Drools rule off per run by passing its assertion
+				// UUID as assertionExclusionList - the engine filters on
+				// InvalidContent.getRuleId(). Mirror that here so a local run
+				// can prove an exclusion works before it goes near a run config.
+				String excludeProp = System.getProperty("drools.exclude", "");
+				java.util.Set<String> exclusions = excludeProp.isBlank() ? null
+						: new java.util.HashSet<>(java.util.List.of(excludeProp.split(",")));
+				if (exclusions != null) {
+					System.out.println("excluded : " + exclusions);
+				}
 				long t0 = System.currentTimeMillis();
-				var invalid = validator.validateRF2Files(dirs, null, ruleSets, null,
+				var invalid = validator.validateRF2Files(dirs, null, ruleSets, exclusions,
 						args.length > 4 ? args[4] : null, null, true);
 				System.out.println("RAN      : " + invalid.size() + " rule violations in "
 						+ ((System.currentTimeMillis() - t0) / 1000) + "s");

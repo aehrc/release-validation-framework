@@ -1,0 +1,87 @@
+import org.ihtsdo.drools.domain.Concept
+import org.ihtsdo.drools.domain.Description
+import org.ihtsdo.drools.domain.Constants
+import org.ihtsdo.drools.response.InvalidContent
+import org.ihtsdo.drools.helper.DescriptionHelper
+import org.ihtsdo.drools.response.Severity
+import java.text.Normalizer
+import java.util.regex.Pattern
+import java.util.Arrays
+import java.util.HashSet
+import org.ihtsdo.drools.service.DescriptionService
+
+global java.util.List invalidContent
+global DescriptionService descriptionService
+
+function String stripAccents(String term) {
+	String str = term;
+	str = Normalizer.normalize(str, Normalizer.Form.NFD);
+	str = str.replaceAll("\\p{M}", "");
+	return str;
+}
+
+function boolean isDrugWithCaseSensitiveUnit(String fsn, String term, DescriptionService descriptionService) {
+	if (!descriptionService.isSemanticTagCompatibleWithinHierarchy(fsn, new HashSet(Arrays.asList("case-significance-unit-exempt")))) {
+		return false;
+	}
+	if (term == null || term.isEmpty()) return false;
+	String stripTerm = term.trim();
+	String spTerm = " " + stripTerm;
+	String[] abbrevs = { "mg", "g", "ml", "mcg", "unit", "units", "IU", "mEq", "mL", "MBq", "ppm",
+			"microgram", "micrograms", "milligram", "milligrams", "nanogram", "nanograms",
+			"millilitre", "millilitres", "litre", "litres", "mmol", "mol",
+			"cm", "mm", "kg", "kBq", "GBq", "mmHg" };
+	for (int i = 0; i < abbrevs.length; i++) {
+		if (stripTerm.contains(" " + abbrevs[i] + " ") || 
+			stripTerm.endsWith(" " + abbrevs[i]) ||
+			stripTerm.endsWith("/" + abbrevs[i]) ||
+			spTerm.contains(" " +  abbrevs[i] + "/") ||
+			spTerm.contains("/" + abbrevs[i] + " ") ||
+			stripTerm.equals(abbrevs[i])) {
+			return true;
+		}
+	}
+	
+	return false;
+}
+
+rule "An active term on an active concept with case significance 'only initial character case insensitive' should contain a capital letter after the first character."
+	dialect "mvel"
+	when
+		c : Concept(active == true)
+		d1 : Description(conceptId == c.id && active && typeId == Constants.FSN && DescriptionHelper.getTag(term) != "substance")
+		d2 : Description(active == true && conceptId == c.id && caseSignificanceId == Constants.ONLY_INITIAL_CHARACTER_CASE_INSENSITIVE
+						&& stripAccents(term) not matches "^..*[A-Z].*$"
+						&& stripAccents(term) not matches "^..*[0-9]$"
+						&& stripAccents(term) not matches "^..*[0-9][A-Za-z].*$"
+						&& stripAccents(term) not matches "^[<, %, >, . , &, ^, /].*$"
+						&& stripAccents(term) not matches "^..*\\p{Lu}.*$"
+						&& !isDrugWithCaseSensitiveUnit(d1.term, term, descriptionService))
+
+	then
+		invalidContent.add(new InvalidContent("4ee9cfeb-3ce5-48bf-b238-de7498fde042",
+				d2, "An active term on an active concept with case significance 'only initial character case insensitive' should contain " +
+				"a capital letter after the first character.", Severity.WARNING));
+end
+
+rule "An active term on an active concept with case significance 'entire term case insensitive' should not contain capital letters after the first character."
+	dialect "mvel"
+	when
+		c : Concept(active == true)
+		d : Description(active == true && conceptId == c.id && caseSignificanceId == Constants.ENTIRE_TERM_CASE_INSENSITIVE && (term matches "^..*[A-Z].*$" || stripAccents(term) matches "^..*\\p{Lu}.*$"))
+	then
+		invalidContent.add(new InvalidContent("900bbad3-5ebf-47ff-8206-01ff57c8f975",
+				d, "An active term on an active concept with case significance 'entire term case insensitive' should not contain " +
+				"capital letters after the first character.", Severity.WARNING));
+end
+
+rule "Terms containing a capital letter are expected to be marked cI or CS."
+	dialect "mvel"
+	when
+		c : Concept(active == true)
+		d : Description(active == true && conceptId == c.id && caseSignificanceId == Constants.ENTIRE_TERM_CASE_INSENSITIVE && (term matches "^..*[A-Z].*$" || stripAccents(term) matches "^..*\\p{Lu}.*$"))
+	then
+		invalidContent.add(new InvalidContent("aa0b2de4-5b51-4594-980c-3ef46b7b4ade",
+				d, "Terms containing a capital letter are expected to be marked cI or CS.", Severity.WARNING));
+end
+

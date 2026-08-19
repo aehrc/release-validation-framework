@@ -9,11 +9,28 @@ Lucene 9.12.0).
     of which one rule                                       143,065
     after externalising that rule's exemption list           75,496
     that rule now                                               455
-    after the administrative= hierarchy line                  75,418   <- measured
-    30 distinct rules become                                      29
+    after the administrative= hierarchy line                  75,418
+    after externalising four more tag literals                16,736   <- measured
+    27 distinct rules
 
-Both fixes verified end to end in one run: 75,418 findings over 29 rules,
-9,305 ERROR and 66,113 WARNING, with the tag-vs-parent rule at zero.
+Each stage verified end to end in its own full run. The final 16,736 is
+7,431 WARNING and 9,305 ERROR - and 7,908 of those ERRORs are one loader
+artefact (see below), so the real ERROR count is 1,397.
+
+| rule | before | after | how |
+|---|---|---|---|
+| For each active FSN there is a synonym that has the same text | 143,065 | 455 | `fsn-synonym-exempt` |
+| Term already exists within this hierarchy | 29,990 | 478 | `duplicate-term-exempt`, different-level pairs only |
+| cI term should contain a capital after the first character | 18,062 | 4,296 | `case-significance-unit-exempt` + spelled-out units |
+| Concept should not contain redundantly stated IsA | 6,524 | 554 | `redundant-isa-exempt` |
+| FSN contains &, %, $, @ or # | 5,147 | 12 | `fsn-special-char-exempt` |
+| Relationship module differs from source concept | 4,299 | 0 | `assertionExclusionList` (run config, no rule change) |
+| Semantic tag compatible with active parent(s) | 78 | 0 | `administrative=` hierarchy line |
+
+The duplicate-term guard exempts a pair only when the two concepts sit at
+DIFFERENT levels of the same product hierarchy. A tag-only guard would have been
+simpler and would have lost 38 real findings - among them 20 genuine
+`(clinical drug)` <-> `(clinical drug)` duplicates, which survive here.
 
 ## Fixed by reference data (see README.md)
 
@@ -93,7 +110,7 @@ Two discriminators do nearly all the work:
 | For each active FSN there is a synonym that has the same text | 143,065 | model mismatch. **Fixed** above: 455 remain |
 | Term already exists within this hierarchy | 29,990 | 29,480 (98%) are AMT package-level pairs - TPP/CTPP/TPUU sharing one preferred term by design. Every flagged description is a SYNONYM, not an FSN: the FSNs differ by tag, the preferred terms are deliberately identical. 510 same-tag residue |
 | cI term should contain a capital after the first character | 18,062 | 11,876 (66%) carry a case-sensitive unit (`mg`, `mL`, `IU`...) but sit at an AMT tag. The rule's `isDrugWithCaseSensitiveUnit` exemption is gated on `"clinical drug".equals(semanticTag)` - same defect class, same one-tag-literal cause. 6,186 residue |
-| Two relationships with same type, target and group (ERROR) | 7,908 | 5,015 (63%) on international-module concepts. 2,893 AU |
+| Two relationships with same type, target and group (ERROR) | 7,908 | none of it is content - a loader artefact, see below |
 | Redundantly stated IsA | 6,524 | 5,705 name an international drug top-parent (Medicinal product package, Medicinal product, Drug-device combination product) - AMT states both an international and an AMT parent. A content decision, not a rule bug. 819 other |
 | FSN contains &, %, $, @ or # | 5,147 | 3,613 contain `&` and 1,594 `%` - ARTG-registered product names (`Bausch & Lomb`, `Naphcon-A 0.025%`). Not AU-fixable: the term is the registered name |
 | Inferred relationship has a different module | 3,141 | 2,996 are an AU-module relationship on an international-module concept - which is what an extension IS. Written for a monolithic edition |
@@ -114,6 +131,29 @@ Two discriminators do nearly all the work:
 concepts and are by design. The other 195 are the reverse - an
 **international-module relationship on an AU-module concept** - which should not
 happen and is the one part of that rule's output worth reading.
+
+### The 7,908 duplicate-relationship ERRORs are a loader artefact
+
+`ReleaseImporter` loads `SNAPSHOT_AND_DELTA`, so an OWL axiom that changed in
+this release is read twice - once from the Snapshot and once from the Delta,
+under the same axiom id. Each read instantiates the axiom's relationships again,
+so every relationship inside it gains a twin with the same `axiomId`, `typeId`,
+`destinationId` and `relationshipGroup` - which is exactly the match condition
+of `DuplicateRelationships.drl`.
+
+    findings                                          7,908
+    distinct source concepts                          1,782
+    concepts with an axiom active in Snapshot AND Delta 1,782
+    overlap                                             100%, both directions, zero residue
+
+Worked example: concept 75968004 has one axiom, present once in each file. All
+22 of its relationships are reported, each exactly once, though no two of them
+share a type/target/group.
+
+This is not AU-specific and not extension-specific - any release with a
+non-empty Delta hits it, and it fires at ERROR. It is the single biggest item
+left, and it is a defect in RVF/snomed-drools rather than in content. Raised in
+`upstream-proposal/UPSTREAM-FEEDBACK.md`.
 
 ### Why so much international content appears at all
 

@@ -1,0 +1,167 @@
+--- a/common-authoring/relationships/redundant-is-a-relationship/RedundantIsaRelationship.drl
++++ b/common-authoring/relationships/redundant-is-a-relationship/RedundantIsaRelationship.drl
+@@ -1,5 +1,6 @@
+ import org.ihtsdo.drools.domain.Constants
+ import org.ihtsdo.drools.domain.Concept
++import org.ihtsdo.drools.domain.Description
+ import org.ihtsdo.drools.domain.Relationship
+ import org.ihtsdo.drools.response.InvalidContent
+ import org.ihtsdo.drools.service.ConceptService
+@@ -7,6 +8,8 @@
+ import org.ihtsdo.drools.response.Severity
+ 
+ import java.util.ArrayList
++import java.util.Arrays
++import java.util.HashSet
+ import java.util.Collections
+ 
+ global java.util.List invalidContent
+@@ -17,6 +20,8 @@
+ 	dialect "mvel"
+ 	when
+ 		c : Concept(active)
++		Description(conceptId == c.id, active, typeId == Constants.FSN,
++						!descriptionService.isSemanticTagCompatibleWithinHierarchy(term, new HashSet(Arrays.asList("redundant-isa-exempt"))))
+ 		r1 : Relationship(active && sourceId == c.id && typeId == Constants.IS_A && characteristicTypeId == Constants.STATED_RELATIONSHIP && !axiomGCI)
+ 		r2 : Relationship(active && sourceId == c.id && typeId == Constants.IS_A && characteristicTypeId == Constants.STATED_RELATIONSHIP && !axiomGCI && r1.id != id)
+ 		statedAncestors : ArrayList(size > 0) from collect( String() from conceptService.findStatedAncestorsOfConcepts(Collections.singletonList(r1.destinationId)))
+--- a/common-authoring/terms/fsn-term-having-a-same-synonym-term/FsnTermHavingASameSynonynTerm.drl
++++ b/common-authoring/terms/fsn-term-having-a-same-synonym-term/FsnTermHavingASameSynonynTerm.drl
+@@ -6,16 +6,18 @@
+ import org.ihtsdo.drools.domain.Constants
+ import java.util.ArrayList
+ import org.ihtsdo.drools.helper.ConceptHelper
++import java.util.Arrays
++import java.util.HashSet
+ 
+ global java.util.List invalidContent
++global org.ihtsdo.drools.service.DescriptionService descriptionService
+ 
+ rule "For each active FSN there is a synonym that has the same text."
+ 	dialect "mvel"
+ 	when
+ 		c : Concept(active)
+-		fsn : Description(active, conceptId == c.id, typeId == Constants.FSN && (acceptabilityMap["900000000000509007"] == Constants.ACCEPTABILITY_PREFERRED || acceptabilityMap["900000000000508004"] == Constants.ACCEPTABILITY_PREFERRED) && DescriptionHelper.getTag(term)
+-						not in ("product", "medicinal product", "medicinal product form", "clinical drug", "substance", "product name", "packaged clinical drug", "real clinical drug",
+-						"real medicinal product", "real packaged clinical drug", "supplier"))
++		fsn : Description(active, conceptId == c.id, typeId == Constants.FSN && (acceptabilityMap["900000000000509007"] == Constants.ACCEPTABILITY_PREFERRED || acceptabilityMap["900000000000508004"] == Constants.ACCEPTABILITY_PREFERRED)
++						&& !descriptionService.isSemanticTagCompatibleWithinHierarchy(term, new HashSet(Arrays.asList("fsn-synonym-exempt"))))
+ 		ArrayList(size > 0) from collect (
+ 			Description(active, conceptId == c.id, typeId == Constants.SYNONYM)
+ 		)
+--- a/common-authoring/terms/fsn-term/FSNTermFormat.drl
++++ b/common-authoring/terms/fsn-term/FSNTermFormat.drl
+@@ -7,6 +7,8 @@
+ import org.ihtsdo.drools.service.ConceptService
+ import org.ihtsdo.drools.service.DescriptionService
+ import java.util.ArrayList
++import java.util.Arrays
++import java.util.HashSet
+ 
+ global java.util.List invalidContent
+ global ConceptService conceptService
+@@ -56,7 +58,8 @@
+ 	dialect "mvel"
+ 	when
+ 		c : Concept(active)
+-		d : Description(conceptId == c.id && active == true && typeId == Constants.FSN && term matches ".*[&%$@#].*")
++		d : Description(conceptId == c.id && active == true && typeId == Constants.FSN && term matches ".*[&%$@#].*"
++						&& !descriptionService.isSemanticTagCompatibleWithinHierarchy(term, new HashSet(Arrays.asList("fsn-special-char-exempt"))))
+ 	then
+ 		invalidContent.add(new InvalidContent("e3048fa9-4238-48f1-a836-1b91ed4fcec2",
+ 				d, "An active FSN should not contain the special characters &, %, $, @ or #.", Severity.WARNING));
+--- a/common-authoring/terms/term-case-significance/TermCaseSignificance.drl
++++ b/common-authoring/terms/term-case-significance/TermCaseSignificance.drl
+@@ -6,8 +6,12 @@
+ import org.ihtsdo.drools.response.Severity
+ import java.text.Normalizer
+ import java.util.regex.Pattern
++import java.util.Arrays
++import java.util.HashSet
++import org.ihtsdo.drools.service.DescriptionService
+ 
+ global java.util.List invalidContent
++global DescriptionService descriptionService
+ 
+ function String stripAccents(String term) {
+ 	String str = term;
+@@ -16,15 +20,17 @@
+ 	return str;
+ }
+ 
+-function boolean isDrugWithCaseSensitiveUnit(String fsn, String term) {
+-	String semanticTag = DescriptionHelper.getTag(fsn);
+-	if (!"clinical drug".equals(semanticTag)) {
++function boolean isDrugWithCaseSensitiveUnit(String fsn, String term, DescriptionService descriptionService) {
++	if (!descriptionService.isSemanticTagCompatibleWithinHierarchy(fsn, new HashSet(Arrays.asList("case-significance-unit-exempt")))) {
+ 		return false;
+ 	}
+ 	if (term == null || term.isEmpty()) return false;
+ 	String stripTerm = term.trim();
+ 	String spTerm = " " + stripTerm;
+-	String[] abbrevs = { "mg", "g", "ml", "mcg", "unit", "units", "IU", "mEq", "mL",  "MBq", "ppm" };
++	String[] abbrevs = { "mg", "g", "ml", "mcg", "unit", "units", "IU", "mEq", "mL", "MBq", "ppm",
++			"microgram", "micrograms", "milligram", "milligrams", "nanogram", "nanograms",
++			"millilitre", "millilitres", "litre", "litres", "mmol", "mol",
++			"cm", "mm", "kg", "kBq", "GBq", "mmHg" };
+ 	for (int i = 0; i < abbrevs.length; i++) {
+ 		if (stripTerm.contains(" " + abbrevs[i] + " ") || 
+ 			stripTerm.endsWith(" " + abbrevs[i]) ||
+@@ -50,7 +56,7 @@
+ 						&& stripAccents(term) not matches "^..*[0-9][A-Za-z].*$"
+ 						&& stripAccents(term) not matches "^[<, %, >, . , &, ^, /].*$"
+ 						&& stripAccents(term) not matches "^..*\\p{Lu}.*$"
+-						&& !isDrugWithCaseSensitiveUnit(d1.term, term))
++						&& !isDrugWithCaseSensitiveUnit(d1.term, term, descriptionService))
+ 
+ 	then
+ 		invalidContent.add(new InvalidContent("4ee9cfeb-3ce5-48bf-b238-de7498fde042",
+--- a/common-authoring/terms/term-unique-in-hierarchy/TermUniqueInHierarchy.drl
++++ b/common-authoring/terms/term-unique-in-hierarchy/TermUniqueInHierarchy.drl
+@@ -5,18 +5,46 @@
+ import org.ihtsdo.drools.service.ConceptService
+ import org.ihtsdo.drools.response.InvalidContent
+ import org.ihtsdo.drools.response.Severity
++import org.ihtsdo.drools.domain.Constants
++import java.util.Arrays
++import java.util.Collections
++import java.util.HashSet
++import java.util.Set
+ 
+ global java.util.List invalidContent
+ global DescriptionService descriptionService
+ global ConceptService conceptService
+ 
++
++// A term is deliberately reused up and down a product package hierarchy: in AMT
++// the TPUU, TPP and CTPP FSNs differ only by their semantic tag, so their
++// preferred terms are identical by design. Exempt only a pair at DIFFERENT
++// levels - two concepts at the SAME level sharing a term is still a duplicate.
++// Membership is data, in semantic-tag-hierarchies.txt, so an extension can name
++// its own levels without a rule change.
++function boolean isSameProductFamilyAtDifferentLevel(String fsn, String duplicateConceptId, DescriptionService descriptionService) {
++	Set<String> key = new HashSet<>(Arrays.asList("duplicate-term-exempt"));
++	if (!descriptionService.isSemanticTagCompatibleWithinHierarchy(fsn, key)) {
++		return false;
++	}
++	Set<String> duplicateFsns = descriptionService.getFSNs(Collections.singleton(duplicateConceptId), Constants.US_EN_LANG_REFSET, Constants.GB_EN_LANG_REFSET);
++	if (duplicateFsns == null || duplicateFsns.isEmpty()) {
++		return false;
++	}
++	String duplicateFsn = duplicateFsns.iterator().next();
++	return descriptionService.isSemanticTagCompatibleWithinHierarchy(duplicateFsn, key)
++			&& !DescriptionHelper.getTag(fsn).equals(DescriptionHelper.getTag(duplicateFsn));
++}
++
+ // "Correlation ID" is a special case where duplicates are expected
+ rule "Two active descriptions in the same hierarchy should not share the same term, unless the language is different."
+ 	dialect "mvel"
+ 	when
+ 		c : Concept(active)
++		fsn : Description(c.id == fsn.conceptId && active && typeId == Constants.FSN)
+ 		d : Description(c.id == d.conceptId && active && term.length > 1 && !term.startsWith("Correlation ID"))
+ 		$duplicate : Description(active && id != d.id && conceptService.isActive(conceptId) == true) from descriptionService.findMatchingDescriptionInHierarchy(c, d)
++		eval(!isSameProductFamilyAtDifferentLevel(fsn.term, $duplicate.conceptId, descriptionService))
+ 	then
+ 		invalidContent.add(new InvalidContent("25334385-83b3-4531-8e6e-cf9e32ebccd2",
+ 				d, "Term already exists within this hierarchy on concept " + $duplicate.conceptId +

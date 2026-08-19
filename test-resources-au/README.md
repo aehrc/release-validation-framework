@@ -29,7 +29,11 @@ NOT added: a tag nothing uses cannot prevent a false positive, and would hide a
 real one if the level were ever renamed.
 
 **`semantic-tag-hierarchies.txt`** — the same 12 tags added to the `product=`
-and `physical object=` lines.
+and `physical object=` lines, plus `administrative=administrative` and
+`reference set` on `metadata=` (AU has a top-level hierarchy,
+`32570731000036101 |Administrative value (administrative)|`, that the
+international file has no line for), plus five keys that are not hierarchies at
+all - see below.
 
 The format is NOT a parent/child chain. `FSNSemanticTagAgainstParent.drl` calls
 `isSemanticTagCompatibleWithinHierarchy(term, getTags(topLevelFSNs))` where
@@ -60,11 +64,31 @@ The international model already contains AMT's levels under different names -
 `real clinical drug` is TPUU, `packaged clinical drug` is MPP,
 `real packaged clinical drug` is TPP. Only CTPP has no international equivalent.
 
+## The five exemption keys
+
+`semantic-tag-hierarchies.txt` is loaded into a plain `Map<String, Set<String>>`
+and queried by `isSemanticTagCompatibleWithinHierarchy(term, keys)`, which is a
+rule-visible global. Nothing requires a key to name a real hierarchy. So a rule
+that today hardcodes a list of drug-model tags can instead ask this file, and an
+extension can supply its own level names without forking the rules:
+
+    fsn-synonym-exempt              FsnTermHavingASameSynonynTerm
+    duplicate-term-exempt           TermUniqueInHierarchy
+    redundant-isa-exempt            RedundantIsaRelationship
+    fsn-special-char-exempt         FSNTermFormat (special characters)
+    case-significance-unit-exempt   TermCaseSignificance (isDrugWithCaseSensitiveUnit)
+
+Each defaults to the tags already in the rule's literal, so the international
+edition's behaviour is unchanged. The matching rule patches are in
+`upstream-proposal/` with an `apply.sh`; they are a proposal, not a fork we
+intend to carry.
+
 ## Effect, on the AU daily build 20260831
 
     Active FSN should end with a valid semantic tag        143,684 -> 0
     Concept's semantic tag compatible with parent(s)       143,761 -> 0
     total rule violations                                  505,471 -> 218,106
+    ...with the five exemption keys and the rule patches   218,106 -> 16,736
 
 ## Where this should really live
 
