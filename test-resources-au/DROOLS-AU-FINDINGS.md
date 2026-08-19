@@ -9,6 +9,11 @@ Lucene 9.12.0).
     of which one rule                                       143,065
     after externalising that rule's exemption list           75,496
     that rule now                                               455
+    after the administrative= hierarchy line                  75,418   <- measured
+    30 distinct rules become                                      29
+
+Both fixes verified end to end in one run: 75,418 findings over 29 rules,
+9,305 ERROR and 66,113 WARNING, with the tag-vs-parent rule at zero.
 
 ## Fixed by reference data (see README.md)
 
@@ -101,7 +106,7 @@ Two discriminators do nearly all the work:
 | Semantic tag compatible with active parent(s) | 78 | reference-data gap. **Fixed** below |
 | FSN should not start with open parentheses | 55 | 55 (100%) international content |
 | Text definitions must be in at least one dialect (ERROR) | 34 | 34 (100%) international content |
-| 14 further rules | 35 | mostly singletons |
+| 13 further rules | 35 | mostly singletons |
 
 ### The 195 module mismatches that go the other way
 
