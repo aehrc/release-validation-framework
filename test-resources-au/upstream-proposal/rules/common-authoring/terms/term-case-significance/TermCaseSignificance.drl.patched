@@ -6,12 +6,8 @@ import org.ihtsdo.drools.helper.DescriptionHelper
 import org.ihtsdo.drools.response.Severity
 import java.text.Normalizer
 import java.util.regex.Pattern
-import java.util.Arrays
-import java.util.HashSet
-import org.ihtsdo.drools.service.DescriptionService
 
 global java.util.List invalidContent
-global DescriptionService descriptionService
 
 function String stripAccents(String term) {
 	String str = term;
@@ -20,10 +16,7 @@ function String stripAccents(String term) {
 	return str;
 }
 
-function boolean isDrugWithCaseSensitiveUnit(String fsn, String term, DescriptionService descriptionService) {
-	if (!descriptionService.isSemanticTagCompatibleWithinHierarchy(fsn, new HashSet(Arrays.asList("case-significance-unit-exempt")))) {
-		return false;
-	}
+function boolean isTermWithCaseSensitiveUnit(String term) {
 	if (term == null || term.isEmpty()) return false;
 	String stripTerm = term.trim();
 	String spTerm = " " + stripTerm;
@@ -56,7 +49,7 @@ rule "An active term on an active concept with case significance 'only initial c
 						&& stripAccents(term) not matches "^..*[0-9][A-Za-z].*$"
 						&& stripAccents(term) not matches "^[<, %, >, . , &, ^, /].*$"
 						&& stripAccents(term) not matches "^..*\\p{Lu}.*$"
-						&& !isDrugWithCaseSensitiveUnit(d1.term, term, descriptionService))
+						&& !isTermWithCaseSensitiveUnit(term))
 
 	then
 		invalidContent.add(new InvalidContent("4ee9cfeb-3ce5-48bf-b238-de7498fde042",

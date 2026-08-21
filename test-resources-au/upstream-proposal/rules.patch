@@ -1,27 +1,19 @@
 --- a/common-authoring/relationships/redundant-is-a-relationship/RedundantIsaRelationship.drl
 +++ b/common-authoring/relationships/redundant-is-a-relationship/RedundantIsaRelationship.drl
-@@ -1,5 +1,6 @@
- import org.ihtsdo.drools.domain.Constants
- import org.ihtsdo.drools.domain.Concept
-+import org.ihtsdo.drools.domain.Description
- import org.ihtsdo.drools.domain.Relationship
+@@ -4,6 +4,7 @@
  import org.ihtsdo.drools.response.InvalidContent
  import org.ihtsdo.drools.service.ConceptService
-@@ -7,6 +8,8 @@
+ import org.ihtsdo.drools.service.DescriptionService
++import org.ihtsdo.drools.helper.ConceptHelper
  import org.ihtsdo.drools.response.Severity
  
  import java.util.ArrayList
-+import java.util.Arrays
-+import java.util.HashSet
- import java.util.Collections
- 
- global java.util.List invalidContent
-@@ -17,6 +20,8 @@
+@@ -16,7 +17,7 @@
+ rule "Redundantly stated IsA relationships."
  	dialect "mvel"
  	when
- 		c : Concept(active)
-+		Description(conceptId == c.id, active, typeId == Constants.FSN,
-+						!descriptionService.isSemanticTagCompatibleWithinHierarchy(term, new HashSet(Arrays.asList("redundant-isa-exempt"))))
+-		c : Concept(active)
++		c : Concept(active, ConceptHelper.isCoreModule(moduleId))
  		r1 : Relationship(active && sourceId == c.id && typeId == Constants.IS_A && characteristicTypeId == Constants.STATED_RELATIONSHIP && !axiomGCI)
  		r2 : Relationship(active && sourceId == c.id && typeId == Constants.IS_A && characteristicTypeId == Constants.STATED_RELATIONSHIP && !axiomGCI && r1.id != id)
  		statedAncestors : ArrayList(size > 0) from collect( String() from conceptService.findStatedAncestorsOfConcepts(Collections.singletonList(r1.destinationId)))
@@ -72,30 +64,16 @@
  				d, "An active FSN should not contain the special characters &, %, $, @ or #.", Severity.WARNING));
 --- a/common-authoring/terms/term-case-significance/TermCaseSignificance.drl
 +++ b/common-authoring/terms/term-case-significance/TermCaseSignificance.drl
-@@ -6,8 +6,12 @@
- import org.ihtsdo.drools.response.Severity
- import java.text.Normalizer
- import java.util.regex.Pattern
-+import java.util.Arrays
-+import java.util.HashSet
-+import org.ihtsdo.drools.service.DescriptionService
- 
- global java.util.List invalidContent
-+global DescriptionService descriptionService
- 
- function String stripAccents(String term) {
- 	String str = term;
-@@ -16,15 +20,17 @@
+@@ -16,15 +16,14 @@
  	return str;
  }
  
 -function boolean isDrugWithCaseSensitiveUnit(String fsn, String term) {
 -	String semanticTag = DescriptionHelper.getTag(fsn);
 -	if (!"clinical drug".equals(semanticTag)) {
-+function boolean isDrugWithCaseSensitiveUnit(String fsn, String term, DescriptionService descriptionService) {
-+	if (!descriptionService.isSemanticTagCompatibleWithinHierarchy(fsn, new HashSet(Arrays.asList("case-significance-unit-exempt")))) {
- 		return false;
- 	}
+-		return false;
+-	}
++function boolean isTermWithCaseSensitiveUnit(String term) {
  	if (term == null || term.isEmpty()) return false;
  	String stripTerm = term.trim();
  	String spTerm = " " + stripTerm;
@@ -107,12 +85,12 @@
  	for (int i = 0; i < abbrevs.length; i++) {
  		if (stripTerm.contains(" " + abbrevs[i] + " ") || 
  			stripTerm.endsWith(" " + abbrevs[i]) ||
-@@ -50,7 +56,7 @@
+@@ -50,7 +49,7 @@
  						&& stripAccents(term) not matches "^..*[0-9][A-Za-z].*$"
  						&& stripAccents(term) not matches "^[<, %, >, . , &, ^, /].*$"
  						&& stripAccents(term) not matches "^..*\\p{Lu}.*$"
 -						&& !isDrugWithCaseSensitiveUnit(d1.term, term))
-+						&& !isDrugWithCaseSensitiveUnit(d1.term, term, descriptionService))
++						&& !isTermWithCaseSensitiveUnit(term))
  
  	then
  		invalidContent.add(new InvalidContent("4ee9cfeb-3ce5-48bf-b238-de7498fde042",

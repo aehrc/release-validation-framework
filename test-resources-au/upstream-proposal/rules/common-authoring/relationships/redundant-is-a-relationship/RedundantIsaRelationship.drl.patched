@@ -1,15 +1,13 @@
 import org.ihtsdo.drools.domain.Constants
 import org.ihtsdo.drools.domain.Concept
-import org.ihtsdo.drools.domain.Description
 import org.ihtsdo.drools.domain.Relationship
 import org.ihtsdo.drools.response.InvalidContent
 import org.ihtsdo.drools.service.ConceptService
 import org.ihtsdo.drools.service.DescriptionService
+import org.ihtsdo.drools.helper.ConceptHelper
 import org.ihtsdo.drools.response.Severity
 
 import java.util.ArrayList
-import java.util.Arrays
-import java.util.HashSet
 import java.util.Collections
 
 global java.util.List invalidContent
@@ -19,9 +17,7 @@ global DescriptionService descriptionService
 rule "Redundantly stated IsA relationships."
 	dialect "mvel"
 	when
-		c : Concept(active)
-		Description(conceptId == c.id, active, typeId == Constants.FSN,
-						!descriptionService.isSemanticTagCompatibleWithinHierarchy(term, new HashSet(Arrays.asList("redundant-isa-exempt"))))
+		c : Concept(active, ConceptHelper.isCoreModule(moduleId))
 		r1 : Relationship(active && sourceId == c.id && typeId == Constants.IS_A && characteristicTypeId == Constants.STATED_RELATIONSHIP && !axiomGCI)
 		r2 : Relationship(active && sourceId == c.id && typeId == Constants.IS_A && characteristicTypeId == Constants.STATED_RELATIONSHIP && !axiomGCI && r1.id != id)
 		statedAncestors : ArrayList(size > 0) from collect( String() from conceptService.findStatedAncestorsOfConcepts(Collections.singletonList(r1.destinationId)))

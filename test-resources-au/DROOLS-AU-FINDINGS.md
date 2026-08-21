@@ -10,27 +10,43 @@ Lucene 9.12.0).
     after externalising that rule's exemption list           75,496
     that rule now                                               455
     after the administrative= hierarchy line                  75,418
-    after externalising four more tag literals                16,736   <- measured
+    after the rule patches and one run-config exclusion       15,939   <- measured
     27 distinct rules
 
-Each stage verified end to end in its own full run. The final 16,736 is
-7,431 WARNING and 9,305 ERROR - and 7,908 of those ERRORs are one loader
+Each stage verified end to end in its own full run. The final 15,939 is
+6,634 WARNING and 9,305 ERROR - and 7,908 of those ERRORs are one loader
 artefact (see below), so the real ERROR count is 1,397.
 
 | rule | before | after | how |
 |---|---|---|---|
 | For each active FSN there is a synonym that has the same text | 143,065 | 455 | `fsn-synonym-exempt` |
 | Term already exists within this hierarchy | 29,990 | 478 | `duplicate-term-exempt`, different-level pairs only |
-| cI term should contain a capital after the first character | 18,062 | 4,296 | `case-significance-unit-exempt` + spelled-out units |
-| Concept should not contain redundantly stated IsA | 6,524 | 554 | `redundant-isa-exempt` |
+| cI term should contain a capital after the first character | 18,062 | 3,766 | tag gate dropped, unit list extended |
+| Two relationships with same type/target/group (ERROR) | 7,908 | 7,908 | untouched - a loader artefact, not content |
+| Concept should not contain redundantly stated IsA | 6,524 | 287 | scoped to core modules |
 | FSN contains &, %, $, @ or # | 5,147 | 12 | `fsn-special-char-exempt` |
 | Relationship module differs from source concept | 4,299 | 0 | `assertionExclusionList` (run config, no rule change) |
 | Semantic tag compatible with active parent(s) | 78 | 0 | `administrative=` hierarchy line |
 
-The duplicate-term guard exempts a pair only when the two concepts sit at
-DIFFERENT levels of the same product hierarchy. A tag-only guard would have been
-simpler and would have lost 38 real findings - among them 20 genuine
-`(clinical drug)` <-> `(clinical drug)` duplicates, which survive here.
+Three of the fixes are worth reading twice, because the obvious version of each
+was wrong:
+
+* **duplicate term** exempts a pair only when the two concepts sit at DIFFERENT
+  levels of the same product hierarchy. A tag-only guard was simpler and would
+  have lost 38 real findings, 20 of them genuine `(clinical drug)` <->
+  `(clinical drug)` duplicates.
+* **redundant IsA** is scoped by MODULE, not by semantic tag. It encodes an
+  international editorial policy that AMT and AU clinical content have not
+  adopted, and that is not confined to the drug hierarchy - 6,237 of the 6,524
+  are simply "in the AU extension module". The 287 left are inherited
+  international content.
+* **cI capitalisation** drops the tag gate entirely rather than widening it. A
+  widened-but-still-gated version still missed 530 findings, 452 of them
+  `(physical object)` dressings measured in `10 cm x 10 cm` - a wound dressing
+  is not a drug, but `cm` is still `cm`. See `CASE-SIGNIFICANCE.md`.
+
+The 3,766 cI findings that remain are genuine AU content, listed one row each in
+`../../rvf-local-runs/au-cI-to-review.tsv`.
 
 ## Fixed by reference data (see README.md)
 

@@ -74,8 +74,8 @@ these lists.
 |---|---|---|---|
 | FsnTermHavingASameSynonynTerm | 65adcfee | 143,065 | 142,610 (99.7%) |
 | TermUniqueInHierarchy | 25334385 | 29,990 | 29,513 (98%) |
-| TermCaseSignificance (cI) | 4ee9cfeb | 18,062 | 14,296 (79%) |
-| RedundantIsaRelationship | 5e04e3df | 6,524 | 5,705 (87%) |
+| TermCaseSignificance (cI) | 4ee9cfeb | 18,062 | 14,826 (82%) - see item 4 |
+| RedundantIsaRelationship | 5e04e3df | 6,524 | 6,237 (96%) - see item 3b |
 | FSNTermFormat (special chars) | e3048fa9 | 5,147 | 5,145 (99.9%) |
 
 **These need no engine change to fix.**
@@ -83,11 +83,9 @@ these lists.
 already a rule-visible global, and `semantic-tag-hierarchies.txt` is already a
 per-edition external file. So a named tag list can live in that file under its
 own key and be queried from a rule. `rules.patch` in this directory does exactly
-that for all five, one key each:
+that for three of them, one key each:
 
-    fsn-synonym-exempt             duplicate-term-exempt
-    redundant-isa-exempt           fsn-special-char-exempt
-    case-significance-unit-exempt
+    fsn-synonym-exempt   duplicate-term-exempt   fsn-special-char-exempt
 
 Defaulting each key to the tags currently in the literal leaves the
 international edition's behaviour bit-for-bit unchanged, and lets an extension
@@ -101,10 +99,24 @@ Two of the five are worth a closer look than "add tags":
   preferred terms are identical by design), but two concepts at the *same* level
   sharing a term is still a duplicate. A tag-only guard would have lost 38 real
   findings; this one keeps them.
-* **RedundantIsaRelationship** - AMT states both an AMT parent and the
-  international top parent it sits under (`Medicinal product package`,
-  `Medicinal product`, `Drug-device combination product` account for 5,705 of
-  6,524). That is deliberate, so the product levels opt out wholesale.
+### 3b. RedundantIsaRelationship is a policy, so scope it to the modules whose
+     policy it is
+
+Redundantly-stated IsA is an **international editorial policy**. AMT and AU
+clinical content have not adopted it - stating both an AMT parent and the
+international top parent it sits under is deliberate, and it is not confined to
+the drug hierarchy, so a tag exemption is the wrong shape.
+
+    findings                                          6,524
+    on SNOMED CT-AU extension-module concepts         6,237  (96%)
+    on international core-module concepts               287
+
+The patch scopes the rule with the helper that already exists,
+`ConceptHelper.isCoreModule(c.moduleId)` (900000000000207008 or
+900000000000012004), leaving the 287 inherited-international findings reported
+and dropping the 6,237. If you would rather it stayed edition-wide by default,
+a per-run switch would do - but a rule that encodes one edition's editorial
+policy should not be on by default for editions that have not adopted it.
 
 ---
 
@@ -122,12 +134,21 @@ Of the 18,062 findings on AU:
             the function is gated on `"clinical drug".equals(semanticTag)`
      2,420  carry a case-significant unit the list omits - microgram, cm, mm,
             kg, mmol, milligram, millilitre
+       530  carry a listed unit, but at a tag outside the drug model - 452 of
+            them (physical object) dressings measured in "10 cm x 10 cm"
      3,766  carry no unit at all
 
-The middle bucket is not an extension problem. `microgram` must not become
+The second bucket is not an extension problem. `microgram` must not become
 `Microgram` for exactly the same reason `mg` must not become `MG`, and
-international clinical drug terms spell it out too. The patch adds the
-spelled-out forms and the length/mass units.
+international clinical drug terms spell it out too.
+
+The third is why the patch **removes the tag gate entirely** rather than
+externalising it. A gate is another list to get wrong: we first externalised it
+to a key defaulting to the drug-model tags, and it still missed 530 findings
+because a wound dressing is not a drug. The unit test is self-sufficient - if a
+term carries a case-significant unit, its case must be preserved wherever in the
+model the concept sits. The function is renamed `isTermWithCaseSensitiveUnit`
+accordingly and takes only the term.
 
 ---
 
@@ -157,6 +178,15 @@ change the content.
 
 `rules.patch` (5 rules), the reference data in `../semantic-tags.txt` and
 `../semantic-tag-hierarchies.txt`, and `assertionExclusionList` carrying
-`26713930-fece-484d-ac9c-3e00b0e1090d` for item 2. Nothing here is a fork we
+`26713930-fece-484d-ac9c-3e00b0e1090d` for item 2. `../CASE-SIGNIFICANCE.md`
+has the full working behind item 4 and item 5.
+
+One rule we did NOT patch: `FSNTermFormat`'s special-character check has 12
+findings left after the branded levels opt out, and all 12 are correct as
+content - nine AU `(qualifier value)` unit concepts of the `Tissue culture
+infectious dose 50% unit` family, `Ethanol 90% (substance)`, and two of your own
+metadata concepts naming the `European Directorate for the Quality of Medicines
+& Healthcare`. Twelve readable findings is a better outcome than blinding two
+more hierarchies to reach zero. Nothing here is a fork we
 intend to carry; `apply.sh` re-applies the patches after every rules re-clone
 precisely because we would rather they lived upstream.
