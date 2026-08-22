@@ -7,7 +7,12 @@ much they matter to anyone other than us.
 
 ---
 
-## 1. Loading Snapshot and Delta together duplicates every changed axiom (bug)
+## 1. SNAPSHOT_AND_DELTA loading duplicates every component changed this release
+
+**Caveat first: RVF is not affected.** `DroolsRulesValidationService` unzips with
+`ReleaseImporter.ImportType.SNAPSHOT`, so it only ever loads the Snapshot. We hit
+this by pointing a probe at a full unpacked bundle, which is also what the
+standalone `snomed-drools-rf2-validator` CLI does, so it is still worth fixing.
 
 `ReleaseImporter` loads `SNAPSHOT_AND_DELTA`, so an OWL axiom that changed in
 this release is read twice - once from
@@ -16,25 +21,28 @@ axiom id. Each read instantiates the axiom's relationships again, so every
 relationship inside it gains a twin with the same `axiomId`, `typeId`,
 `destinationId` and `relationshipGroup`.
 
-That is exactly the match condition of
-`DuplicateRelationships.drl` (`1edb6c09-31ec-4a98-8c98-9409c56e07f1`), which
-fires at **ERROR** severity.
+Three rules match on exactly that, all at **ERROR** severity:
 
-    findings                                          7,908
-    distinct source concepts                          1,782
-    axioms present and active in both files           1,782 concepts
-    overlap                                             100%, both directions
+| rule | assertion | findings | population read twice | overlap |
+|---|---|---|---|---|
+| Two relationships with same type/target/group | 1edb6c09 | 7,908 | 1,782 concepts with an axiom active in both files | 1,782, zero residue |
+| An FSN must be represented in at least one dialect | a0372a76 | 1,347 | 1,347 active FSNs in the Delta | 1,347, zero residue |
+| Text definitions must be preferred in at least one dialect | - | 34 | 34 active text definitions in the Delta | 34, zero residue |
 
-Not a single one is content. Worked example - concept 75968004 has one axiom,
-`0430055d-f979-43e0-bffb-2ac1b6d0f2a0`, which appears once in the Snapshot and
-once in the Delta. All 22 of its relationships are reported, each exactly once,
-though no two of them share a type/target/group.
+Not one is content. Worked example - concept 75968004 has one axiom,
+`0430055d-f979-43e0-bffb-2ac1b6d0f2a0`, appearing once in the Snapshot and once
+in the Delta. All 22 of its relationships are reported, each exactly once, though
+no two of them share a type/target/group. And counted from the Snapshot files
+alone, the number of active FSNs with no PREFERRED language-refset row is
+**zero**: the duplicate instance is the one with an empty acceptability map.
 
-This is edition-agnostic: any release whose Delta is non-empty hits it, and it
-is an ERROR, so it fails a validation run. It looks like the importer should
-de-duplicate axiom members by id when both files are loaded, or the rule should
-require `r1.id != r2.id` on the underlying refset member rather than on the
-derived relationship.
+Measured both ways on the same release: 15,939 findings loading
+SNAPSHOT_AND_DELTA, 6,650 loading SNAPSHOT only, with the WARNING count
+byte-identical at 6,634. Every one of the 9,289 ERRORs is the double-load.
+
+The importer should de-duplicate by component id when both files are loaded -
+or, if reading both is deliberate, the Delta instance should be merged into the
+Snapshot one rather than added alongside it.
 
 ---
 

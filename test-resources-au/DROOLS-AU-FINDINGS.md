@@ -10,19 +10,26 @@ Lucene 9.12.0).
     after externalising that rule's exemption list           75,496
     that rule now                                               455
     after the administrative= hierarchy line                  75,418
-    after the rule patches and one run-config exclusion       15,939   <- measured
-    27 distinct rules
+    after the rule patches and one run-config exclusion       15,939
+    loading SNAPSHOT only, as RVF does                         6,650   <- measured
+    16 distinct rules
 
-Each stage verified end to end in its own full run. The final 15,939 is
-6,634 WARNING and 9,305 ERROR - and 7,908 of those ERRORs are one loader
-artefact (see below), so the real ERROR count is 1,397.
+Each stage verified end to end in its own full run. The final 6,650 is
+**6,634 WARNING and 16 ERROR**, over 15 warning assertions and 1 failing one.
+
+RVF reports failed *assertions*, not findings: `constructValidationReport` sends
+`Severity.WARNING` to `warningAssertions` and everything else to
+`failedAssertions`. So the Drools contribution to `totalFailures` on this release
+is **one assertion**, and 14 of its 16 findings are international content.
 
 | rule | before | after | how |
 |---|---|---|---|
 | For each active FSN there is a synonym that has the same text | 143,065 | 455 | `fsn-synonym-exempt` |
 | Term already exists within this hierarchy | 29,990 | 478 | `duplicate-term-exempt`, different-level pairs only |
 | cI term should contain a capital after the first character | 18,062 | 3,766 | tag gate dropped, unit list extended |
-| Two relationships with same type/target/group (ERROR) | 7,908 | 7,908 | untouched - a loader artefact, not content |
+| Two relationships with same type/target/group (ERROR) | 7,908 | 0 | probe artefact - load SNAPSHOT only, as RVF does |
+| FSN must be represented in at least one dialect (ERROR) | 1,347 | 0 | same |
+| Text definitions must be preferred in at least one dialect (ERROR) | 34 | 0 | same |
 | Concept should not contain redundantly stated IsA | 6,524 | 287 | scoped to core modules |
 | FSN contains &, %, $, @ or # | 5,147 | 12 | `fsn-special-char-exempt` |
 | Relationship module differs from source concept | 4,299 | 0 | `assertionExclusionList` (run config, no rule change) |
@@ -148,28 +155,42 @@ concepts and are by design. The other 195 are the reverse - an
 **international-module relationship on an AU-module concept** - which should not
 happen and is the one part of that rule's output worth reading.
 
-### The 7,908 duplicate-relationship ERRORs are a loader artefact
+### 9,289 of the 9,305 ERRORs were mine, not RVF's
 
-`ReleaseImporter` loads `SNAPSHOT_AND_DELTA`, so an OWL axiom that changed in
-this release is read twice - once from the Snapshot and once from the Delta,
-under the same axiom id. Each read instantiates the axiom's relationships again,
-so every relationship inside it gains a twin with the same `axiomId`, `typeId`,
-`destinationId` and `relationshipGroup` - which is exactly the match condition
-of `DuplicateRelationships.drl`.
+Handing snomedboot a full unpacked release makes it load `SNAPSHOT_AND_DELTA`,
+so every component changed this release is read twice under the same id - once
+from the Snapshot, once from the Delta. Three rules match on exactly that:
 
-    findings                                          7,908
-    distinct source concepts                          1,782
-    concepts with an axiom active in Snapshot AND Delta 1,782
-    overlap                                             100%, both directions, zero residue
+| rule | findings | population read twice | overlap |
+|---|---|---|---|
+| Two relationships with same type/target/group | 7,908 | 1,782 concepts with an axiom active in both files | 1,782, zero residue |
+| An FSN must be represented in at least one dialect | 1,347 | 1,347 active FSNs in the Delta | 1,347, zero residue |
+| Text definitions must be preferred in at least one dialect | 34 | 34 active text definitions in the Delta | 34, zero residue |
 
 Worked example: concept 75968004 has one axiom, present once in each file. All
 22 of its relationships are reported, each exactly once, though no two of them
-share a type/target/group.
+share a type/target/group. And from the Snapshot files alone, the number of
+active FSNs with no PREFERRED language-refset row is **zero** - all 1,347 have
+one; the duplicate instance is the one without an acceptability map.
 
-This is not AU-specific and not extension-specific - any release with a
-non-empty Delta hits it, and it fires at ERROR. It is the single biggest item
-left, and it is a defect in RVF/snomed-drools rather than in content. Raised in
-`upstream-proposal/UPSTREAM-FEEDBACK.md`.
+**RVF does not have this problem.**
+`DroolsRulesValidationService.extractFiles` unzips with
+`ReleaseImporter.ImportType.SNAPSHOT`, so production only ever loads the
+Snapshot. The 9,289 were an artefact of this probe pointing at the full bundle.
+Re-running against a Snapshot-only view: 6,650 findings, **WARNING count
+byte-identical at 6,634**, ERROR 9,305 -> 16. `run-drools.sh` now builds and
+uses that view by default.
+
+The underlying snomedboot behaviour is still real for anything that IS given a
+full bundle - the standalone `snomed-drools-rf2-validator` CLI, for one - so it
+stays in the upstream feedback, but as a caveat rather than an RVF defect.
+
+### The 16 ERRORs that are real
+
+`An active concept must not have two or more axioms containing only IsA
+relationships` - 16 concepts, 14 of them international-module, and none of them
+has an axiom duplicated across files. A genuine finding: two separate IsA-only
+axioms on one concept should be one axiom.
 
 ### Why so much international content appears at all
 
