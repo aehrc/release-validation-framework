@@ -38,7 +38,7 @@ public class DuckStoreProbe {
 
 	public static void main(String[] args) throws Exception {
 		if (args.length < 2) {
-			System.err.println("usage: DuckStoreProbe <store.json> <parquet-dir> [limit]");
+			System.err.println("usage: DuckStoreProbe <store.json> <parquet-dir|rf2-release-dir> [limit]");
 			System.exit(64);
 		}
 		Path storePath = Path.of(args[0]);
@@ -56,7 +56,17 @@ public class DuckStoreProbe {
 
 		Class.forName("org.duckdb.DuckDBDriver");
 		try (Connection con = DriverManager.getConnection("jdbc:duckdb:")) {
-			attach(con, parquetDir, json);
+			// Two ways in, and the point of having both is that everything
+			// downstream is identical. Parquet is what the Python materialiser
+			// produces and what this probe was first proven against;
+			// DuckMaterialiser reads the RF2 release itself. Same store, same
+			// binder, same assertions - so any difference in the result is the
+			// materialiser and nothing else.
+			if (hasParquet(parquetDir)) {
+				attach(con, parquetDir, json);
+			} else {
+				materialise(con, parquetDir, json);
+			}
 			createResultTable(con);
 
 			int applied = 0, prereqFailed = 0;
@@ -172,18 +182,13 @@ public class DuckStoreProbe {
 	 * placeholders unbound on purpose, so assertions referencing them fail the
 	 * same way they do on MySQL rather than silently reading the wrong schema.
 	 */
-	private static void attach(Connection con, Path parquetDir, String json) throws Exception {
+	/**
+	 * Session settings both entry paths need. Neither is optional and
+	 * neither carries to another connection, so anything that opens its own
+	 * must repeat them - rvf_duck.py sets the same two per cursor.
+	 */
+	private static void session(Connection con) throws Exception {
 		try (Statement st = con.createStatement()) {
-			st.execute("CREATE SCHEMA IF NOT EXISTS prospective");
-			int views = 0;
-			try (var files = Files.list(parquetDir)) {
-				for (Path p : files.filter(f -> f.toString().endsWith(".parquet")).toList()) {
-					String table = p.getFileName().toString().replaceFirst("\\.parquet$", "");
-					st.execute("CREATE OR REPLACE VIEW prospective." + table
-							+ " AS SELECT * FROM read_parquet('" + p.toAbsolutePath() + "')");
-					views++;
-				}
-			}
 			// pre-requisites.sql refers to its inputs UNQUALIFIED - "FROM
 			// concept_s", not "FROM prospective.concept_s" - so the connection
 			// needs a default schema or every one of them fails with "Table with
@@ -199,11 +204,42 @@ public class DuckStoreProbe {
 			// 200, which is easy to mistake for a content or macro problem.
 			// rvf_duck.py sets the same flag per cursor for the same reason.
 			st.execute("SET old_implicit_casting=true");
+		}
+	}
+
+	private static boolean hasParquet(Path dir) throws Exception {
+		try (var files = Files.list(dir)) {
+			return files.anyMatch(f -> f.toString().endsWith(".parquet"));
+		}
+	}
+
+	private static void materialise(Connection con, Path releaseDir, String json) throws Exception {
+		var r = org.ihtsdo.rvf.core.service.duck.DuckMaterialiser.materialise(
+				con, releaseDir, "prospective", tableColumns(json));
+		session(con);
+		System.out.println("materialised : " + r.tablesLoaded() + " tables, " + r.rows()
+				+ " rows, " + r.emptyFiles() + " empty files, " + r.placeholders()
+				+ " placeholders in " + r.millis() + "ms, as schema 'prospective'");
+	}
+
+	private static void attach(Connection con, Path parquetDir, String json) throws Exception {
+		try (Statement st = con.createStatement()) {
+			st.execute("CREATE SCHEMA IF NOT EXISTS prospective");
+			int views = 0;
+			try (var files = Files.list(parquetDir)) {
+				for (Path p : files.filter(f -> f.toString().endsWith(".parquet")).toList()) {
+					String table = p.getFileName().toString().replaceFirst("\\.parquet$", "");
+					st.execute("CREATE OR REPLACE VIEW prospective." + table
+							+ " AS SELECT * FROM read_parquet('" + p.toAbsolutePath() + "')");
+					views++;
+				}
+			}
 			// Every DDL table the release does not ship gets an EMPTY
 			// placeholder, exactly as rvf_duck.py's attach() does. Most
 			// assertions over an absent table are "no bad rows in X" and pass
 			// correctly against zero rows; without the placeholder they die on a
 			// missing catalog entry instead, which is a false failure.
+			session(con);
 			int placeholders = 0;
 			for (Map.Entry<String, String> e : tableColumns(json).entrySet()) {
 				try (ResultSet rs = con.getMetaData().getTables(null, "prospective", e.getKey(), null)) {
