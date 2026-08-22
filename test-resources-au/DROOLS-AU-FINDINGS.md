@@ -11,16 +11,37 @@ Lucene 9.12.0).
     that rule now                                               455
     after the administrative= hierarchy line                  75,418
     after the rule patches and one run-config exclusion       15,939
-    loading SNAPSHOT only, as RVF does                         6,650   <- measured
-    16 distinct rules
+    loading SNAPSHOT only, as RVF does                         6,650
+    filtering to the AU modules, as RVF can                    4,934   <- measured
+    11 distinct rules
 
-Each stage verified end to end in its own full run. The final 6,650 is
-**6,634 WARNING and 16 ERROR**, over 15 warning assertions and 1 failing one.
+Each stage verified end to end in its own full run. The final 4,934 is
+**4,932 WARNING and 2 ERROR**, over 10 warning assertions and 1 failing one.
 
 RVF reports failed *assertions*, not findings: `constructValidationReport` sends
 `Severity.WARNING` to `warningAssertions` and everything else to
 `failedAssertions`. So the Drools contribution to `totalFailures` on this release
-is **one assertion**, and 14 of its 16 findings are international content.
+is **one assertion with two findings**.
+
+### The module filter is the last big lever, and RVF already has it
+
+`validateRF2Files` takes a module set and the engine filters
+`InvalidContent.getComponent().getModuleId()` against it. RVF passes
+`includedModules` straight through. On an extension release that is the
+difference between reporting your own content and reporting the international
+backlog you inherited:
+
+    all modules      6,650 findings over 16 rules   ERROR 16
+    AU modules only  4,934 findings over 11 rules   ERROR  2
+
+Five rules go to zero outright - redundantly stated IsA (287), SEP naming (147),
+FSN opening with a parenthesis (55), text definitions in no dialect (34), two or
+more IsA-only axioms drops 14 of 16 - because every finding was on an
+international-module component. It costs one run-config value, no code.
+
+Note it filters on the COMPONENT's module, not the concept's, which is the right
+behaviour: an AU description added to an international concept stays reported,
+because AU authored it.
 
 | rule | before | after | how |
 |---|---|---|---|

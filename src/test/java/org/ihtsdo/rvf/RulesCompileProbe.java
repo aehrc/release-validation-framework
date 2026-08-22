@@ -63,9 +63,19 @@ public class RulesCompileProbe {
 				if (exclusions != null) {
 					System.out.println("excluded : " + exclusions);
 				}
+				// RVF passes includedModules through to the engine, which filters
+				// on InvalidContent.getComponent().getModuleId(). On an extension
+				// release that is the difference between reporting your own
+				// content and reporting the international backlog you inherited.
+				String moduleProp = System.getProperty("drools.modules", "");
+				java.util.Set<String> modules = moduleProp.isBlank() ? null
+						: new java.util.HashSet<>(java.util.List.of(moduleProp.split(",")));
+				if (modules != null) {
+					System.out.println("modules  : " + modules);
+				}
 				long t0 = System.currentTimeMillis();
 				var invalid = validator.validateRF2Files(dirs, null, ruleSets, exclusions,
-						args.length > 4 ? args[4] : null, null, true);
+						args.length > 4 ? args[4] : null, modules, true);
 				System.out.println("RAN      : " + invalid.size() + " rule violations in "
 						+ ((System.currentTimeMillis() - t0) / 1000) + "s");
 				java.util.Map<String, Integer> byRule = new java.util.TreeMap<>();
