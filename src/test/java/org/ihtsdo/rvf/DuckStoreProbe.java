@@ -36,6 +36,9 @@ import java.util.regex.Pattern;
  */
 public class DuckStoreProbe {
 
+	/** Schemas actually materialised, so bind() only points at ones that exist. */
+	private static final java.util.Set<String> SCHEMAS = new java.util.HashSet<>();
+
 	public static void main(String[] args) throws Exception {
 		if (args.length < 2) {
 			System.err.println("usage: DuckStoreProbe <store.json> <parquet-dir|rf2-release-dir> [limit]");
@@ -65,7 +68,21 @@ public class DuckStoreProbe {
 			if (hasParquet(parquetDir)) {
 				attach(con, parquetDir, json);
 			} else {
-				materialise(con, parquetDir, json);
+				materialise(con, parquetDir, json, "prospective");
+			}
+			// 81 of the 453 assertions in the full corpus read the PREVIOUS
+			// release and 20 read the DEPENDENCY - prev_x and dependency_x in
+			// the source SQL, rewritten to <PREVIOUS>.x and <DEPENDENCY>.x at
+			// import time. They are separate schemas, so they are separate
+			// materialisations into the names the store's sentinels already use.
+			// Without them those assertions fail on a missing table rather than
+			// reporting anything.
+			for (String[] extra : new String[][] {
+					{ "previous", System.getProperty("probe.previous", "") },
+					{ "dependency", System.getProperty("probe.dependency", "") } }) {
+				if (!extra[1].isBlank()) {
+					materialise(con, Path.of(extra[1]), json, extra[0]);
+				}
 			}
 			createResultTable(con);
 
@@ -127,9 +144,11 @@ public class DuckStoreProbe {
 					ok++;
 				} catch (Exception e) {
 					failed++;
-					if (errors.size() < 8) {
-						errors.add(file + "\n      " + e.getMessage().replace('\n', ' '));
-					}
+					// Keep every failure, not the first 8. On the 200-assertion
+					// AU corpus 8 was the whole list; on the full 453 it hid 100
+					// of 108, and a truncated list cannot be categorised - which
+					// is the only useful thing to do with it.
+					errors.add(file + "\t" + e.getMessage().replace('\n', ' '));
 				}
 			}
 			try (Statement st = con.createStatement();
@@ -166,8 +185,13 @@ public class DuckStoreProbe {
 			System.out.println("EXECUTED     : " + ok);
 			System.out.println("FAILED       : " + failed);
 			System.out.println("FINDINGS     : " + totalFindings + " rows in qa_result");
-			for (String e : errors) {
-				System.out.println("  ! " + e);
+			String errOut = System.getProperty("probe.errors");
+			if (errOut != null) {
+				Files.writeString(Path.of(errOut), String.join("\n", errors) + "\n");
+				System.out.println("errors       : " + errOut + " (" + errors.size() + " rows)");
+			}
+			for (String e : errors.subList(0, Math.min(8, errors.size()))) {
+				System.out.println("  ! " + e.replace("\t", "\n      "));
 			}
 			System.exit(failed == 0 ? 0 : 1);
 		}
@@ -213,18 +237,21 @@ public class DuckStoreProbe {
 		}
 	}
 
-	private static void materialise(Connection con, Path releaseDir, String json) throws Exception {
+	private static void materialise(Connection con, Path releaseDir, String json, String schema)
+			throws Exception {
 		var r = org.ihtsdo.rvf.core.service.duck.DuckMaterialiser.materialise(
-				con, releaseDir, "prospective", tableColumns(json));
+				con, releaseDir, schema, tableColumns(json));
+		SCHEMAS.add(schema);
 		session(con);
 		System.out.println("materialised : " + r.tablesLoaded() + " tables, " + r.rows()
 				+ " rows, " + r.emptyFiles() + " empty files, " + r.placeholders()
-				+ " placeholders in " + r.millis() + "ms, as schema 'prospective'");
+				+ " placeholders in " + r.millis() + "ms, as schema '" + schema + "'");
 	}
 
 	private static void attach(Connection con, Path parquetDir, String json) throws Exception {
 		try (Statement st = con.createStatement()) {
 			st.execute("CREATE SCHEMA IF NOT EXISTS prospective");
+			SCHEMAS.add("prospective");
 			int views = 0;
 			try (var files = Files.list(parquetDir)) {
 				for (Path p : files.filter(f -> f.toString().endsWith(".parquet")).toList()) {
@@ -284,11 +311,14 @@ public class DuckStoreProbe {
 				case "<RUNID>" -> String.valueOf(runId);
 				case "<ASSERTIONUUID>" -> assertionId;
 				case "<PROSPECTIVE>", "<TEMP>" -> "prospective";
-				// Left as the literal placeholder when absent, exactly as bind()
-				// does: an assertion needing a release we do not have must fail,
-				// not silently query the prospective one.
-				case "<PREVIOUS>" -> "<PREVIOUS>";
-				case "<DEPENDENCY>" -> "<DEPENDENCY>";
+				// Bound only when that release was actually materialised. Left as
+				// the literal placeholder otherwise, exactly as bind() does: an
+				// assertion needing a release we do not have must fail, not
+				// silently query the prospective one. 81 of the full corpus's
+				// 453 assertions read PREVIOUS and 20 read DEPENDENCY, so on the
+				// full corpus this is the difference between 108 failures and 28.
+				case "<PREVIOUS>" -> SCHEMAS.contains("previous") ? "previous" : "<PREVIOUS>";
+				case "<DEPENDENCY>" -> SCHEMAS.contains("dependency") ? "dependency" : "<DEPENDENCY>";
 				case "<INCLUDED_MODULES>" -> "NULL";
 				default -> "";
 			};
