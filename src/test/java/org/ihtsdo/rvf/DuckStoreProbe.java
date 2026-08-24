@@ -46,6 +46,7 @@ public class DuckStoreProbe {
 		}
 		Path storePath = Path.of(args[0]);
 		Path parquetDir = Path.of(args[1]);
+		setReleaseVersion(parquetDir);
 		int limit = args.length > 2 ? Integer.parseInt(args[2]) : Integer.MAX_VALUE;
 
 		String json = Files.readString(storePath);
@@ -133,14 +134,32 @@ public class DuckStoreProbe {
 			int ok = 0, failed = 0;
 			long totalFindings = 0;
 			List<String> errors = new ArrayList<>();
+			// An assertion that needs a release we do not hold is SKIPPED, not
+			// failed. bind() deliberately leaves <PREVIOUS>/<DEPENDENCY> in
+			// place when there is no such schema, so the placeholder surviving
+			// into the bound SQL is the signal. Executing it anyway produced 43
+			// "syntax error at or near <" rows that all said the same thing, and
+			// buried the two real failures. Production reaches the same outcome
+			// by a different route: releaseAsAnEdition=true means no dependency
+			// is ever loaded, so these assertions do not run there either.
+			java.util.Set<String> skippedAssertions = new java.util.TreeSet<>();
+			int skipped = 0;
 			int n = 0;
 			for (String[] a : assertions) {
 				if (n++ >= limit) {
 					break;
 				}
 				String uuid = a[0], file = a[1], stmt = a[2];
+				String bound = bind(stmt, sentinels, 1, uuid);
+				String unbound = bound.contains("<DEPENDENCY>") ? "<DEPENDENCY>"
+						: bound.contains("<PREVIOUS>") ? "<PREVIOUS>" : null;
+				if (unbound != null) {
+					skipped++;
+					skippedAssertions.add(file + " needs " + unbound);
+					continue;
+				}
 				try (Statement st = con.createStatement()) {
-					st.execute(bind(stmt, sentinels, 1, uuid));
+					st.execute(bound);
 					ok++;
 				} catch (Exception e) {
 					failed++;
@@ -184,6 +203,11 @@ public class DuckStoreProbe {
 			System.out.println();
 			System.out.println("EXECUTED     : " + ok);
 			System.out.println("FAILED       : " + failed);
+			System.out.println("SKIPPED      : " + skipped + " statements across "
+					+ skippedAssertions.size() + " assertions needing a release not supplied");
+			for (String sk : skippedAssertions) {
+				System.out.println("  - " + sk);
+			}
 			System.out.println("FINDINGS     : " + totalFindings + " rows in qa_result");
 			String errOut = System.getProperty("probe.errors");
 			if (errOut != null) {
@@ -375,6 +399,23 @@ public class DuckStoreProbe {
 	 * drifts the first time it changes, and the failure would be a wrong query
 	 * that still runs.
 	 */
+	/** The effectiveTime in a release directory name, or NOT_SUPPLIED. */
+	private static String releaseVersion = "NOT_SUPPLIED";
+
+	private static void setReleaseVersion(Path releaseDir) {
+		java.util.regex.Matcher m = java.util.regex.Pattern
+				.compile("(?<![0-9])(20[0-9]{6})(?![0-9])")
+				.matcher(releaseDir.getFileName().toString());
+		String last = null;
+		while (m.find()) {
+			last = m.group(1);
+		}
+		if (last != null) {
+			releaseVersion = last;
+		}
+		System.out.println("version      : <VERSION> bound to " + releaseVersion);
+	}
+
 	private static String bind(String stmt, Map<String, String> sentinels, long runId, String assertionId) {
 		String s = stmt;
 		for (Map.Entry<String, String> e : sentinels.entrySet()) {
@@ -383,15 +424,42 @@ public class DuckStoreProbe {
 				case "<RUNID>" -> String.valueOf(runId);
 				case "<ASSERTIONUUID>" -> assertionId;
 				case "<PROSPECTIVE>", "<TEMP>" -> "prospective";
-				// Bound only when that release was actually materialised. Left as
-				// the literal placeholder otherwise, exactly as bind() does: an
-				// assertion needing a release we do not have must fail, not
-				// silently query the prospective one. 81 of the full corpus's
-				// 453 assertions read PREVIOUS and 20 read DEPENDENCY, so on the
-				// full corpus this is the difference between 108 failures and 28.
+				// Bound only when that release was actually materialised, and
+				// left as the literal placeholder otherwise so the caller can
+				// tell. That is what MySqlQueryTransformer does too, though by a
+				// different route: it drops any statement still containing
+				// <PREVIOUS>/<DEPENDENCY> when the schema is null, per STATEMENT
+				// rather than per assertion. The execute loop matches that -
+				// unbound means skipped, not failed.
 				case "<PREVIOUS>" -> SCHEMAS.contains("previous") ? "previous" : "<PREVIOUS>";
 				case "<DEPENDENCY>" -> SCHEMAS.contains("dependency") ? "dependency" : "<DEPENDENCY>";
 				case "<INCLUDED_MODULES>" -> "NULL";
+				// MySqlQueryTransformer's defaults, not blanks. <MODULEID> lands
+				// in a BIGINT concept_id, where "" fails the whole assertion
+				// with "Could not convert string '' to INT64"; RVF binds
+				// RF2Constants.SCTID_CORE_MODULE when the run sets no default
+				// module. <VERSION> is only ever interpolated into details text.
+				// RVF's own default when a run sets no defaultModuleId, and it
+				// is the wrong one for an extension: on the AU daily build,
+				// mdrs-no-module-dependencies-for-edition asks whether the CORE
+				// module published an MDRS row at THIS release's effectiveTime.
+				// It never has - the International rows carry the International
+				// effectiveTime - so all 26 refset rows are flagged. Passing
+				// -Dprobe.moduleid=32506021000036107 (the edition's own module)
+				// takes it to zero, which is what makes it a config defect
+				// rather than a content one. MySQL binds the same default, so
+				// this diverges in neither direction.
+				case "<MODULEID>" -> System.getProperty("probe.moduleid", "900000000000207008");
+				// The release's effectiveTime. RVF takes this from the third
+				// '_'-separated part of its own internal prospectiveVersion
+				// string, which is not reconstructible from a release directory,
+				// so take the effectiveTime out of the directory name instead -
+				// semantically the same value. Falling back to NOT_SUPPLIED (as
+				// RVF does) is not harmless: every assertion comparing
+				// effectivetime = '<VERSION>' then matches nothing, and one that
+				// asks "is there NO row for this version" flags every row it
+				// looks at. That was 26 invented findings on a 26-row refset.
+				case "<VERSION>" -> releaseVersion;
 				default -> "";
 			};
 			s = s.replace(sentinel, value);
