@@ -13,6 +13,10 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.ihtsdo.rvf.core.service.duck.DuckBinder;
+import org.ihtsdo.rvf.core.service.duck.DuckDbAssertionExecutionService;
+import org.ihtsdo.rvf.core.service.duck.DuckStore;
+
 /**
  * Can the JAVA engine execute the assertion corpus against DuckDB?
  *
@@ -50,13 +54,18 @@ public class DuckStoreProbe {
 		int limit = args.length > 2 ? Integer.parseInt(args[2]) : Integer.MAX_VALUE;
 
 		String json = Files.readString(storePath);
-		Map<String, String> sentinels = sentinels(json);
+		// Read and bind through the PRODUCTION classes, not a probe-local copy.
+		// This is the only place the real store meets them before a validation
+		// does, so a divergence between the two would be found here or not at
+		// all - which is the whole reason the probe exists.
+		DuckStore duckStore = DuckStore.parse(json);
+		Map<String, String> sentinels = duckStore.sentinels();
 		List<String[]> assertions = selectGroups(assertions(json), json);
-		List<String[]> prerequisites = prerequisites(json);
 		System.out.println("store        : " + storePath);
 		System.out.println("sentinels    : " + sentinels.size());
 		System.out.println("assertions   : " + assertions.size());
-		System.out.println("prerequisites: " + prerequisites.size() + " statement(s)");
+		System.out.println("prerequisites: "
+				+ duckStore.prerequisiteStatements().size() + " statement(s)");
 
 		Class.forName("org.duckdb.DuckDBDriver");
 		try (Connection con = DriverManager.getConnection("jdbc:duckdb:")) {
@@ -87,48 +96,26 @@ public class DuckStoreProbe {
 			}
 			createResultTable(con);
 
-			int applied = 0, prereqFailed = 0;
-			List<String> prereqErrors = new ArrayList<>();
-			for (String[] p : prerequisites) {
-				try (Statement st = con.createStatement()) {
-					st.execute(bind(p[1], sentinels, 1, "prereq"));
-					applied++;
-				} catch (Exception e) {
-					// A MySQL CREATE FUNCTION body has no DuckDB equivalent and
-					// is expected to fail; anything else here is a real problem,
-					// so keep the message rather than counting it silently.
-					prereqFailed++;
-					if (prereqErrors.size() < 6) {
-						prereqErrors.add(p[1].substring(0, Math.min(70, p[1].length()))
-								.replace('\n', ' ') + "\n        " + e.getMessage().replace('\n', ' '));
-					}
-				}
-			}
-			System.out.println("prereqs      : " + applied + " applied, " + prereqFailed + " skipped");
-			for (String e : prereqErrors) {
+			// Setup goes through the production service, so its ORDERING is
+			// exercised on the real corpus. The probe used to apply pre-requisites
+			// then ports; the service applies ports first, which is safe because a
+			// DuckDB MACRO body is resolved at CALL time, not at creation - so a
+			// macro over description_active can be created before that table exists.
+			// If that ever stops holding, the applied/failed counts printed here move
+			// and the probe says so.
+			DuckBinder probeBinder = new DuckBinder(sentinels, new DuckBinder.Config(
+					1L, "prospective",
+					SCHEMAS.contains("previous") ? "previous" : null,
+					SCHEMAS.contains("dependency") ? "dependency" : null,
+					"rvf_results.qa_result",
+					System.getProperty("probe.moduleid"), java.util.List.of(), releaseVersion));
+			DuckDbAssertionExecutionService setupService =
+					new DuckDbAssertionExecutionService(duckStore, probeBinder, con);
+			DuckDbAssertionExecutionService.SetupResult setup = setupService.prepareSchema();
+			System.out.println("setup        : " + setup.applied() + " applied, "
+					+ setup.failures().size() + " failed (MySQL routine bodies, replaced by ports)");
+			for (String e : setup.failures().subList(0, Math.min(6, setup.failures().size()))) {
 				System.out.println("  ~ " + e);
-			}
-
-			// The ports must follow the pre-requisites and precede the
-			// assertions: they supply the *_active relations and the helper
-			// macros that stand in for the MySQL functions just skipped. Omit
-			// them and every amtv4 assertion fails with "Table with name
-			// description_active does not exist", which reads like a broken
-			// materialisation and is not.
-			int portsOk = 0;
-			List<String> portErrors = new ArrayList<>();
-			for (String p : ports(json)) {
-				try (Statement st = con.createStatement()) {
-					st.execute(bind(p, sentinels, 1, "ports"));
-					portsOk++;
-				} catch (Exception e) {
-					portErrors.add(p.split("\\(")[0].trim() + ": " + e.getMessage().replace('\n', ' '));
-				}
-			}
-			System.out.println("ports        : " + portsOk + " installed"
-					+ (portErrors.isEmpty() ? "" : ", " + portErrors.size() + " FAILED"));
-			for (String e : portErrors.subList(0, Math.min(4, portErrors.size()))) {
-				System.out.println("  ! " + e);
 			}
 
 			int ok = 0, failed = 0;
@@ -150,16 +137,14 @@ public class DuckStoreProbe {
 					break;
 				}
 				String uuid = a[0], file = a[1], stmt = a[2];
-				String bound = bind(stmt, sentinels, 1, uuid);
-				String unbound = bound.contains("<DEPENDENCY>") ? "<DEPENDENCY>"
-						: bound.contains("<PREVIOUS>") ? "<PREVIOUS>" : null;
-				if (unbound != null) {
+				DuckBinder.Bound bound = probeBinder.bind(stmt, uuid);
+				if (bound.isSkipped()) {
 					skipped++;
-					skippedAssertions.add(file + " needs " + unbound);
+					skippedAssertions.add(file + " needs " + bound.skippedFor());
 					continue;
 				}
 				try (Statement st = con.createStatement()) {
-					st.execute(bound);
+					st.execute(bound.sql());
 					ok++;
 				} catch (Exception e) {
 					failed++;
@@ -416,56 +401,6 @@ public class DuckStoreProbe {
 		System.out.println("version      : <VERSION> bound to " + releaseVersion);
 	}
 
-	private static String bind(String stmt, Map<String, String> sentinels, long runId, String assertionId) {
-		String s = stmt;
-		for (Map.Entry<String, String> e : sentinels.entrySet()) {
-			String placeholder = e.getKey(), sentinel = e.getValue();
-			String value = switch (placeholder) {
-				case "<RUNID>" -> String.valueOf(runId);
-				case "<ASSERTIONUUID>" -> assertionId;
-				case "<PROSPECTIVE>", "<TEMP>" -> "prospective";
-				// Bound only when that release was actually materialised, and
-				// left as the literal placeholder otherwise so the caller can
-				// tell. That is what MySqlQueryTransformer does too, though by a
-				// different route: it drops any statement still containing
-				// <PREVIOUS>/<DEPENDENCY> when the schema is null, per STATEMENT
-				// rather than per assertion. The execute loop matches that -
-				// unbound means skipped, not failed.
-				case "<PREVIOUS>" -> SCHEMAS.contains("previous") ? "previous" : "<PREVIOUS>";
-				case "<DEPENDENCY>" -> SCHEMAS.contains("dependency") ? "dependency" : "<DEPENDENCY>";
-				case "<INCLUDED_MODULES>" -> "NULL";
-				// MySqlQueryTransformer's defaults, not blanks. <MODULEID> lands
-				// in a BIGINT concept_id, where "" fails the whole assertion
-				// with "Could not convert string '' to INT64"; RVF binds
-				// RF2Constants.SCTID_CORE_MODULE when the run sets no default
-				// module. <VERSION> is only ever interpolated into details text.
-				// RVF's own default when a run sets no defaultModuleId, and it
-				// is the wrong one for an extension: on the AU daily build,
-				// mdrs-no-module-dependencies-for-edition asks whether the CORE
-				// module published an MDRS row at THIS release's effectiveTime.
-				// It never has - the International rows carry the International
-				// effectiveTime - so all 26 refset rows are flagged. Passing
-				// -Dprobe.moduleid=32506021000036107 (the edition's own module)
-				// takes it to zero, which is what makes it a config defect
-				// rather than a content one. MySQL binds the same default, so
-				// this diverges in neither direction.
-				case "<MODULEID>" -> System.getProperty("probe.moduleid", "900000000000207008");
-				// The release's effectiveTime. RVF takes this from the third
-				// '_'-separated part of its own internal prospectiveVersion
-				// string, which is not reconstructible from a release directory,
-				// so take the effectiveTime out of the directory name instead -
-				// semantically the same value. Falling back to NOT_SUPPLIED (as
-				// RVF does) is not harmless: every assertion comparing
-				// effectivetime = '<VERSION>' then matches nothing, and one that
-				// asks "is there NO row for this version" flags every row it
-				// looks at. That was 26 invented findings on a 26-row refset.
-				case "<VERSION>" -> releaseVersion;
-				default -> "";
-			};
-			s = s.replace(sentinel, value);
-		}
-		return s.replaceAll("\\bqa_result\\b", "rvf_results.qa_result");
-	}
 
 	// ---- minimal JSON reading -------------------------------------------
 	// Enough for this store's shape, and no more. A real implementation uses
@@ -490,13 +425,6 @@ public class DuckStoreProbe {
 		}
 	}
 
-	private static Map<String, String> sentinels(String json) {
-		Map<String, String> out = new LinkedHashMap<>();
-		for (var n : store(json).path("sentinels")) {
-			out.put(n.path("placeholder").asText(), n.path("sentinel").asText());
-		}
-		return out;
-	}
 
 	/** {@code [uuid, file, statement]} per statement, in store order. */
 	private static List<String[]> assertions(String json) {
@@ -529,24 +457,7 @@ public class DuckStoreProbe {
 		return out;
 	}
 
-	private static List<String> ports(String json) {
-		List<String> out = new ArrayList<>();
-		for (var n : store(json).path("ports")) {
-			out.add(n.asText());
-		}
-		return out;
-	}
 
-	/** {@code [file, statement]} per pre-requisite statement. */
-	private static List<String[]> prerequisites(String json) {
-		List<String[]> out = new ArrayList<>();
-		for (var p : store(json).path("prerequisites")) {
-			for (var s : p.path("statements")) {
-				out.add(new String[] { p.path("file").asText(), s.asText() });
-			}
-		}
-		return out;
-	}
 
 	private static String unescape(String s) {
 		return s.replace("\\n", "\n").replace("\\t", "\t").replace("\\r", "\r")
