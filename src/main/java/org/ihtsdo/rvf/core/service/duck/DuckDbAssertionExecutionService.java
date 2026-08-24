@@ -54,8 +54,35 @@ public class DuckDbAssertionExecutionService {
 		this.connection = connection;
 	}
 
-	/** What a preparation step did, so a run can log it rather than infer it. */
+	/** What preparation did. On success {@code failures} is always empty. */
 	public record SetupResult(int applied, List<String> failures) {
+	}
+
+	/**
+	 * Setup did not complete, so nothing downstream can be trusted.
+	 *
+	 * <p>Unchecked and thrown rather than returned, because the alternative was
+	 * tried and does not work: {@link #prepareSchema()} used to report failures
+	 * for a caller to inspect, and a caller (me) read the findings count instead.
+	 * Ports-first ordering silently lost 12 of 45 setup statements while the
+	 * findings total did not move by one row - the macros lost belonged to a
+	 * corpus that run did not exercise. A validation that reports results off a
+	 * half-built schema is worse than one that fails.
+	 */
+	public static class SetupFailedException extends RuntimeException {
+
+		private final transient List<String> failures;
+
+		SetupFailedException(List<String> failures) {
+			super("DuckDB schema setup failed on " + failures.size()
+					+ " statement(s), so no assertion result from this run is "
+					+ "trustworthy. First: " + failures.get(0));
+			this.failures = List.copyOf(failures);
+		}
+
+		public List<String> getFailures() {
+			return failures;
+		}
 	}
 
 	/**
@@ -73,8 +100,15 @@ public class DuckDbAssertionExecutionService {
 	 * the closure failed on the missing relation and every statement after it
 	 * failed on the connection's pending result. What made that dangerous is that
 	 * the assertion results did not move at all: the macros lost are amtv4's, and
-	 * the corpus under test does not call them. A silent 12-statement regression
-	 * is exactly what an ordering comment is for.
+	 * the corpus under test does not call them.
+	 *
+	 * <p>Which is why this now THROWS on any failure at all. The publisher emits
+	 * no setup statement it expects to fail - MySQL routine definitions are
+	 * dropped at publish time, and so is the one CALL whose DuckDB equivalent is
+	 * a port - so the tolerated failure count is zero, and a tolerated count of
+	 * zero is the only kind a regression cannot hide inside.
+	 *
+	 * @throws SetupFailedException if any setup statement fails
 	 */
 	public SetupResult prepareSchema() {
 		List<String> failures = new ArrayList<>();
@@ -93,8 +127,11 @@ public class DuckDbAssertionExecutionService {
 				failures.add(abbreviate(raw) + " -> " + e.getMessage());
 			}
 		}
-		logger.info("DuckDB schema prepared: {} statements applied, {} failed",
-				applied, failures.size());
+		if (!failures.isEmpty()) {
+			failures.forEach(f -> logger.error("DuckDB setup statement failed: {}", f));
+			throw new SetupFailedException(failures);
+		}
+		logger.info("DuckDB schema prepared: {} statements applied", applied);
 		return new SetupResult(applied, failures);
 	}
 

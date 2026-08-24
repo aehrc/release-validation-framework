@@ -16,6 +16,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -40,8 +41,7 @@ class DuckDbAssertionExecutionServiceTest {
            "create table rvfph_prospective_.derived_from_prereq as select count(*) n from rvfph_prospective_.concept_active"],
 			 "prerequisites": [
 			  {"file": "pre-requisites.sql", "statements": [
-			   "create table rvfph_prospective_.concept_active as select id from rvfph_prospective_.concept_s where active = '1'",
-			   "create function noSuchThing() returns int deterministic return 1"]}
+			   "create table rvfph_prospective_.concept_active as select id from rvfph_prospective_.concept_s where active = '1'"]}
 			 ],
 			 "assertions": {
 			  "11111111-1111-1111-1111-111111111111": {
@@ -103,14 +103,34 @@ class DuckDbAssertionExecutionServiceTest {
 	}
 
 	@Test
-	void prepareSchemaAppliesWhatItCanAndReportsWhatItCannot() {
+	void prepareSchemaAppliesEverySetupStatement() {
+		// The publisher emits nothing here it expects to fail: MySQL routine
+		// definitions are dropped at publish time, and so is the one CALL whose
+		// DuckDB equivalent is a port. So the tolerated failure count is zero.
 		DuckDbAssertionExecutionService.SetupResult r = service.prepareSchema();
-		// The *_active build, the macro and the derived table succeed; the MySQL
-		// CREATE FUNCTION cannot, and must not abort the rest of the file - the
-		// ports are what replace it.
 		assertEquals(3, r.applied());
-		assertEquals(1, r.failures().size());
-		assertTrue(r.failures().get(0).contains("noSuchThing"));
+		assertTrue(r.failures().isEmpty());
+	}
+
+	@Test
+	void aFailedSetupStatementAbortsTheRunRatherThanDegradingIt() throws Exception {
+		// The regression this exists to prevent: ports-first ordering lost 12 of
+		// 45 setup statements and the findings total did not move by one row,
+		// because the machinery lost belonged to a corpus that run did not
+		// exercise. Reporting results off a half-built schema is worse than
+		// failing, so any setup failure is fatal.
+		DuckStore broken = DuckStore.parse(STORE.replace(
+				"\"ports\": [", "\"ports\": [\"create table x as select * from no_such_relation\", "));
+		DuckDbAssertionExecutionService svc = new DuckDbAssertionExecutionService(broken,
+				new DuckBinder(broken.sentinels(), new DuckBinder.Config(7L, "prospective",
+						null, null, "rvf_results.qa_result", null, List.of(), "20260831")),
+				con);
+
+		DuckDbAssertionExecutionService.SetupFailedException e = assertThrows(
+				DuckDbAssertionExecutionService.SetupFailedException.class, svc::prepareSchema);
+		assertEquals(1, e.getFailures().size());
+		assertTrue(e.getFailures().get(0).contains("no_such_relation"), e.getFailures().get(0));
+		assertTrue(e.getMessage().contains("no assertion result from this run is trustworthy"), e.getMessage());
 	}
 
 	@Test

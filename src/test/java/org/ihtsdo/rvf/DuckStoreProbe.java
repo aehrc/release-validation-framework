@@ -111,12 +111,23 @@ public class DuckStoreProbe {
 					System.getProperty("probe.moduleid"), java.util.List.of(), releaseVersion));
 			DuckDbAssertionExecutionService setupService =
 					new DuckDbAssertionExecutionService(duckStore, probeBinder, con);
-			DuckDbAssertionExecutionService.SetupResult setup = setupService.prepareSchema();
-			System.out.println("setup        : " + setup.applied() + " applied, "
-					+ setup.failures().size() + " failed (MySQL routine bodies, replaced by ports)");
-			for (String e : setup.failures().subList(0, Math.min(6, setup.failures().size()))) {
-				System.out.println("  ~ " + e);
+			// prepareSchema throws on ANY setup failure now, and the probe lets it
+			// out rather than catching it. Printing a failure count and carrying
+			// on is exactly what hid a 12-statement regression: the findings
+			// total did not move, so the numbers still read as a good run.
+			DuckDbAssertionExecutionService.SetupResult setup;
+			try {
+				setup = setupService.prepareSchema();
+			} catch (DuckDbAssertionExecutionService.SetupFailedException e) {
+				System.out.println("setup        : FAILED on " + e.getFailures().size()
+						+ " statement(s) - no result below would be trustworthy");
+				for (String f : e.getFailures().subList(0, Math.min(8, e.getFailures().size()))) {
+					System.out.println("  ! " + f);
+				}
+				System.exit(70);
+				return;
 			}
+			System.out.println("setup        : " + setup.applied() + " applied, 0 failed");
 
 			int ok = 0, failed = 0;
 			long totalFindings = 0;
