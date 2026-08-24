@@ -50,7 +50,7 @@ public class DuckStoreProbe {
 
 		String json = Files.readString(storePath);
 		Map<String, String> sentinels = sentinels(json);
-		List<String[]> assertions = assertions(json);
+		List<String[]> assertions = selectGroups(assertions(json), json);
 		List<String[]> prerequisites = prerequisites(json);
 		System.out.println("store        : " + storePath);
 		System.out.println("sentinels    : " + sentinels.size());
@@ -231,6 +231,78 @@ public class DuckStoreProbe {
 		}
 	}
 
+	/**
+	 * Keep only the assertions the requested groups select.
+	 *
+	 * <p>RVF never runs a corpus whole: the invocation names groups, and
+	 * groups.xml plus policies.xml decide membership. Production's AU run asks
+	 * for nine of the forty-odd groups. Run all 453 files instead and you run
+	 * ten other countries' preferred-term assertions, which on an AU release was
+	 * 84% of every finding - so this is not a refinement, it is the difference
+	 * between a number that means something and one that does not.
+	 *
+	 * <p>The rules come from RVF's own AssertionGroupImporter rather than a
+	 * reimplementation here. -Dprobe.groups=ALL opts out.
+	 */
+	private static List<String[]> selectGroups(List<String[]> all, String json) throws Exception {
+		String wanted = System.getProperty("probe.groups",
+				"common-edition,file-centric-validation,component-centric-validation,"
+				+ "release-type-validation,mdrs,common-authoring,au-authoring,"
+				+ "AustralianEdition,amtv4");
+		String corpus = System.getProperty("probe.corpus", "");
+		if ("ALL".equals(wanted) || corpus.isBlank()) {
+			System.out.println("groups       : not filtered"
+					+ (corpus.isBlank() ? " (no -Dprobe.corpus)" : ""));
+			return all;
+		}
+		Map<String, String[]> meta = assertionMeta(json);
+		List<org.ihtsdo.rvf.core.data.model.Assertion> models = new ArrayList<>();
+		for (Map.Entry<String, String[]> e : meta.entrySet()) {
+			var a = new org.ihtsdo.rvf.core.data.model.Assertion();
+			a.setUuid(java.util.UUID.fromString(e.getKey()));
+			a.setAssertionText(e.getValue()[1]);
+			a.setKeywords(e.getValue()[2]);
+			models.add(a);
+		}
+		Map<String, java.util.Set<String>> resolved;
+		try (var g = Files.newInputStream(Path.of(corpus, "groups.xml"));
+				var p = Files.newInputStream(Path.of(corpus, "policies.xml"))) {
+			resolved = new org.ihtsdo.rvf.importer.AssertionGroupImporter(null)
+					.resolveGroups(g, p, models);
+		}
+		java.util.Set<String> want = new java.util.LinkedHashSet<>(
+				List.of(wanted.split("\\s*,\\s*")));
+		java.util.Set<String> keep = new java.util.HashSet<>();
+		for (Map.Entry<String, java.util.Set<String>> e : resolved.entrySet()) {
+			if (e.getValue().stream().anyMatch(want::contains)) {
+				keep.add(e.getKey());
+			}
+		}
+		// The 'resource' category is infrastructure, not validation: those
+		// assertions build the shared intermediate tables (res_edited_active_concepts,
+		// tmp_pt, ancestors, description_tmp) and define the procedures that other
+		// assertions call. They are not in any of the nine groups, so filtering by
+		// group alone drops them and 12 assertions then fail on a missing table
+		// that nothing was left to create. Keep them, and run them FIRST.
+		java.util.Set<String> resource = new java.util.HashSet<>();
+		for (Map.Entry<String, String[]> e : meta.entrySet()) {
+			if (java.util.Arrays.stream(e.getValue()[2].split(","))
+					.map(String::trim).anyMatch("resource"::equals)) {
+				resource.add(e.getKey());
+			}
+		}
+		List<String[]> first = all.stream().filter(a -> resource.contains(a[0])).toList();
+		List<String[]> rest = all.stream()
+				.filter(a -> keep.contains(a[0]) && !resource.contains(a[0])).toList();
+		List<String[]> out = new ArrayList<>(first);
+		out.addAll(rest);
+		System.out.println("groups       : " + want.size() + " requested, "
+				+ keep.size() + " of " + meta.size() + " assertions selected; "
+				+ resource.size() + " resource assertions run first ("
+				+ out.size() + " statements)");
+		return out;
+	}
+
 	private static boolean hasParquet(Path dir) throws Exception {
 		try (var files = Files.list(dir)) {
 			return files.anyMatch(f -> f.toString().endsWith(".parquet"));
@@ -332,90 +404,80 @@ public class DuckStoreProbe {
 	// Jackson, which RVF already depends on; the probe avoids it so that a
 	// failure is attributable to DuckDB or the store rather than to binding.
 
+	// ---------------------------------------------------------------------
+	// Store parsing.
+	//
+	// This was hand-rolled regex over the JSON, and adding three fields to each
+	// assertion entry silently broke it - the pattern required "sha256" to be
+	// followed immediately by "statements", so it matched nothing and the probe
+	// would have reported 0 assertions rather than an error. Jackson is already
+	// on the classpath; the store is not big enough for streaming to matter.
+	// ---------------------------------------------------------------------
+
+	private static com.fasterxml.jackson.databind.JsonNode store(String json) {
+		try {
+			return new com.fasterxml.jackson.databind.ObjectMapper().readTree(json);
+		} catch (Exception e) {
+			throw new IllegalStateException("store is not valid JSON", e);
+		}
+	}
+
 	private static Map<String, String> sentinels(String json) {
 		Map<String, String> out = new LinkedHashMap<>();
-		Matcher m = Pattern.compile(
-				"\\{\\s*\"placeholder\":\\s*\"(<[A-Z_]+>)\",\\s*\"sentinel\":\\s*\"([^\"]+)\"\\s*\\}")
-				.matcher(section(json, "\"sentinels\""));
-		while (m.find()) {
-			out.put(m.group(1), m.group(2));
+		for (var n : store(json).path("sentinels")) {
+			out.put(n.path("placeholder").asText(), n.path("sentinel").asText());
 		}
 		return out;
 	}
 
+	/** {@code [uuid, file, statement]} per statement, in store order. */
 	private static List<String[]> assertions(String json) {
 		List<String[]> out = new ArrayList<>();
-		Matcher m = Pattern.compile(
-				"\"([0-9a-f-]{36})\":\\s*\\{\\s*\"file\":\\s*\"((?:[^\"\\\\]|\\\\.)*)\","
-						+ "\\s*\"sha256\":\\s*\"[0-9a-f]+\",\\s*\"statements\":\\s*\\[\\s*\"((?:[^\"\\\\]|\\\\.)*)\"")
-				.matcher(json);
-		while (m.find()) {
-			out.add(new String[] { m.group(1), unescape(m.group(2)), unescape(m.group(3)) });
-		}
+		var node = store(json).path("assertions");
+		node.fieldNames().forEachRemaining(uuid -> {
+			var a = node.path(uuid);
+			for (var s : a.path("statements")) {
+				out.add(new String[] { uuid, a.path("file").asText(), s.asText() });
+			}
+		});
+		return out;
+	}
+
+	/** {@code uuid -> [file, text, keywords]}, for group resolution. */
+	private static Map<String, String[]> assertionMeta(String json) {
+		Map<String, String[]> out = new LinkedHashMap<>();
+		var node = store(json).path("assertions");
+		node.fieldNames().forEachRemaining(uuid -> out.put(uuid, new String[] {
+				node.path(uuid).path("file").asText(),
+				node.path(uuid).path("text").asText(""),
+				node.path(uuid).path("keywords").asText("") }));
 		return out;
 	}
 
 	private static Map<String, String> tableColumns(String json) {
 		Map<String, String> out = new LinkedHashMap<>();
-		int i = json.indexOf("\"tableColumns\"");
-		int start = json.indexOf('{', i);
-		int depth = 0, end = start;
-		for (int j = start; j < json.length(); j++) {
-			char c = json.charAt(j);
-			if (c == '{') {
-				depth++;
-			} else if (c == '}' && --depth == 0) {
-				end = j + 1;
-				break;
-			}
-		}
-		Matcher m = Pattern.compile("\"([a-z0-9_]+)\":\\s*\"((?:[^\"\\\\]|\\\\.)*)\"")
-				.matcher(json.substring(start, end));
-		while (m.find()) {
-			out.put(m.group(1), unescape(m.group(2)));
-		}
+		var node = store(json).path("tableColumns");
+		node.fieldNames().forEachRemaining(t -> out.put(t, node.path(t).asText()));
 		return out;
 	}
 
 	private static List<String> ports(String json) {
 		List<String> out = new ArrayList<>();
-		Matcher m = Pattern.compile("\"((?:[^\"\\\\]|\\\\.)*)\"").matcher(section(json, "\"ports\""));
-		while (m.find()) {
-			out.add(unescape(m.group(1)));
+		for (var n : store(json).path("ports")) {
+			out.add(n.asText());
 		}
 		return out;
 	}
 
+	/** {@code [file, statement]} per pre-requisite statement. */
 	private static List<String[]> prerequisites(String json) {
 		List<String[]> out = new ArrayList<>();
-		String sec = section(json, "\"prerequisites\"");
-		Matcher m = Pattern.compile("\"((?:[^\"\\\\]|\\\\.)*)\"").matcher(sec);
-		String file = "pre_requisites";
-		while (m.find()) {
-			String v = unescape(m.group(1));
-			if (v.length() > 20 && !v.equals("file") && !v.equals("statements") && !v.equals("sha256")) {
-				out.add(new String[] { file, v });
+		for (var p : store(json).path("prerequisites")) {
+			for (var s : p.path("statements")) {
+				out.add(new String[] { p.path("file").asText(), s.asText() });
 			}
 		}
 		return out;
-	}
-
-	private static String section(String json, String key) {
-		int i = json.indexOf(key);
-		if (i < 0) {
-			return "";
-		}
-		int start = json.indexOf('[', i);
-		int depth = 0;
-		for (int j = start; j < json.length(); j++) {
-			char c = json.charAt(j);
-			if (c == '[') {
-				depth++;
-			} else if (c == ']' && --depth == 0) {
-				return json.substring(start, j + 1);
-			}
-		}
-		return json.substring(start);
 	}
 
 	private static String unescape(String s) {
