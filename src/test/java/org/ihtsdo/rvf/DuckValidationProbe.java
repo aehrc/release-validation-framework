@@ -42,6 +42,7 @@ import static org.mockito.Mockito.mock;
  *   -Dprobe.extension=true     releaseAsAnEdition=false, split + combine
  *   -Dprobe.edition=true       releaseAsAnEdition=true
  *   -Dprobe.standalone=true    stand-alone product, no combine
+ *   -Dprobe.deltaonly=true     package is a delta; rebuild the snapshot from it
  *   -Dprobe.modules=a,b,c      &lt;INCLUDED_MODULES&gt;
  *   -Dprobe.moduleid=x         &lt;MODULEID&gt;
  *   -Dprobe.groups=a,b         assertion groups (default: production's nine)
@@ -72,6 +73,7 @@ public final class DuckValidationProbe {
 		config.setExtensionValidation(Boolean.getBoolean("probe.extension"));
 		config.setReleaseAsAnEdition(Boolean.getBoolean("probe.edition"));
 		config.setStandAloneProduct(Boolean.getBoolean("probe.standalone"));
+		config.setRf2DeltaOnly(Boolean.getBoolean("probe.deltaonly"));
 		config.setIncludedModules(csv(System.getProperty("probe.modules", "")));
 		config.setDefaultModuleId(System.getProperty("probe.moduleid"));
 		config.setFailureExportMax(10);
