@@ -9,6 +9,13 @@ import org.ihtsdo.rvf.core.service.RvfDynamicDataSource;
 import org.ihtsdo.rvf.core.service.ValidationRunner;
 import org.ihtsdo.rvf.core.service.duck.DuckDbValidationService;
 import org.ihtsdo.rvf.importer.RvfAssertionsDatabasePrimerService;
+import org.ihtsdo.rvf.rest.controller.TestUploadFileController;
+import org.ihtsdo.rvf.rest.controller.AutomatedTestController;
+import org.ihtsdo.rvf.rest.controller.AssertionController;
+import org.ihtsdo.rvf.rest.controller.AssertionGroupController;
+import org.ihtsdo.rvf.rest.controller.ReleaseController;
+import org.ihtsdo.rvf.core.service.duck.DuckAssertionService;
+import org.ihtsdo.rvf.core.service.AssertionServiceImpl;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -71,8 +78,13 @@ class DuckDbEngineContextTest {
 				"no EntityManagerFactory - nothing may run DDL");
 		assertEquals(0, context.getBeanNamesForType(Repository.class).length,
 				"no Spring Data repositories - they would need an EntityManagerFactory");
-		assertEquals(0, context.getBeanNamesForType(AssertionService.class).length,
-				"the JPA-backed assertion service is replaced by DuckAssertionSource");
+		// AssertionService itself IS present - it has to be, or every controller
+		// that injects it disappears and the application cannot be asked to
+		// validate anything. What must be absent is the JPA implementation.
+		assertEquals(0, context.getBeanNamesForType(AssertionServiceImpl.class).length,
+				"the JPA-backed assertion service would need an EntityManagerFactory");
+		assertEquals(1, context.getBeanNamesForType(AssertionService.class).length,
+				"exactly one implementation, so injection is unambiguous");
 	}
 
 	@Test
@@ -86,7 +98,39 @@ class DuckDbEngineContextTest {
 		assertEquals(0, context.getBeanNamesForType(RvfDynamicDataSource.class).length);
 		assertEquals(0, context.getBeanNamesForType(MysqlValidationService.class).length);
 		assertEquals(0, context.getBeanNamesForType(ValidationRunner.class).length,
-				"the MySQL orchestrator goes with them; the DuckDB runner is not wired yet");
+				"the MySQL orchestrator goes with them; the DuckDB runner is not wired yet - "
+						+ "so a submitted validation is enqueued and nothing drains the queue");
+	}
+
+	/**
+	 * The submission path exists in DuckDB mode.
+	 *
+	 * <p>It did not, and the reason was a single injected dependency: every
+	 * controller that accepts a validation takes {@code AssertionService}, whose
+	 * only implementation was JPA-backed and therefore MySQL-conditional. So the
+	 * application booted, served /version and /result, and had no endpoint that
+	 * could be asked to validate anything - a server that looks healthy and
+	 * cannot do its job.
+	 *
+	 * <p>The assertion CRUD controllers stay MySQL-only on purpose. They
+	 * administer an assertion database, and in this mode the corpus is a
+	 * published store; an endpoint that pretended to accept a write would be
+	 * worse than one that is absent.
+	 */
+	@Test
+	void theSubmissionPathIsRegisteredAndTheCrudControllersAreNot() {
+		assertEquals(1, context.getBeanNamesForType(TestUploadFileController.class).length,
+				"nothing could submit a validation without this");
+		assertEquals(1, context.getBeanNamesForType(AutomatedTestController.class).length);
+		assertEquals(1, context.getBeanNamesForType(AssertionService.class).length,
+				"exactly one AssertionService - the store-backed one");
+		assertEquals(DuckAssertionService.class,
+				context.getBean(AssertionService.class).getClass());
+
+		assertEquals(0, context.getBeanNamesForType(AssertionController.class).length,
+				"assertion CRUD administers a database this mode does not have");
+		assertEquals(0, context.getBeanNamesForType(AssertionGroupController.class).length);
+		assertEquals(0, context.getBeanNamesForType(ReleaseController.class).length);
 	}
 
 	@Test

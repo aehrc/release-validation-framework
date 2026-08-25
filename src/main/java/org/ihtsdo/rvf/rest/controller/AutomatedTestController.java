@@ -28,14 +28,24 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import org.ihtsdo.rvf.config.ConditionalOnMysqlEngine;
 
 /**
  * The controller that runs the automated regression test
  */
+/**
+ * Present in BOTH engines. Its only MySQL coupling was {@code AssertionService},
+ * whose sole implementation used to be the JPA one - which is why the entire
+ * submission path disappeared under {@code rvf.execution.engine=duckdb}, leaving
+ * an application that booted and could not be asked to validate anything.
+ * {@code DuckAssertionService} supplies the same interface over the published
+ * store, so this controller is engine-agnostic and no longer conditional.
+ *
+ * <p>The assertion CRUD controllers are NOT: they reach ReleaseDataManager and
+ * AssertionGroupRepository, which administer a database DuckDB mode does not
+ * have.
+ */
 @RestController
 @Tag(name = "Automated Test")
-@ConditionalOnMysqlEngine
 public class AutomatedTestController {
 
     private static final String ENABLE_MRCM_VALIDATION = "enableMRCMValidation";
