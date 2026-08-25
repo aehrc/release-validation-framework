@@ -34,7 +34,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -101,6 +104,23 @@ public class DuckDbValidationService {
 	private static final String PROSPECTIVE_SCHEMA = "prospective";
 	private static final String PREVIOUS_SCHEMA = "previous";
 	private static final String DEPENDENCY_SCHEMA = "dependency";
+
+	/**
+	 * Where an extension is merged with its dependency. A fourth schema rather
+	 * than a merge INTO {@code prospective}, which is what MySQL does: the
+	 * release-type assertions have already run against the extension alone by
+	 * then, but a run that had to be re-examined afterwards would find its
+	 * inputs overwritten.
+	 */
+	private static final String COMBINED_SCHEMA = "combined";
+
+	/** Marks which side of the extension/dependency merge a row came from. */
+	private static final String MERGE_SOURCE = "rvf_merge_source";
+
+	private static final String EFFECTIVE_TIME = "effectivetime";
+
+	/** Assertions that compare a package against its own previous release. */
+	private static final String RELEASE_TYPE_VALIDATION = "release-type-validation";
 
 	/** Where qa_result lives, matching DuckStoreProbe and rvf_duck.py. */
 	private static final String QA_RESULT_SCHEMA = "rvf_results";
@@ -196,6 +216,20 @@ public class DuckDbValidationService {
 	public ValidationStatusReport runValidations(MysqlExecutionConfig executionConfig,
 			ReleaseDirectories releases, String reportStorage, ValidationStatusReport statusReport) {
 		long timeStart = System.currentTimeMillis();
+		// ValidationRunner hands both engines a status report that already
+		// carries an empty ValidationReport, and constructTestReport fills that
+		// one in rather than replacing it - the MySQL service assumes the same.
+		// Guarded rather than assumed because the failure otherwise lands as an
+		// NPE inside the catch block below, from a class that documents itself
+		// as never throwing. The status report's OWN collections cannot be
+		// guarded from here: it has no setter for them, so a caller must still
+		// build it with the ValidationRunConfig constructor rather than the
+		// no-arg one Jackson uses.
+		if (statusReport.getResultReport() == null) {
+			ValidationReport report = new ValidationReport();
+			report.setExecutionId(executionConfig.getExecutionId());
+			statusReport.setResultReport(report);
+		}
 		Path database = databaseFile(executionConfig.getExecutionId());
 		try {
 			// A file database, not jdbc:duckdb: in memory. A full release is
@@ -239,7 +273,7 @@ public class DuckDbValidationService {
 			materialise(connection, releases.prospective(), PROSPECTIVE_SCHEMA, store);
 			// Only now: pre-requisites.sql names its inputs unqualified, so the
 			// search path has to point at a schema that already exists.
-			session(connection);
+			session(connection, PROSPECTIVE_SCHEMA);
 			statusReport.setRF2Files(rf2FileNames(releases.prospective()));
 
 			if (releases.previous() != null) {
@@ -260,17 +294,23 @@ public class DuckDbValidationService {
 			return statusReport;
 		}
 
-		DuckBinder binder = new DuckBinder(store.sentinels(), new DuckBinder.Config(
-				executionConfig.getExecutionId(), PROSPECTIVE_SCHEMA,
-				releases.previous() == null ? null : PREVIOUS_SCHEMA,
-				releases.dependency() == null ? null : DEPENDENCY_SCHEMA,
-				qaResultTable, executionConfig.getDefaultModuleId(),
-				executionConfig.getIncludedModules(), releaseVersion(releases.prospective())));
-		DuckDbAssertionExecutionService executionService =
-				new DuckDbAssertionExecutionService(store, binder, connection);
+		DuckAssertionSource source = assertionSource(store);
+		List<Assertion> assertions = selectAssertions(source, executionConfig);
+		LOGGER.info("Total assertions to run {} for groups {}", assertions.size(),
+				executionConfig.getGroupNames());
 
+		// Derived once, not per phase: it walks the release directory, and both
+		// phases must bind the SAME <VERSION> or their findings disagree about
+		// which release they describe.
+		String version = releaseVersion(releases.prospective());
+
+		List<TestRunItem> items;
 		try {
-			executionService.prepareSchema();
+			items = executionConfig.isExtensionValidation() && !executionConfig.isReleaseAsAnEdition()
+					? runExtensionSplit(connection, store, executionConfig, releases,
+							reportStorage, assertions, version)
+					: runSinglePhase(connection, store, executionConfig, releases,
+							reportStorage, assertions, version);
 		} catch (DuckDbAssertionExecutionService.SetupFailedException e) {
 			// Deliberately not downgraded to a warning and carried past. The
 			// publisher emits no setup statement it expects to fail, so a
@@ -282,18 +322,225 @@ public class DuckDbValidationService {
 			statusReport.addFailureMessage(e.getMessage());
 			statusReport.getReportSummary().put(SQL_SUMMARY_KEY, e.getMessage());
 			return statusReport;
+		} catch (SQLException e) {
+			// Reached only from the extension combine. See runExtensionSplit for
+			// why this aborts the run instead of reporting alongside it.
+			String message = ExceptionUtils.getExceptionCause(
+					"Failed to combine the extension with its dependency", e);
+			LOGGER.error(message, e);
+			statusReport.addFailureMessage(message);
+			statusReport.getReportSummary().put(SQL_SUMMARY_KEY, message);
+			return statusReport;
 		}
-
-		DuckAssertionSource source = assertionSource(store);
-		List<Assertion> assertions = selectAssertions(source, executionConfig);
-		LOGGER.info("Total assertions to run {} for groups {}", assertions.size(),
-				executionConfig.getGroupNames());
-		List<TestRunItem> items = executeAssertions(executionService, assertions, reportStorage);
 
 		constructTestReport(statusReport, executionConfig, timeStart, items,
 				new DuckFailuresExtractor(connection, qaResultTable, whitelistService,
 						source::findAll));
 		return statusReport;
+	}
+
+	/**
+	 * Every assertion against one schema - an international or edition release,
+	 * and the shape production runs.
+	 */
+	private List<TestRunItem> runSinglePhase(Connection connection, DuckStore store,
+			MysqlExecutionConfig executionConfig, ReleaseDirectories releases,
+			String reportStorage, List<Assertion> assertions, String version) {
+		DuckDbAssertionExecutionService executionService = executionService(
+				connection, store, executionConfig, releases, PROSPECTIVE_SCHEMA, version);
+		executionService.prepareSchema();
+		return executeAssertions(executionService, assertions, reportStorage);
+	}
+
+	/**
+	 * The extension shape: release-type assertions against the extension alone,
+	 * everything else against the extension merged with its dependency.
+	 *
+	 * <p>Mirrors {@code MysqlValidationService.runExtensionReleaseValidation}.
+	 * The split is not cosmetic in either engine. A release-type assertion asks
+	 * "did this package change the right way since its previous release", so it
+	 * must see the extension's OWN delta/snapshot/full - merge the dependency in
+	 * first and every international component reads as newly added. Every other
+	 * assertion asks a question about a coherent terminology, so it must see the
+	 * dependency too - unmerged, every AU description of an international concept
+	 * is an orphan and every AU relationship points at a concept that does not
+	 * exist.
+	 *
+	 * <p>An earlier version of this class did not reproduce the split, on the
+	 * reasoning that {@code <DEPENDENCY>} already names the dependency schema so
+	 * nothing needs merging. That was wrong: only a handful of assertions mention
+	 * {@code <DEPENDENCY>} explicitly, and the rest address {@code curr_*} alone.
+	 *
+	 * <p>Unlike the MySQL service, a failed combine ABORTS. MySQL catches the
+	 * exception, reports it as a message, and then runs the remaining assertions
+	 * anyway - against a schema whose combine stopped part way. Those assertions
+	 * find nothing and report clean, so the run's failure count is unaffected by
+	 * a merge that did not happen. See UPSTREAM-SQL-DEFECTS.md, defect 7.
+	 */
+	private List<TestRunItem> runExtensionSplit(Connection connection, DuckStore store,
+			MysqlExecutionConfig executionConfig, ReleaseDirectories releases,
+			String reportStorage, List<Assertion> assertions, String version) throws SQLException {
+		List<Assertion> releaseType = new ArrayList<>();
+		List<Assertion> rest = new ArrayList<>();
+		for (Assertion assertion : assertions) {
+			String keywords = assertion.getKeywords();
+			if (keywords != null && keywords.contains(RELEASE_TYPE_VALIDATION)) {
+				releaseType.add(assertion);
+			} else {
+				rest.add(assertion);
+			}
+		}
+		LOGGER.info("Extension validation: {} release-type assertions against the extension, "
+				+ "{} against the extension combined with its dependency",
+				releaseType.size(), rest.size());
+
+		DuckDbAssertionExecutionService extensionPhase = executionService(
+				connection, store, executionConfig, releases, PROSPECTIVE_SCHEMA, version);
+		extensionPhase.prepareSchema();
+		List<TestRunItem> items =
+				new ArrayList<>(executeAssertions(extensionPhase, releaseType, reportStorage));
+
+		if (executionConfig.isStandAloneProduct()) {
+			// A stand-alone product has no dependency to merge; MySQL skips the
+			// combine here too and runs the rest against the extension schema.
+			LOGGER.info("Stand-alone product - no dependency combine");
+			items.addAll(executeAssertions(extensionPhase, rest, reportStorage));
+			return items;
+		}
+		if (releases.dependency() == null) {
+			throw new SQLException("Extension validation needs a dependency release, none supplied");
+		}
+
+		combineExtensionWithDependency(connection, store);
+		DuckDbAssertionExecutionService combinedPhase = executionService(
+				connection, store, executionConfig, releases, COMBINED_SCHEMA, version);
+		// The pre-requisite and port tables are built by unqualified DDL, so
+		// they landed in `prospective`. The combined schema needs its OWN -
+		// a transitive closure over the extension alone would leave every
+		// international ancestor out of it.
+		combinedPhase.prepareSchema();
+		items.addAll(executeAssertions(combinedPhase, rest, reportStorage));
+		return items;
+	}
+
+	/**
+	 * Builds {@link #COMBINED_SCHEMA}: the extension's own delta and full, and a
+	 * snapshot merged with the dependency's.
+	 *
+	 * <p>The merge rule is MySQL's, restated. {@code ReleaseDataManager.copyData}
+	 * runs four inserts per table - dependency rows with no counterpart, extension
+	 * rows with no counterpart, dependency rows that tie or beat their
+	 * counterpart's effectiveTime ({@code >=}), and extension rows that strictly
+	 * beat theirs ({@code >}). Those four are mutually exclusive and exhaustive,
+	 * so together they mean: one row per key, highest effectiveTime, dependency
+	 * wins a tie. That is what the window function below says in one statement.
+	 *
+	 * <p>Two deliberate deviations from the MySQL text:
+	 * <ul>
+	 * <li>effectiveTime is compared AS STORED rather than through
+	 *     {@code cast(... as datetime)}. The column is {@code char(8)} holding
+	 *     zero-padded {@code YYYYMMDD}, whose lexicographic order is its
+	 *     chronological order, so the cast changes no answer - and DuckDB will
+	 *     not perform it.
+	 * <li>the partition key is the table's ACTUAL key. MySQL hardcodes
+	 *     {@code id}, which {@code identifier_s} does not have - see
+	 *     {@link #keyColumns}.
+	 * </ul>
+	 */
+	private void combineExtensionWithDependency(Connection connection, DuckStore store)
+			throws SQLException {
+		long t0 = System.currentTimeMillis();
+		Map<String, String> tableColumns = store.tableColumns();
+		int merged = 0;
+		int copied = 0;
+		try (Statement st = connection.createStatement()) {
+			st.execute("CREATE SCHEMA IF NOT EXISTS " + COMBINED_SCHEMA);
+			for (Map.Entry<String, String> entry : new TreeMap<>(tableColumns).entrySet()) {
+				String table = entry.getKey();
+				List<String> columns = columnNames(entry.getValue());
+				if (table.endsWith("_s")) {
+					st.execute(mergedSnapshotSql(table, columns));
+					merged++;
+				} else {
+					// Delta and full stay the extension's own. The dependency's
+					// history is not this package's to restate.
+					st.execute("CREATE OR REPLACE TABLE " + COMBINED_SCHEMA + "." + table
+							+ " AS SELECT * FROM " + PROSPECTIVE_SCHEMA + "." + table);
+					copied++;
+				}
+			}
+		}
+		LOGGER.info("Combined extension with dependency: {} snapshot tables merged, "
+				+ "{} delta/full tables copied, in {}ms",
+				merged, copied, System.currentTimeMillis() - t0);
+	}
+
+	private String mergedSnapshotSql(String table, List<String> columns) {
+		String select = String.join(", ", columns);
+		String key = String.join(", ", keyColumns(table, columns));
+		String order = columns.contains(EFFECTIVE_TIME)
+				? EFFECTIVE_TIME + " DESC, " + MERGE_SOURCE
+				: MERGE_SOURCE;
+		return "CREATE OR REPLACE TABLE " + COMBINED_SCHEMA + "." + table + " AS SELECT " + select
+				+ " FROM (SELECT *, 0 AS " + MERGE_SOURCE + " FROM " + DEPENDENCY_SCHEMA + "." + table
+				+ " UNION ALL SELECT *, 1 AS " + MERGE_SOURCE + " FROM " + PROSPECTIVE_SCHEMA + "." + table
+				+ ") QUALIFY row_number() OVER (PARTITION BY " + key + " ORDER BY " + order + ") = 1";
+	}
+
+	/**
+	 * The columns that identify one component in a snapshot table.
+	 *
+	 * <p>{@code id} for all but one. {@code identifier_s} carries the RF2
+	 * Identifier file, which is keyed on
+	 * {@code (identifierSchemeId, alternateIdentifier)} and has no {@code id}
+	 * column at all - and MySQL's merge names {@code id} unconditionally, so on
+	 * that one table it raises "Unknown column" and takes the rest of the combine
+	 * down with it.
+	 */
+	private static List<String> keyColumns(String table, List<String> columns) {
+		if (columns.contains("id")) {
+			return List.of("id");
+		}
+		if (columns.contains("identifierschemeid") && columns.contains("alternateidentifier")) {
+			return List.of("identifierschemeid", "alternateidentifier");
+		}
+		throw new IllegalStateException(
+				"No key columns known for " + table + " - cannot merge it with a dependency");
+	}
+
+	/** Column names out of the DDL fragment the store carries per table. */
+	private static List<String> columnNames(String columnSpec) {
+		List<String> names = new ArrayList<>();
+		for (String column : columnSpec.split(",")) {
+			String trimmed = column.trim();
+			if (trimmed.isEmpty()) {
+				continue;
+			}
+			int space = trimmed.indexOf(' ');
+			names.add((space < 0 ? trimmed : trimmed.substring(0, space)).toLowerCase(Locale.ROOT));
+		}
+		return names;
+	}
+
+	private DuckDbAssertionExecutionService executionService(Connection connection, DuckStore store,
+			MysqlExecutionConfig executionConfig, ReleaseDirectories releases, String schema,
+			String version) {
+		DuckBinder binder = new DuckBinder(store.sentinels(), new DuckBinder.Config(
+				executionConfig.getExecutionId(), schema,
+				releases.previous() == null ? null : PREVIOUS_SCHEMA,
+				releases.dependency() == null ? null : DEPENDENCY_SCHEMA,
+				qaResultTable, executionConfig.getDefaultModuleId(),
+				executionConfig.getIncludedModules(), version));
+		try {
+			session(connection, schema);
+		} catch (SQLException e) {
+			// Same class of failure as a setup statement failing, and treated
+			// alike: without the search path the pre-requisites build in, or
+			// read from, the wrong schema.
+			throw new DuckDbAssertionExecutionService.SetupFailedException(
+					List.of("SET search_path='" + schema + "' -> " + e.getMessage()));
+		}
+		return new DuckDbAssertionExecutionService(store, binder, connection);
 	}
 
 	/**
@@ -422,11 +669,14 @@ public class DuckDbValidationService {
 	 * Session settings, neither of them optional, both established against the
 	 * real corpus by DuckStoreProbe. They do not carry to another connection.
 	 */
-	private void session(Connection connection) throws SQLException {
+	private void session(Connection connection, String schema) throws SQLException {
 		try (Statement st = connection.createStatement()) {
 			// pre-requisites.sql refers to its inputs unqualified - "FROM
-			// concept_s", not "FROM prospective.concept_s".
-			st.execute("SET search_path='" + PROSPECTIVE_SCHEMA + "'");
+			// concept_s", not "FROM prospective.concept_s". Which schema that
+			// resolves to is the whole reason the extension split works: the
+			// combined phase re-runs the same statements with the search path
+			// moved, and they build over the merged tables instead.
+			st.execute("SET search_path='" + schema + "'");
 			// MySQL casts freely between types and DuckDB does not; amtv4's
 			// isValidComponentId_cr calls length() on a BIGINT column.
 			st.execute("SET old_implicit_casting=true");
