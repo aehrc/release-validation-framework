@@ -29,8 +29,10 @@ import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import org.ihtsdo.rvf.config.ConditionalOnMysqlEngine;
 
 @Service
+@ConditionalOnMysqlEngine
 public class ValidationRunner {
 
 	public static final List<String> EMPTY_TEST_ASSERTION_GROUPS = Collections.singletonList("empty-test");

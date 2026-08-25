@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.*;
 import java.util.stream.Collectors;
+import org.ihtsdo.rvf.config.ConditionalOnMysqlEngine;
 
 /**
  * Imports assertion groups from {@link AssertionGroupingXml#GROUPS_RESOURCE_FILENAME} and
@@ -57,6 +58,7 @@ import java.util.stream.Collectors;
  */
 @Service
 @Transactional
+@ConditionalOnMysqlEngine
 public class AssertionGroupImporter {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(AssertionGroupImporter.class);

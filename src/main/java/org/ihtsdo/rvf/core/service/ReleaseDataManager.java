@@ -34,8 +34,10 @@ import java.sql.*;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.ihtsdo.rvf.config.ConditionalOnMysqlEngine;
 
 @Service
+@ConditionalOnMysqlEngine
 public class ReleaseDataManager {
 
 	private static final Logger logger = LoggerFactory.getLogger(ReleaseDataManager.class);

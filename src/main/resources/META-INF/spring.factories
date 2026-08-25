@@ -1,0 +1,4 @@
+# EnvironmentPostProcessor is still discovered through spring.factories in Spring
+# Boot 3; only auto-configuration moved to AutoConfiguration.imports.
+org.springframework.boot.env.EnvironmentPostProcessor=\
+org.ihtsdo.rvf.config.DuckDbEngineEnvironmentPostProcessor

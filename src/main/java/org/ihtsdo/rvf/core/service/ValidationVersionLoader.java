@@ -39,9 +39,12 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
+import org.ihtsdo.rvf.config.ConditionalOnMysqlEngine;
+
 import static org.ihtsdo.rvf.core.service.ReleaseDataManager.RVF_DB_PREFIX;
 
 @Service
+@ConditionalOnMysqlEngine
 public class ValidationVersionLoader {
 
 	private static final String COMBINED = "_combined";

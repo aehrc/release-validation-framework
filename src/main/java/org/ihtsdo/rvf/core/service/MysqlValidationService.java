@@ -21,8 +21,10 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import org.ihtsdo.rvf.config.ConditionalOnMysqlEngine;
 
 @Service
+@ConditionalOnMysqlEngine
 public class MysqlValidationService {
 
 	public static final String START_EXECUTING_ASSERTIONS = "Start executing assertions...";

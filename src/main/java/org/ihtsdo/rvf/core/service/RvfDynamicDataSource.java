@@ -11,11 +11,13 @@ import jakarta.annotation.Resource;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.concurrent.ConcurrentHashMap;
+import org.ihtsdo.rvf.config.ConditionalOnMysqlEngine;
 
 /**
  * A wrapper around {@link org.apache.commons.dbcp.BasicDataSource} that handles dynamic schema changes
  */
 @Service
+@ConditionalOnMysqlEngine
 public class RvfDynamicDataSource {
 
 	@Resource(name = "dataSource")

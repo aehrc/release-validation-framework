@@ -15,9 +15,11 @@ import jakarta.annotation.PostConstruct;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import org.ihtsdo.rvf.config.ConditionalOnMysqlEngine;
 
 @Service
 @ConditionalOnProperty(name = "rvf.import.assertions.on-startup", havingValue = "true")
+@ConditionalOnMysqlEngine
 public class RvfAssertionsDatabasePrimerService {
 	@Autowired
 	private AssertionsDatabaseImporter dbImporter;
