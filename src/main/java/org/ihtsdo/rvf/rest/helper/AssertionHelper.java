@@ -9,8 +9,10 @@ import org.springframework.stereotype.Component;
 
 import jakarta.persistence.EntityNotFoundException;
 import java.util.*;
+import org.ihtsdo.rvf.config.ConditionalOnMysqlEngine;
 
 @Component
+@ConditionalOnMysqlEngine
 public class AssertionHelper {
 	@Autowired
 	private AssertionExecutionService assertionExecutionService;

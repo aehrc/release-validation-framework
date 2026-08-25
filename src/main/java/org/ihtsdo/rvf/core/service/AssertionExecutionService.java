@@ -31,9 +31,11 @@ import java.sql.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.regex.Pattern;
+import org.ihtsdo.rvf.config.ConditionalOnMysqlEngine;
 
 
 @Service
+@ConditionalOnMysqlEngine
 public class AssertionExecutionService {
 
 	private static final String FAILED_TO_FIND_RVF_DB_SCHEMA = "Failed to find rvf db schema for ";

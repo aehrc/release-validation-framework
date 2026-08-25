@@ -28,12 +28,14 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.ihtsdo.rvf.config.ConditionalOnMysqlEngine;
 
 /**
  * The controller that runs the automated regression test
  */
 @RestController
 @Tag(name = "Automated Test")
+@ConditionalOnMysqlEngine
 public class AutomatedTestController {
 
     private static final String ENABLE_MRCM_VALIDATION = "enableMRCMValidation";

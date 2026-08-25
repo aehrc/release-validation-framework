@@ -38,12 +38,14 @@ import java.io.PrintWriter;
 import java.net.URI;
 import java.nio.file.Files;
 import java.util.*;
+import org.ihtsdo.rvf.config.ConditionalOnMysqlEngine;
 
 /**
  * The controller that handles uploaded files for the validation to run
  */
 @RestController
 @Tag(name = "Validate")
+@ConditionalOnMysqlEngine
 public class TestUploadFileController {
 
 	private static final String ENABLE_MRCM_VALIDATION = "enableMRCMValidation";

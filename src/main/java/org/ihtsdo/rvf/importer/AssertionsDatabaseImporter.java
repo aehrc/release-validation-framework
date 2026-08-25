@@ -28,6 +28,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.*;
 
+import org.ihtsdo.rvf.config.ConditionalOnMysqlEngine;
+
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 /**
@@ -37,6 +39,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 	 */
 	@Service
 	@Transactional
+	@ConditionalOnMysqlEngine
 	public class AssertionsDatabaseImporter {
 
 		private static final String CREATE_PROCEDURE = "CREATE PROCEDURE";
