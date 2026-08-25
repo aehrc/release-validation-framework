@@ -175,11 +175,16 @@ public class DuckDbAssertionExecutionService {
 			return item;
 		}
 
-		// The assertion id, not the uuid: RVF binds <ASSERTIONUUID> to
-		// String.valueOf(assertion.getAssertionId()), and several assertions
-		// interpolate it into a numeric column unquoted. Using the uuid here
-		// would break those and would not join back to qa_result.
-		String assertionId = String.valueOf(assertion.getAssertionId());
+		// The UUID, not the numeric assertion id. RVF's MySQL path binds
+		// <ASSERTIONUUID> to String.valueOf(assertion.getAssertionId()) - a
+		// MySQL primary key - and this once did the same, on the assumption that
+		// some assertion interpolates it into a numeric column unquoted. That
+		// assumption was never checked and is false: all 849 occurrences across
+		// both assertion corpora are quoted, none appear in a numeric context,
+		// and qa_result.assertion_id is VARCHAR here. Keying on the UUID is what
+		// lets this path run with no MySQL at all, since the numeric id exists
+		// only as a row in a database we are trying to stop needing.
+		String assertionId = assertion.getUuid().toString();
 		List<String> skippedFor = new ArrayList<>();
 		for (String raw : stored.statements()) {
 			DuckBinder.Bound bound = binder.bind(raw, assertionId);

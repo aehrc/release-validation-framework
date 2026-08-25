@@ -22,6 +22,8 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -250,5 +252,42 @@ class DuckFailuresExtractorTest {
 		// Every column bar id/effectiveTime, comma-joined: active, moduleid,
 		// definitionstatusid.
 		assertEquals("1,mod-included,900000000000074008", detail.getFullComponent());
+	}
+
+	@Test
+	void aTableNameThatIsNotAKnownTableIsNeverConcatenatedIntoAQuery() throws Exception {
+		// The table name cannot be a bind parameter, so it is concatenated - and
+		// therefore validated against the catalog first. Every table_name in the
+		// corpus is a quoted literal today, so this is not reachable from a
+		// submitted release package; it is guarded because that is a property of
+		// the assertion corpus rather than of this code.
+		String uuid = "88888888-8888-8888-8888-888888888888";
+		insertQaResult(7L, uuid, 100L, "100",
+				"prospective.concept_s where 1=0 union all select * from prospective.concept_s --",
+				false);
+
+		DuckFailuresExtractor extractor = new DuckFailuresExtractor(con, QA_RESULT, whitelistService, assertionService);
+		when(whitelistService.isWhitelistDisabled()).thenReturn(false);
+		when(assertionService.findAll()).thenReturn(List.of(assertion(uuid)));
+		when(assertionService.getAllAssertionGroups()).thenReturn(Collections.emptyList());
+		when(whitelistService.checkComponentFailuresAgainstWhitelist(any())).thenReturn(Collections.emptyList());
+
+		TestRunItem testItem = item(uuid);
+		MysqlExecutionConfig config = new MysqlExecutionConfig(7L);
+		config.setFailureExportMax(100);
+
+		extractor.extractTestResults(List.of(testItem), config);
+
+		// The finding still surfaces - enrichment is additive, so refusing to
+		// enrich must never lose a failure - but nothing was executed for it.
+		assertEquals(1L, testItem.getFailureCount());
+		assertEquals(1, testItem.getFirstNInstances().size());
+		assertNull(testItem.getFirstNInstances().get(0).getModuleId());
+	}
+
+	@Test
+	void aQaResultTableNameThatIsNotAnIdentifierIsRejectedAtConstruction() {
+		assertThrows(IllegalArgumentException.class, () -> new DuckFailuresExtractor(
+				con, "qa_result; drop table concept_s", whitelistService, assertionService));
 	}
 }

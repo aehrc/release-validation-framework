@@ -75,10 +75,59 @@ public class DuckFailuresExtractor {
 	public DuckFailuresExtractor(Connection connection, String qaResultTable,
 			WhitelistService whitelistService, AssertionService assertionService, int whitelistBatchSize) {
 		this.connection = connection;
-		this.qaResultTable = qaResultTable;
+		this.qaResultTable = requireIdentifier(qaResultTable, "qaResultTable");
 		this.whitelistService = whitelistService;
 		this.assertionService = assertionService;
 		this.whitelistBatchSize = whitelistBatchSize;
+	}
+
+	/**
+	 * A schema-qualified SQL identifier and nothing else.
+	 *
+	 * <p>Deliberately strict rather than a quoting routine: every identifier this
+	 * class interpolates is one WE choose (a table from the store, a configured
+	 * qa_result name), so anything outside this shape is a bug or an attack, and
+	 * in neither case is the right answer to escape it and carry on.
+	 */
+	private static final java.util.regex.Pattern IDENTIFIER =
+			java.util.regex.Pattern.compile("[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*");
+
+	private static String requireIdentifier(String value, String what) {
+		if (value == null || !IDENTIFIER.matcher(value).matches()) {
+			throw new IllegalArgumentException(what + " is not a plain SQL identifier: " + value);
+		}
+		return value;
+	}
+
+	/**
+	 * Whether {@code table} is a table this store declares.
+	 *
+	 * <p>Checked against the catalog rather than a name pattern: a name-shaped
+	 * string that happens to be a real relation elsewhere would still pass a
+	 * pattern check, and the catalog is the actual authority on what this
+	 * connection can read.
+	 */
+	private boolean isKnownTable(String table) {
+		if (table == null || !IDENTIFIER.matcher(table).matches()) {
+			return false;
+		}
+		int dot = table.lastIndexOf('.');
+		String schema = dot < 0 ? null : table.substring(0, dot);
+		String name = dot < 0 ? table : table.substring(dot + 1);
+		String sql = "select 1 from information_schema.tables where lower(table_name) = lower(?)"
+				+ (schema == null ? "" : " and lower(table_schema) = lower(?)");
+		try (PreparedStatement ps = connection.prepareStatement(sql)) {
+			ps.setString(1, name);
+			if (schema != null) {
+				ps.setString(2, schema);
+			}
+			try (ResultSet rs = ps.executeQuery()) {
+				return rs.next();
+			}
+		} catch (SQLException e) {
+			logger.warn("Could not verify table {} against the catalog", table, e);
+			return false;
+		}
 	}
 
 	/**
@@ -198,7 +247,26 @@ public class DuckFailuresExtractor {
 		// Cross-catalog in MySQL, but here it is just another schema on the same
 		// DuckDB connection - table_name already carries its schema prefix (e.g.
 		// "prospective.concept_s"), so no connection switch is needed.
-		String sql = "select * from " + failureDetail.getTableName() + " where id = ?";
+		//
+		// The table name is CONCATENATED, because an identifier cannot be a bind
+		// parameter. So it is validated first. Today every table_name in the
+		// corpus is a quoted literal naming an RF2 table, which means the value
+		// is corpus-controlled and not reachable from the untrusted input (the
+		// submitted release package) - but "not reachable today" is a property of
+		// the assertion corpus, not of this code, and the corpus is edited by
+		// hand. MysqlFailuresExtractor:146 concatenates it unchecked; that is
+		// inherited, not a reason to keep it.
+		String table = failureDetail.getTableName();
+		if (!isKnownTable(table)) {
+			// Enrichment only, so skipping costs a moduleId and a fullComponent
+			// on one finding - never a missed finding. Logged because a
+			// legitimate table falling out of the known set would otherwise show
+			// up as a silently unfiltered result much later.
+			logger.warn("Not enriching failure detail: table_name {} is not a known "
+					+ "table in this store", table);
+			return;
+		}
+		String sql = "select * from " + table + " where id = ?";
 		try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
 			preparedStatement.setString(1, failureDetail.getComponentId());
 			try (ResultSet resultSet = preparedStatement.executeQuery()) {

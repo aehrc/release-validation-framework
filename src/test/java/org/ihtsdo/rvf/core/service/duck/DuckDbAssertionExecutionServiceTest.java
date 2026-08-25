@@ -157,11 +157,12 @@ class DuckDbAssertionExecutionServiceTest {
 		assertEquals(1, items.size());
 		assertNull(items.get(0).getFailureMessage());
 		assertNotNull(items.get(0).getRunTime());
-		// The report joins qa_result on the numeric assertion id, which is also
-		// what RVF binds <ASSERTIONUUID> to. Writing the uuid here would produce
-		// findings that join to nothing.
+		// Keyed on the UUID, not the numeric assertion id. DuckFailuresExtractor
+		// reads qa_result by uuid, and the numeric id is a MySQL primary key this
+		// path must not depend on. The two disagreeing is silent: the extractor
+		// simply finds no rows and every assertion reports a clean pass.
 		Map<String, Long> counts = service.failureCounts(7L, "rvf_results.qa_result");
-		assertEquals(Map.of("501", 2L), counts);
+		assertEquals(Map.of("11111111-1111-1111-1111-111111111111", 2L), counts);
 	}
 
 	@Test
@@ -184,7 +185,8 @@ class DuckDbAssertionExecutionServiceTest {
 
 		assertNotNull(items.get(0).getFailureMessage());
 		assertNull(items.get(1).getFailureMessage());
-		assertEquals(Map.of("501", 2L), service.failureCounts(7L, "rvf_results.qa_result"));
+		assertEquals(Map.of("11111111-1111-1111-1111-111111111111", 2L),
+				service.failureCounts(7L, "rvf_results.qa_result"));
 	}
 
 	@Test
@@ -193,7 +195,8 @@ class DuckDbAssertionExecutionServiceTest {
 		TestRunItem item = service.execute(
 				List.of(assertion("44444444-4444-4444-4444-444444444444", 504L, "Uses a ported macro"))).get(0);
 		assertNull(item.getFailureMessage());
-		assertEquals(1L, service.failureCounts(7L, "rvf_results.qa_result").get("504"));
+		assertEquals(1L, service.failureCounts(7L, "rvf_results.qa_result")
+				.get("44444444-4444-4444-4444-444444444444"));
 	}
 
 	@Test
