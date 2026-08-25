@@ -61,7 +61,7 @@ public class DuckDbEngineEnvironmentPostProcessor implements EnvironmentPostProc
 
 	@Override
 	public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication application) {
-		if (!ExecutionEngine.DUCKDB.equals(environment.getProperty(ExecutionEngine.PROPERTY))) {
+		if (!ExecutionEngine.isDuckDb(environment.getProperty(ExecutionEngine.PROPERTY))) {
 			return;
 		}
 		Set<String> excludes = new LinkedHashSet<>(EXCLUDED_AUTO_CONFIGURATION);

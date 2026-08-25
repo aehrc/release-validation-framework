@@ -41,6 +41,7 @@ import java.util.TreeMap;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -280,6 +281,10 @@ public class DuckDbValidationService {
 				lastItemLoadAttempted = "Previous Release - " + releases.previous();
 				materialise(connection, releases.previous(), PREVIOUS_SCHEMA, store);
 			}
+			if (executionConfig.isRf2DeltaOnly()) {
+				lastItemLoadAttempted = "Delta-only rebuild of the prospective snapshot";
+				rebuildSnapshotFromPreviousAndDelta(connection, store, releases);
+			}
 			if (releases.dependency() != null) {
 				lastItemLoadAttempted = "Dependency Release - " + releases.dependency();
 				materialise(connection, releases.dependency(), DEPENDENCY_SCHEMA, store);
@@ -295,8 +300,8 @@ public class DuckDbValidationService {
 		}
 
 		DuckAssertionSource source = assertionSource(store);
-		List<Assertion> assertions = selectAssertions(source, executionConfig);
-		LOGGER.info("Total assertions to run {} for groups {}", assertions.size(),
+		Selection selection = selectAssertions(source, executionConfig);
+		LOGGER.info("Total assertions to run {} for groups {}", selection.total(),
 				executionConfig.getGroupNames());
 
 		// Derived once, not per phase: it walks the release directory, and both
@@ -308,9 +313,9 @@ public class DuckDbValidationService {
 		try {
 			items = executionConfig.isExtensionValidation() && !executionConfig.isReleaseAsAnEdition()
 					? runExtensionSplit(connection, store, executionConfig, releases,
-							reportStorage, assertions, version)
+							reportStorage, selection, version)
 					: runSinglePhase(connection, store, executionConfig, releases,
-							reportStorage, assertions, version);
+							reportStorage, selection, version);
 		} catch (DuckDbAssertionExecutionService.SetupFailedException e) {
 			// Deliberately not downgraded to a warning and carried past. The
 			// publisher emits no setup statement it expects to fail, so a
@@ -345,11 +350,14 @@ public class DuckDbValidationService {
 	 */
 	private List<TestRunItem> runSinglePhase(Connection connection, DuckStore store,
 			MysqlExecutionConfig executionConfig, ReleaseDirectories releases,
-			String reportStorage, List<Assertion> assertions, String version) {
+			String reportStorage, Selection selection, String version) {
 		DuckDbAssertionExecutionService executionService = executionService(
 				connection, store, executionConfig, releases, PROSPECTIVE_SCHEMA, version);
 		executionService.prepareSchema();
-		return executeAssertions(executionService, assertions, reportStorage);
+		List<TestRunItem> items = new ArrayList<>(
+				executeAssertions(executionService, selection.resources(), reportStorage));
+		items.addAll(executeAssertions(executionService, selection.assertions(), reportStorage));
+		return items;
 	}
 
 	/**
@@ -379,10 +387,10 @@ public class DuckDbValidationService {
 	 */
 	private List<TestRunItem> runExtensionSplit(Connection connection, DuckStore store,
 			MysqlExecutionConfig executionConfig, ReleaseDirectories releases,
-			String reportStorage, List<Assertion> assertions, String version) throws SQLException {
+			String reportStorage, Selection selection, String version) throws SQLException {
 		List<Assertion> releaseType = new ArrayList<>();
 		List<Assertion> rest = new ArrayList<>();
-		for (Assertion assertion : assertions) {
+		for (Assertion assertion : selection.assertions()) {
 			String keywords = assertion.getKeywords();
 			if (keywords != null && keywords.contains(RELEASE_TYPE_VALIDATION)) {
 				releaseType.add(assertion);
@@ -397,8 +405,14 @@ public class DuckDbValidationService {
 		DuckDbAssertionExecutionService extensionPhase = executionService(
 				connection, store, executionConfig, releases, PROSPECTIVE_SCHEMA, version);
 		extensionPhase.prepareSchema();
-		List<TestRunItem> items =
-				new ArrayList<>(executeAssertions(extensionPhase, releaseType, reportStorage));
+		// Resource assertions first, in THIS schema. They are re-run below in the
+		// combined one, exactly as MysqlValidationService re-runs them by calling
+		// runAssertionTests once per phase: the tables they build live in the
+		// schema the phase addresses, so a set built in `prospective` is not
+		// there to be read when the next phase addresses `combined`.
+		List<TestRunItem> items = new ArrayList<>(
+				executeAssertions(extensionPhase, selection.resources(), reportStorage));
+		items.addAll(executeAssertions(extensionPhase, releaseType, reportStorage));
 
 		if (executionConfig.isStandAloneProduct()) {
 			// A stand-alone product has no dependency to merge; MySQL skips the
@@ -419,8 +433,69 @@ public class DuckDbValidationService {
 		// a transitive closure over the extension alone would leave every
 		// international ancestor out of it.
 		combinedPhase.prepareSchema();
+		items.addAll(executeAssertions(combinedPhase, selection.resources(), reportStorage));
 		items.addAll(executeAssertions(combinedPhase, rest, reportStorage));
 		return items;
+	}
+
+	/**
+	 * Delta-only validation: the prospective package ships a delta and nothing
+	 * else, so the snapshot it would be validated against has to be built -
+	 * previous release's snapshot, with this delta applied over it.
+	 *
+	 * <p>Mirrors {@code ValidationVersionLoader
+	 * .loadProspectiveDeltaAndCombineWithPreviousSnapshotIntoDB} and the
+	 * {@code ReleaseDataManager.updateSnapshotTableWithDataFromDelta} it calls:
+	 * copy the previous snapshot in, delete every row the delta supersedes, then
+	 * insert the delta. A component's delta row wins whether it is an addition,
+	 * a change or an inactivation, which is what makes delete-then-insert right
+	 * rather than an upsert.
+	 *
+	 * <p>With no previous release the snapshot stays empty, as on MySQL - the
+	 * delta alone IS the release for a first-time load.
+	 *
+	 * <p>Keyed on {@link #keyColumns} rather than on {@code id}. MySQL hardcodes
+	 * {@code id} here too, so on {@code identifier_s} its DELETE raises Unknown
+	 * column - and unlike the extension combine that failure is caught and
+	 * logged per table, so the identifier snapshot silently keeps the previous
+	 * release's rows and never sees this delta. Third instance of the same root
+	 * cause; see UPSTREAM-SQL-DEFECTS.md defects 1 and 7.
+	 */
+	private void rebuildSnapshotFromPreviousAndDelta(Connection connection, DuckStore store,
+			ReleaseDirectories releases) throws SQLException {
+		long t0 = System.currentTimeMillis();
+		if (releases.previous() == null) {
+			LOGGER.info("Delta-only run with no previous release - the prospective snapshot "
+					+ "stays as the delta alone");
+			return;
+		}
+		Map<String, String> tableColumns = store.tableColumns();
+		int rebuilt = 0;
+		try (Statement st = connection.createStatement()) {
+			for (Map.Entry<String, String> entry : new TreeMap<>(tableColumns).entrySet()) {
+				String snapshot = entry.getKey();
+				if (!snapshot.endsWith("_s")) {
+					continue;
+				}
+				String delta = snapshot.substring(0, snapshot.length() - 2) + "_d";
+				if (!tableColumns.containsKey(delta)) {
+					continue;
+				}
+				List<String> key = keyColumns(snapshot, columnNames(entry.getValue()));
+				String join = key.stream()
+						.map(c -> "s." + c + " = d." + c)
+						.collect(Collectors.joining(" AND "));
+				st.execute("INSERT INTO " + PROSPECTIVE_SCHEMA + "." + snapshot
+						+ " SELECT * FROM " + PREVIOUS_SCHEMA + "." + snapshot);
+				st.execute("DELETE FROM " + PROSPECTIVE_SCHEMA + "." + snapshot + " s WHERE EXISTS "
+						+ "(SELECT 1 FROM " + PROSPECTIVE_SCHEMA + "." + delta + " d WHERE " + join + ")");
+				st.execute("INSERT INTO " + PROSPECTIVE_SCHEMA + "." + snapshot
+						+ " SELECT * FROM " + PROSPECTIVE_SCHEMA + "." + delta);
+				rebuilt++;
+			}
+		}
+		LOGGER.info("Delta-only: rebuilt {} snapshot tables from the previous release and this "
+				+ "delta, in {}ms", rebuilt, System.currentTimeMillis() - t0);
 	}
 
 	/**
@@ -557,15 +632,42 @@ public class DuckDbValidationService {
 	 * inserts a second copy of every finding, so the assertion's reported
 	 * failure count doubles. Cheap to prevent, invisible when it happens.
 	 */
-	private List<Assertion> selectAssertions(DuckAssertionSource source,
+	/**
+	 * The resource assertions, and the requested groups' assertions, kept APART.
+	 *
+	 * <p>They have to stay apart because the resource set is not just "more
+	 * assertions to run first" - it is infrastructure that builds the shared
+	 * intermediate tables (res_edited_active_concepts, tmp_pt, ancestors) other
+	 * assertions select from, and it has to be rebuilt in every SCHEMA a phase
+	 * runs against. Merged into one ordered list, as an earlier version of this
+	 * did, the extension split then partitions that list by keyword and every
+	 * resource assertion lands in the non-release-type half - so the
+	 * release-type phase runs against a schema where none of those tables were
+	 * ever built. MySQL avoids this by re-fetching the resource set inside
+	 * {@code runAssertionTests}, which both of its phases call.
+	 *
+	 * <p>{@code assertions} excludes the resource set, which MySQL does not do.
+	 * It gets away with that because no resource assertion is in a requested
+	 * group today; were one ever added, MySQL would run it twice within a single
+	 * phase - and a second run inserts a second copy of every finding, so the
+	 * assertion's reported failure count doubles.
+	 */
+	private record Selection(List<Assertion> resources, List<Assertion> assertions) {
+
+		int total() {
+			return resources.size() + assertions.size();
+		}
+	}
+
+	private Selection selectAssertions(DuckAssertionSource source,
 			MysqlExecutionConfig executionConfig) {
 		List<Assertion> resourceAssertions = source.getAssertionsByKeyWords(RESOURCE_KEYWORD, true);
 		LOGGER.info("Found total resource assertions need to be run before test {}",
 				resourceAssertions.size());
 
-		List<Assertion> selected = new ArrayList<>(resourceAssertions);
 		Set<UUID> already = new LinkedHashSet<>();
 		resourceAssertions.forEach(a -> already.add(a.getUuid()));
+		List<Assertion> selected = new ArrayList<>();
 		List<String> groupNames = executionConfig.getGroupNames();
 		if (!CollectionUtils.isEmpty(groupNames)) {
 			for (Assertion assertion : source.getAssertionsInGroups(groupNames)) {
@@ -576,10 +678,12 @@ public class DuckDbValidationService {
 		}
 
 		List<String> excluded = executionConfig.getAssertionExclusionList();
+		List<Assertion> resources = new ArrayList<>(resourceAssertions);
 		if (!CollectionUtils.isEmpty(excluded)) {
 			selected.removeIf(a -> excluded.contains(a.getUuid().toString()));
+			resources.removeIf(a -> excluded.contains(a.getUuid().toString()));
 		}
-		return selected;
+		return new Selection(resources, selected);
 	}
 
 	private List<TestRunItem> executeAssertions(DuckDbAssertionExecutionService executionService,

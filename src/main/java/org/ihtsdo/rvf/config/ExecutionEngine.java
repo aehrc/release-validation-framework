@@ -27,6 +27,21 @@ public final class ExecutionEngine {
 	 */
 	public static final String DUCKDB = "duckdb";
 
+	/**
+	 * Whether a property value selects the DuckDB engine.
+	 *
+	 * <p>Case-insensitive, and trimmed, because {@code @ConditionalOnProperty}
+	 * is: Spring's {@code OnPropertyCondition} matches {@code havingValue} with
+	 * {@code equalsIgnoreCase}. Anything comparing this property with
+	 * {@code equals} disagrees with the annotations for a value like
+	 * {@code DuckDB}, and the two halves of the switch then disagree about which
+	 * engine is running - which is worse than either answer. Every check of this
+	 * property outside an annotation must go through here.
+	 */
+	public static boolean isDuckDb(String value) {
+		return value != null && DUCKDB.equalsIgnoreCase(value.trim());
+	}
+
 	private ExecutionEngine() {
 	}
 }

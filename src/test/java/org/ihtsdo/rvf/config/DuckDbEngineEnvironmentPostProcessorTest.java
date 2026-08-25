@@ -1,9 +1,12 @@
 package org.ihtsdo.rvf.config;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.mock.env.MockEnvironment;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -52,6 +55,29 @@ class DuckDbEngineEnvironmentPostProcessorTest {
 		String excluded = environment.getProperty("spring.autoconfigure.exclude");
 		assertTrue(excluded.contains("DataSourceAutoConfiguration"), excluded);
 		assertTrue(excluded.contains("HibernateJpaAutoConfiguration"), excluded);
+	}
+
+	/**
+	 * Spring's {@code OnPropertyCondition} matches {@code havingValue} with
+	 * {@code equalsIgnoreCase}, so {@code DuckDB} already selects the DuckDB
+	 * beans and deselects the MySQL ones. This post-processor once compared the
+	 * same property with {@code equals}, which left that spelling in the worst
+	 * of both states: the DuckDB service registered, the MySQL beans gone, and
+	 * Boot's own DataSourceAutoConfiguration still active - so Hibernate would
+	 * build a pool and run ddl-auto against a MySQL that duckdb mode exists to
+	 * do without.
+	 */
+	@ParameterizedTest
+	@ValueSource(strings = {"duckdb", "DuckDB", "DUCKDB", " duckdb "})
+	void anySpellingSpringAcceptsIsAcceptedHereToo(String value) {
+		MockEnvironment environment = new MockEnvironment()
+				.withProperty(ExecutionEngine.PROPERTY, value);
+
+		processor.postProcessEnvironment(environment, null);
+
+		String excluded = environment.getProperty("spring.autoconfigure.exclude");
+		assertNotNull(excluded, "no exclusions applied for engine spelling '" + value + "'");
+		assertTrue(excluded.contains("DataSourceAutoConfiguration"), excluded);
 	}
 
 	@Test

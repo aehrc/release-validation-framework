@@ -113,6 +113,78 @@ class DuckMaterialiserTest {
 		return DriverManager.getConnection("jdbc:duckdb:");
 	}
 
+	/**
+	 * The Identifier file ships its columns in a different order from the one
+	 * {@code create-tables-mysql.sql} declares - {@code alternateIdentifier}
+	 * first, {@code identifierSchemeId} fifth, against a DDL that declares the
+	 * scheme first. {@code read_csv}'s {@code columns} parameter binds by
+	 * POSITION, so a spec built from the DDL order puts each column's data in
+	 * the neighbouring column.
+	 *
+	 * <p>The values here are chosen so a positional load cannot pass by
+	 * coincidence: the scheme id and the referenced component id are different
+	 * numbers, and the alternate identifier is numeric, so a swap would load
+	 * cleanly rather than raising a conversion error. That is the real hazard -
+	 * on a non-numeric alternate identifier DuckDB at least complains.
+	 *
+	 * <p>MySQL gets this wrong too; see UPSTREAM-SQL-DEFECTS.md defect 8.
+	 */
+	@Test
+	void aFileWhoseColumnOrderDiffersFromTheDdlLoadsByNameNotPosition(@TempDir Path release)
+			throws Exception {
+		write(release, "Snapshot/Terminology/sct2_Identifier_Snapshot_AU1000036_20260831.txt", """
+				alternateIdentifier	effectiveTime	active	moduleId	identifierSchemeId	referencedComponentId
+				778899	20260831	1	32506021000036107	705112009	12345
+				""");
+		Map<String, String> columns = Map.of("identifier_s",
+				"identifierschemeid BIGINT, alternateidentifier VARCHAR, effectivetime VARCHAR, "
+				+ "active VARCHAR, moduleid BIGINT, referencedcomponentid BIGINT");
+
+		try (Connection con = DriverManager.getConnection("jdbc:duckdb:")) {
+			DuckMaterialiser.materialise(con, release, "prospective", columns);
+			try (Statement st = con.createStatement();
+					ResultSet rs = st.executeQuery("SELECT identifierschemeid, alternateidentifier,"
+							+ " moduleid, referencedcomponentid FROM prospective.identifier_s")) {
+				assertTrue(rs.next());
+				assertEquals(705112009L, rs.getLong("identifierschemeid"),
+						"the scheme id must come from the identifierSchemeId column, not the first one");
+				assertEquals("778899", rs.getString("alternateidentifier"));
+				assertEquals(32506021000036107L, rs.getLong("moduleid"));
+				assertEquals(12345L, rs.getLong("referencedcomponentid"));
+			}
+		}
+	}
+
+	/**
+	 * AU's extended association refset carries column names the DDL does not
+	 * have at all, because RVF pours it into a generic shape positionally. There
+	 * is nothing to match by name, so the load stays positional - which is also
+	 * what MySQL does. Pinned so that "load by name" does not quietly become
+	 * "fail to load anything whose names we do not recognise".
+	 */
+	@Test
+	void aFileWhoseColumnNamesTheDdlDoesNotDeclareStillLoadsPositionally(@TempDir Path release)
+			throws Exception {
+		write(release, "Snapshot/Refset/Content/der2_ccRefset_ExtendedAssociationSnapshot_AU1000036_20260831.txt", """
+				id	effectiveTime	active	moduleId	refsetId	referencedComponentId	targetAdministeredForm	targetManufacturedForm
+				a1	20260831	1	32506021000036107	900	111	222	333
+				""");
+		Map<String, String> columns = Map.of("extendedassociation_s",
+				"id VARCHAR, effectivetime VARCHAR, active VARCHAR, moduleid BIGINT, "
+				+ "refsetid BIGINT, referencedcomponentid BIGINT, targetcomponentid BIGINT, value BIGINT");
+
+		try (Connection con = DriverManager.getConnection("jdbc:duckdb:")) {
+			DuckMaterialiser.materialise(con, release, "prospective", columns);
+			try (Statement st = con.createStatement();
+					ResultSet rs = st.executeQuery(
+							"SELECT targetcomponentid, value FROM prospective.extendedassociation_s")) {
+				assertTrue(rs.next());
+				assertEquals(222L, rs.getLong("targetcomponentid"));
+				assertEquals(333L, rs.getLong("value"));
+			}
+		}
+	}
+
 	private static void write(Path root, String relative, String content) throws Exception {
 		Path p = root.resolve(relative);
 		Files.createDirectories(p.getParent());

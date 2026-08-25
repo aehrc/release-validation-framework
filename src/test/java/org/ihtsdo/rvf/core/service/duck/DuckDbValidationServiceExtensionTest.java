@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -56,6 +57,8 @@ class DuckDbValidationServiceExtensionTest {
 	private static final String UUID_EXT_MODULE = "33333333-3333-3333-3333-333333333333";
 	private static final String UUID_DEP_MODULE = "44444444-4444-4444-4444-444444444444";
 	private static final String UUID_IDENTIFIERS = "55555555-5555-5555-5555-555555555555";
+	private static final String UUID_RESOURCE = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+	private static final String UUID_RESOURCE_ROWS = "66666666-6666-6666-6666-666666666666";
 
 	private static final String EXT_MODULE = "32506021000036107";
 	private static final String DEP_MODULE = "900000000000207008";
@@ -80,11 +83,21 @@ class DuckDbValidationServiceExtensionTest {
 			 "prerequisites": [],
 			 "ports": [],
 			 "assertions": {
+			  "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa": {
+			   "file": "resource.sql", "text": "Build the shared seed table",
+			   "keywords": "resource", "severity": "",
+			   "statements": [
+			    "CREATE OR REPLACE TABLE rvfph_prospective_.res_seed AS SELECT id, moduleid FROM rvfph_prospective_.concept_s"]},
+			  "66666666-6666-6666-6666-666666666666": {
+			   "file": "resource-rows.sql", "text": "Rows in the shared seed table",
+			   "keywords": "component-centric-validation", "severity": "",
+			   "statements": [
+			    "insert into qa_result (run_id, assertion_id, concept_id, details, component_id, table_name) select 424242424242424242, 'rvfph_assertionuuid_', id, 'seed', id, 'res_seed' from rvfph_prospective_.res_seed"]},
 			  "11111111-1111-1111-1111-111111111111": {
 			   "file": "new-components.sql", "text": "Concepts new since the previous release",
 			   "keywords": "release-type-validation", "severity": "",
 			   "statements": [
-			    "insert into qa_result (run_id, assertion_id, concept_id, details, component_id, table_name) select 424242424242424242, 'rvfph_assertionuuid_', p.id, 'new', p.id, 'concept_s' from rvfph_prospective_.concept_s p where not exists (select 1 from rvfph_previous_.concept_s v where v.id = p.id)"]},
+			    "insert into qa_result (run_id, assertion_id, concept_id, details, component_id, table_name) select 424242424242424242, 'rvfph_assertionuuid_', p.id, 'new', p.id, 'concept_s' from rvfph_prospective_.res_seed p where not exists (select 1 from rvfph_previous_.concept_s v where v.id = p.id)"]},
 			  "22222222-2222-2222-2222-222222222222": {
 			   "file": "orphans.sql", "text": "Descriptions whose concept is missing",
 			   "keywords": "component-centric-validation", "severity": "",
@@ -204,6 +217,42 @@ class DuckDbValidationServiceExtensionTest {
 		// only do against the merged snapshot.
 		assertEquals(0L, item(report, UUID_ORPHANS).getFailureCount(),
 				"non-release-type assertions see the extension merged with its dependency");
+	}
+
+	/**
+	 * Resource assertions build the shared intermediate tables the others select
+	 * from, and those tables live in the SCHEMA the phase addresses - so the
+	 * extension split has to run them twice, once per schema, exactly as
+	 * MysqlValidationService does by calling runAssertionTests once per phase.
+	 *
+	 * <p>An earlier version merged the resource set into one ordered list before
+	 * the split, which then partitioned that list by keyword; resource
+	 * assertions are keyworded "resource", never "release-type-validation", so
+	 * all of them landed in the second phase and the first ran against a schema
+	 * where nothing had been built. Nothing caught it: the full 220-assertion
+	 * extension run reported 0 incomplete, because no release-type assertion in
+	 * that corpus happens to read a resource table.
+	 *
+	 * <p>So {@code newComponents} is written to read {@code res_seed} rather
+	 * than {@code concept_s}. If the resource phase has not run, the table does
+	 * not exist and the assertion reports a failure message instead of a count.
+	 */
+	@Test
+	void resourceAssertionsRunBeforeEachPhaseAndInThatPhasesSchema() {
+		ValidationReport report = runExtension();
+
+		// Phase 1: res_seed existed in `prospective` when the release-type
+		// assertion read it. A missing table would surface here as a failure
+		// message, not as a count.
+		assertNull(item(report, UUID_NEW_COMPONENTS).getFailureMessage(),
+				"the release-type phase ran before its resource tables were built");
+		assertEquals(2L, item(report, UUID_NEW_COMPONENTS).getFailureCount());
+
+		// Phase 2: res_seed was REBUILT in `combined`, so it has the merged six
+		// concepts rather than the extension's four. One number distinguishes
+		// "rebuilt in the combined schema" from "carried over from phase 1".
+		assertEquals(6L, item(report, UUID_RESOURCE_ROWS).getFailureCount(),
+				"the combined phase must rebuild its own resource tables");
 	}
 
 	@Test

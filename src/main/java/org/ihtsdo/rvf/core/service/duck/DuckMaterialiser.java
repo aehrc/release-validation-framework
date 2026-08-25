@@ -166,13 +166,33 @@ public final class DuckMaterialiser {
 	 * row-group statistics useless for pruning.
 	 */
 	private static long load(Statement st, String schema, String table, List<Path> files,
-			String columns) throws SQLException {
-		String spec = columnSpec(columns);
+			String columns) throws SQLException, IOException {
+		List<String> ddlNames = columnNames(columns);
+		// read_csv's `columns` parameter turns schema detection OFF: with
+		// header=true the header line is SKIPPED, not matched, and fields are
+		// assigned by POSITION in the order given. So the order of this spec has
+		// to be the order of the FILE, not the order of create-tables-mysql.sql,
+		// and those differ for ten of the sixty-eight tables a release ships.
+		//
+		// MySQL has the same hazard and does not handle it: `load data local
+		// infile ... ignore 1 lines` with no column list is positional too, so
+		// RVF has always loaded the Identifier file's alternateIdentifier into
+		// identifierschemeid and vice versa. See UPSTREAM-SQL-DEFECTS.md
+		// defect 8. This is the one place the port deliberately does NOT
+		// reproduce MySQL, because a validator reading a column's data out of a
+		// different column cannot be defended on parity grounds.
+		String spec = columnSpec(columns, fileOrder(files, ddlNames, table));
 		String sort = sortKey(table, columns);
 		String fileList = files.stream()
 				.map(f -> "'" + f.toAbsolutePath() + "'")
 				.collect(java.util.stream.Collectors.joining(", "));
-		String sql = "CREATE OR REPLACE TABLE " + schema + "." + table + " AS SELECT * FROM read_csv(["
+		// Selected by name in the DDL's order rather than SELECT *, so the
+		// table's column order is the DDL's however the file was laid out.
+		// Everything downstream that copies a table with SELECT * - the
+		// extension combine, the delta-only snapshot rebuild - depends on two
+		// schemas agreeing about column order.
+		String sql = "CREATE OR REPLACE TABLE " + schema + "." + table + " AS SELECT "
+				+ String.join(", ", ddlNames) + " FROM read_csv(["
 				+ fileList + "], delim='\t', header=true, columns={" + spec + "}, "
 				// RF2 is not quoted or escaped. Leaving DuckDB's defaults in
 				// place makes a term containing a double quote swallow the rest
@@ -189,11 +209,82 @@ public final class DuckMaterialiser {
 	}
 
 	/** {@code "id BIGINT, active VARCHAR"} to {@code "'id':'BIGINT','active':'VARCHAR'"}. */
-	private static String columnSpec(String columns) {
-		List<String> parts = new ArrayList<>();
+	/**
+	 * The column order to hand {@code read_csv}: the RF2 files' own, when every
+	 * name in their header is a column this table declares, and the DDL's
+	 * otherwise.
+	 *
+	 * <p>The fallback is not a formality. Three of AU's refsets - the extended
+	 * association, attribute-value map and extended map refsets - carry column
+	 * NAMES the DDL does not have at all ({@code targetAdministeredForm} where
+	 * the DDL says {@code targetcomponentid}), because RVF's table is a generic
+	 * shape those files are poured into positionally. There is nothing to match
+	 * by name there, and positional is what MySQL does, so positional is what
+	 * happens - but it is logged, because it is also how a genuinely
+	 * mis-declared table would look.
+	 *
+	 * <p>Files that map to one table must agree with each other about their
+	 * header, which every RF2 language variant does; if they ever disagree the
+	 * DDL order is used and the disagreement logged, rather than silently
+	 * applying one file's layout to another file's data.
+	 */
+	private static List<String> fileOrder(List<Path> files, List<String> ddlNames, String table)
+			throws IOException {
+		List<String> header = null;
+		for (Path file : files) {
+			List<String> names = headerOf(file);
+			if (header == null) {
+				header = names;
+			} else if (!header.equals(names)) {
+				LOGGER.warn("files for {} disagree about their header ({} vs {}) - loading in "
+						+ "declared column order", table, header, names);
+				return ddlNames;
+			}
+		}
+		if (header == null || header.equals(ddlNames)) {
+			return ddlNames;
+		}
+		if (!new java.util.HashSet<>(header).equals(new java.util.HashSet<>(ddlNames))) {
+			LOGGER.warn("{} is declared as {} but its file has {} - loading positionally, as "
+					+ "MySQL does", table, ddlNames, header);
+			return ddlNames;
+		}
+		LOGGER.info("{} ships its columns as {} - loading by name, not position", table, header);
+		return header;
+	}
+
+	private static List<String> headerOf(Path file) throws IOException {
+		try (java.io.BufferedReader reader = Files.newBufferedReader(file)) {
+			String line = reader.readLine();
+			if (line == null) {
+				return List.of();
+			}
+			List<String> names = new ArrayList<>();
+			for (String name : line.split("\t", -1)) {
+				names.add(name.trim().toLowerCase(java.util.Locale.ROOT));
+			}
+			return names;
+		}
+	}
+
+	private static List<String> columnNames(String columns) {
+		List<String> names = new ArrayList<>();
+		for (String col : columns.split(",")) {
+			names.add(col.trim().split("\\s+", 2)[0].toLowerCase(java.util.Locale.ROOT));
+		}
+		return names;
+	}
+
+	/** The DDL's declared type for each column, keyed by lower-case name. */
+	private static String columnSpec(String columns, List<String> order) {
+		Map<String, String> types = new java.util.LinkedHashMap<>();
 		for (String col : columns.split(",")) {
 			String[] nameType = col.trim().split("\\s+", 2);
-			parts.add("'" + nameType[0] + "':'" + nameType[1] + "'");
+			types.put(nameType[0].toLowerCase(java.util.Locale.ROOT), nameType[1]);
+		}
+		List<String> parts = new ArrayList<>();
+		for (String name : order) {
+			parts.add("'" + name + "':'" + types.get(name) + "'");
 		}
 		return String.join(",", parts);
 	}
