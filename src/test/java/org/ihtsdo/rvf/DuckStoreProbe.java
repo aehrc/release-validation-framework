@@ -108,7 +108,7 @@ public class DuckStoreProbe {
 					SCHEMAS.contains("previous") ? "previous" : null,
 					SCHEMAS.contains("dependency") ? "dependency" : null,
 					"rvf_results.qa_result",
-					System.getProperty("probe.moduleid"), java.util.List.of(), releaseVersion));
+					System.getProperty("probe.moduleid"), includedModules(), releaseVersion));
 			DuckDbAssertionExecutionService setupService =
 					new DuckDbAssertionExecutionService(duckStore, probeBinder, con);
 			// prepareSchema throws on ANY setup failure now, and the probe lets it
@@ -395,6 +395,24 @@ public class DuckStoreProbe {
 	 * drifts the first time it changes, and the failure would be a wrong query
 	 * that still runs.
 	 */
+	/**
+	 * -Dprobe.modules, the extension's own module ids.
+	 *
+	 * <p>Not cosmetic. Several assertions branch on
+	 * {@code 'NULL' = '<INCLUDED_MODULES>'} and take a DIFFERENT rule when no
+	 * module filter is configured - language-valid-moduleid flags every
+	 * langrefset member whose module differs from its description's, which on a
+	 * merged edition is every AU member sitting on an International description:
+	 * 1,405,850 findings, none of them content. With the filter set it applies
+	 * the rule the assertion is actually for.
+	 */
+	private static java.util.List<String> includedModules() {
+		String raw = System.getProperty("probe.modules", "");
+		return raw.isBlank() ? java.util.List.of()
+				: java.util.Arrays.stream(raw.split(",")).map(String::trim)
+						.filter(m -> !m.isEmpty()).toList();
+	}
+
 	/** The effectiveTime in a release directory name, or NOT_SUPPLIED. */
 	private static String releaseVersion = "NOT_SUPPLIED";
 
