@@ -29,10 +29,22 @@ import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import org.ihtsdo.rvf.config.ConditionalOnMysqlEngine;
 
+/**
+ * Orchestrates the five passes of a validation, in EITHER engine.
+ *
+ * <p>It used to be {@code @ConditionalOnMysqlEngine}, and the reason was one
+ * line: the SQL-assertion pass named {@code MysqlValidationService} directly.
+ * The other four - structural, Drools, MRCM, traceability - already work off RF2
+ * files and touch no datasource. So a single concrete reference made the whole
+ * orchestrator absent under {@code rvf.execution.engine=duckdb}, and with it the
+ * only consumer of the validation queue: a submitted run was accepted, enqueued,
+ * and never picked up.
+ *
+ * <p>That line now takes {@link SqlAssertionValidationService}, of which exactly
+ * one implementation is registered per engine.
+ */
 @Service
-@ConditionalOnMysqlEngine
 public class ValidationRunner {
 
 	public static final List<String> EMPTY_TEST_ASSERTION_GROUPS = Collections.singletonList("empty-test");
@@ -43,14 +55,18 @@ public class ValidationRunner {
 	@Autowired
 	private ValidationReportService reportService;
 	
+	// The acquisition half, which carries no engine condition. This used to be
+	// ValidationVersionLoader; that class is still MySQL-only because its other
+	// half loads into a schema, and injecting it here would have kept this
+	// orchestrator MySQL-only with it.
 	@Autowired
-	private ValidationVersionLoader releaseVersionLoader;
+	private ReleaseAcquisitionService releaseAcquisitionService;
 	
 	@Autowired 
 	private DroolsRulesValidationService droolsValidationService;
 	
 	@Autowired
-	private MysqlValidationService mysqlValidationService;
+	private SqlAssertionValidationService sqlAssertionValidationService;
 
 	@Autowired
 	private MRCMValidationService mrcmValidationService;
@@ -89,9 +105,9 @@ public class ValidationRunner {
 		try {
 			// Prepare to run validations
 			Calendar startTime = Calendar.getInstance();
-			releaseVersionLoader.downloadProspectiveFiles(validationConfig);
-			releaseVersionLoader.downloadPreviousRelease(validationConfig);
-			releaseVersionLoader.downloadDependencyReleases(validationConfig);
+			releaseAcquisitionService.downloadProspectiveFiles(validationConfig);
+			releaseAcquisitionService.downloadPreviousRelease(validationConfig);
+			releaseAcquisitionService.downloadDependencyReleases(validationConfig);
 
 			if (validationConfig.getLocalProspectiveFile() == null) {
 				reportService.writeState(State.FAILED, validationConfig.getStorageLocation());
@@ -147,9 +163,9 @@ public class ValidationRunner {
 			if (!CollectionUtils.isEmpty(validationConfig.getGroupsList())) {
 				statusMessages.append("RVF assertions validation started");
 				reportService.writeProgress(statusMessages.toString(), validationConfig.getStorageLocation());
-				ValidationStatusReport mysqlValidationStatusReport = new ValidationStatusReport(validationConfig);
-				mysqlValidationStatusReport.setResultReport(new ValidationReport());
-				taskMap.put("SQL Assertions", executorService.submit(() -> mysqlValidationService.runRF2MysqlValidations(validationConfig, mysqlValidationStatusReport)));
+				ValidationStatusReport sqlValidationStatusReport = new ValidationStatusReport(validationConfig);
+				sqlValidationStatusReport.setResultReport(new ValidationReport());
+				taskMap.put("SQL Assertions", executorService.submit(() -> sqlAssertionValidationService.runRF2Validations(validationConfig, sqlValidationStatusReport)));
 			}
 
 			if (validationConfig.isEnableDrools()) {

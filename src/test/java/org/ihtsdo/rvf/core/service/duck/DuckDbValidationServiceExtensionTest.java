@@ -2,6 +2,7 @@ package org.ihtsdo.rvf.core.service.duck;
 
 import org.ihtsdo.rvf.core.data.model.TestRunItem;
 import org.ihtsdo.rvf.core.data.model.ValidationReport;
+import org.ihtsdo.rvf.core.service.ReleaseAcquisitionService;
 import org.ihtsdo.rvf.core.service.ValidationReportService;
 import org.ihtsdo.rvf.core.service.WhitelistService;
 import org.ihtsdo.rvf.core.service.config.MysqlExecutionConfig;
@@ -327,7 +328,8 @@ class DuckDbValidationServiceExtensionTest {
 		ValidationRunConfig runConfig = new ValidationRunConfig();
 		runConfig.setRunId(config.getExecutionId());
 		ValidationStatusReport status = new ValidationStatusReport(runConfig);
-		new DuckDbValidationService(reportService, whitelistService, storeFile.toString(),
+		new DuckDbValidationService(reportService, whitelistService,
+				new ReleaseAcquisitionService(), storeFile.toString(),
 				corpus.toString(), work.toString(), "qa_result")
 				.runValidations(config, releases, "storage/", status);
 		return status;

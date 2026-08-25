@@ -25,7 +25,7 @@ import org.ihtsdo.rvf.config.ConditionalOnMysqlEngine;
 
 @Service
 @ConditionalOnMysqlEngine
-public class MysqlValidationService {
+public class MysqlValidationService implements SqlAssertionValidationService {
 
 	public static final String START_EXECUTING_ASSERTIONS = "Start executing assertions...";
 	@Autowired
@@ -56,6 +56,12 @@ public class MysqlValidationService {
 	private final Set<String> schemasToRemove = new HashSet<>();
 	
 	private final ExecutorService executorService = Executors.newCachedThreadPool();
+
+	@Override
+	public ValidationStatusReport runRF2Validations(ValidationRunConfig validationConfig,
+			ValidationStatusReport statusReport) throws BusinessServiceException, ExecutionException, InterruptedException {
+		return runRF2MysqlValidations(validationConfig, statusReport);
+	}
 
 	public ValidationStatusReport runRF2MysqlValidations(ValidationRunConfig validationConfig, ValidationStatusReport statusReport) throws BusinessServiceException, ExecutionException, InterruptedException {
 		// Clean up the prospective databases if any

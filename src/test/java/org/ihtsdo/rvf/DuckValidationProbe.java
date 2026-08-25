@@ -2,6 +2,7 @@ package org.ihtsdo.rvf;
 
 import org.ihtsdo.rvf.core.data.model.TestRunItem;
 import org.ihtsdo.rvf.core.data.model.ValidationReport;
+import org.ihtsdo.rvf.core.service.ReleaseAcquisitionService;
 import org.ihtsdo.rvf.core.service.ValidationReportService;
 import org.ihtsdo.rvf.core.service.WhitelistService;
 import org.ihtsdo.rvf.core.service.config.MysqlExecutionConfig;
@@ -86,7 +87,11 @@ public final class DuckValidationProbe {
 				config.getIncludedModules());
 
 		DuckDbValidationService service = new DuckDbValidationService(
-				mock(ValidationReportService.class), mock(WhitelistService.class), store,
+				mock(ValidationReportService.class), mock(WhitelistService.class),
+				// Real, not mocked: the probe calls runValidations directly, and
+				// the only thing it uses this for is createExecutionConfig, which
+				// is pure translation between two config objects.
+				new ReleaseAcquisitionService(), store,
 				System.getProperty("probe.corpus", ""),
 				System.getProperty("probe.work", System.getProperty("java.io.tmpdir")),
 				"qa_result");

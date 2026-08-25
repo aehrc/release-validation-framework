@@ -9,6 +9,7 @@ import org.ihtsdo.rvf.core.data.model.SeverityLevel;
 import org.ihtsdo.rvf.core.data.model.TestRunItem;
 import org.ihtsdo.rvf.core.data.model.TestType;
 import org.ihtsdo.rvf.core.data.model.ValidationReport;
+import org.ihtsdo.rvf.core.service.ReleaseAcquisitionService;
 import org.ihtsdo.rvf.core.service.ValidationReportService;
 import org.ihtsdo.rvf.core.service.ValidationVersionLoader;
 import org.ihtsdo.rvf.core.service.WhitelistService;
@@ -20,8 +21,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
+import org.ihtsdo.rvf.core.service.SqlAssertionValidationService;
+import org.springframework.util.StringUtils;
 import org.springframework.util.CollectionUtils;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -31,6 +35,7 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -92,7 +97,7 @@ import java.util.stream.Stream;
  */
 @Service
 @ConditionalOnProperty(name = ExecutionEngine.PROPERTY, havingValue = ExecutionEngine.DUCKDB)
-public class DuckDbValidationService {
+public class DuckDbValidationService implements SqlAssertionValidationService {
 
 	private static final Logger LOGGER = LoggerFactory.getLogger(DuckDbValidationService.class);
 
@@ -147,6 +152,7 @@ public class DuckDbValidationService {
 
 	private final ValidationReportService reportService;
 	private final WhitelistService whitelistService;
+	private final ReleaseAcquisitionService acquisitionService;
 	private final String storeFile;
 	private final String corpusRoot;
 	private final String workDirectory;
@@ -154,12 +160,14 @@ public class DuckDbValidationService {
 
 	public DuckDbValidationService(ValidationReportService reportService,
 			WhitelistService whitelistService,
+			ReleaseAcquisitionService acquisitionService,
 			@Value("${rvf.duck.store:}") String storeFile,
 			@Value("${rvf.assertion.resource.local.path:}") String corpusRoot,
 			@Value("${rvf.duck.work.directory:${java.io.tmpdir}}") String workDirectory,
 			@Value("${rvf.qa.result.table.name:qa_result}") String qaResultTableName) {
 		this.reportService = reportService;
 		this.whitelistService = whitelistService;
+		this.acquisitionService = acquisitionService;
 		this.storeFile = storeFile;
 		this.corpusRoot = corpusRoot;
 		this.workDirectory = workDirectory;
@@ -192,18 +200,112 @@ public class DuckDbValidationService {
 	 */
 	public ValidationStatusReport runRF2DuckDbValidations(ValidationRunConfig validationConfig,
 			ValidationStatusReport statusReport, ReleaseDirectories releases) {
-		// ValidationVersionLoader is a @ConditionalOnMysqlEngine @Service, so
-		// there is no bean of it to inject here - but createExecutionConfig is
-		// pure translation from one config object into another and touches none
-		// of its injected fields, so constructing one with `new` reuses those
-		// rules rather than keeping a second copy of them in step. Same
-		// reasoning, and the same hazard, as DuckAssertionSource's
-		// `new AssertionGroupImporter(null)`: if that method ever grows a call to
-		// releaseDataManager it will NPE here, at run time, in DuckDB mode only.
+		// The injected bean, not `new`. This used to construct a
+		// ValidationVersionLoader by hand to reuse createExecutionConfig, with a
+		// comment predicting that it would NPE the day that method touched an
+		// injected field - which is exactly what happened when the acquisition
+		// half was extracted. ReleaseAcquisitionService carries no engine
+		// condition, so there is a bean to take and the hazard is gone rather
+		// than moved.
 		MysqlExecutionConfig executionConfig =
-				new ValidationVersionLoader().createExecutionConfig(validationConfig);
+				acquisitionService.createExecutionConfig(validationConfig);
 		return runValidations(executionConfig, releases, validationConfig.getStorageLocation(),
 				statusReport);
+	}
+
+	/**
+	 * The {@link SqlAssertionValidationService} entry point: takes a run config,
+	 * finds the release files acquisition left on disk, unpacks them and
+	 * validates.
+	 *
+	 * <p>Acquisition hands over ZIPs in one flat, unlabelled list -
+	 * {@code validationConfig.getLocalReleaseFiles()} holds the prospective, the
+	 * previous and every dependency together, in whatever order they were
+	 * downloaded. They are told apart by NAME, against
+	 * {@code getPreviousRelease()} and {@code getExtensionDependencies()}, and
+	 * not by position: the download order depends on which branches
+	 * ValidationRunner took, so an index would be right until the day a run
+	 * supplies no previous release and every subsequent file shifts up one.
+	 *
+	 * <p>A release that was requested and is NOT on disk is left null rather than
+	 * pointed at an empty directory - see {@link ReleaseDirectories}, where null
+	 * is what turns an assertion over a release we do not have into "not run"
+	 * instead of a pass.
+	 */
+	@Override
+	public ValidationStatusReport runRF2Validations(ValidationRunConfig validationConfig,
+			ValidationStatusReport statusReport) {
+		MysqlExecutionConfig executionConfig =
+				acquisitionService.createExecutionConfig(validationConfig);
+		Path work = Path.of(workDirectory, "rvf-" + validationConfig.getRunId());
+		try {
+			ReleaseDirectories releases = unpack(validationConfig, executionConfig, work);
+			return runValidations(executionConfig, releases, validationConfig.getStorageLocation(),
+					statusReport);
+		} catch (IOException e) {
+			String message = ExceptionUtils.getExceptionCause(
+					"Failed to unpack the release files for validation", e);
+			LOGGER.error(message, e);
+			statusReport.addFailureMessage(message);
+			statusReport.getReportSummary().put(SQL_SUMMARY_KEY, message);
+			return statusReport;
+		} finally {
+			FileUtils.deleteQuietly(work.toFile());
+		}
+	}
+
+	private ReleaseDirectories unpack(ValidationRunConfig validationConfig,
+			MysqlExecutionConfig executionConfig, Path work) throws IOException {
+		Files.createDirectories(work);
+		Collection<String> excluded = executionConfig.getExcludedRF2Files();
+
+		File prospectiveZip = validationConfig.getLocalProspectiveFile();
+		if (prospectiveZip == null) {
+			throw new IOException("No prospective release file was acquired for this run");
+		}
+		Path prospective = DuckReleaseUnpacker.unpack(prospectiveZip, work, "prospective", excluded);
+
+		Path previous = null;
+		File previousZip = localFileNamed(validationConfig, validationConfig.getPreviousRelease());
+		if (previousZip != null) {
+			previous = DuckReleaseUnpacker.unpack(previousZip, work, "previous", excluded);
+		}
+
+		Path dependency = null;
+		List<String> dependencies = validationConfig.getExtensionDependencies();
+		if (!CollectionUtils.isEmpty(dependencies)) {
+			// One directory for all of them, which is what an extension with
+			// several dependencies means: the union is the content the extension
+			// sits on top of, and DuckMaterialiser already loads every file that
+			// maps to a table as one relation.
+			for (String name : dependencies) {
+				File zip = localFileNamed(validationConfig, name);
+				if (zip != null) {
+					dependency = DuckReleaseUnpacker.unpack(zip, work, "dependency", excluded);
+				}
+			}
+		}
+		return new ReleaseDirectories(prospective, previous, dependency);
+	}
+
+	/**
+	 * The acquired file whose name matches, or null if that release was not
+	 * requested or did not arrive.
+	 */
+	private static File localFileNamed(ValidationRunConfig validationConfig, String name) {
+		if (!StringUtils.hasLength(name)) {
+			return null;
+		}
+		List<File> acquired = validationConfig.getLocalReleaseFiles();
+		if (acquired == null) {
+			return null;
+		}
+		for (File file : acquired) {
+			if (name.equals(file.getName())) {
+				return file;
+			}
+		}
+		return null;
 	}
 
 	/**

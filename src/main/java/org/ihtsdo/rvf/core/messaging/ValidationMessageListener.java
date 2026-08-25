@@ -21,11 +21,9 @@ import java.io.Closeable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
-import org.ihtsdo.rvf.config.ConditionalOnMysqlEngine;
 
 @Service
 @ConditionalOnProperty(name = "rvf.execution.isWorker", havingValue = "true")
-@ConditionalOnMysqlEngine
 public class ValidationMessageListener implements Closeable {
 
 	private static final Logger LOGGER = LoggerFactory.getLogger(ValidationMessageListener.class);

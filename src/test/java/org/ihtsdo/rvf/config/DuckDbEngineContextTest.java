@@ -16,6 +16,9 @@ import org.ihtsdo.rvf.rest.controller.AssertionGroupController;
 import org.ihtsdo.rvf.rest.controller.ReleaseController;
 import org.ihtsdo.rvf.core.service.duck.DuckAssertionService;
 import org.ihtsdo.rvf.core.service.AssertionServiceImpl;
+import org.ihtsdo.rvf.core.messaging.ValidationMessageListener;
+import org.ihtsdo.rvf.core.service.SqlAssertionValidationService;
+import org.ihtsdo.rvf.core.service.ReleaseAcquisitionService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -97,9 +100,11 @@ class DuckDbEngineContextTest {
 				"the assertion primer imports the corpus into MySQL at startup");
 		assertEquals(0, context.getBeanNamesForType(RvfDynamicDataSource.class).length);
 		assertEquals(0, context.getBeanNamesForType(MysqlValidationService.class).length);
-		assertEquals(0, context.getBeanNamesForType(ValidationRunner.class).length,
-				"the MySQL orchestrator goes with them; the DuckDB runner is not wired yet - "
-						+ "so a submitted validation is enqueued and nothing drains the queue");
+		// ValidationRunner is NOT in this list any more, and that is the point of
+		// the wiring: it orchestrates five passes, four of which never touched a
+		// datasource, and only the SQL pass was engine-specific. It now takes
+		// SqlAssertionValidationService, so it exists in both modes - which is
+		// what gives the validation queue a consumer here.
 	}
 
 	/**
@@ -117,6 +122,29 @@ class DuckDbEngineContextTest {
 	 * published store; an endpoint that pretended to accept a write would be
 	 * worse than one that is absent.
 	 */
+	/**
+	 * The queue has a consumer, and the orchestrator behind it is engine-neutral.
+	 *
+	 * <p>Asserting the LISTENER matters more than asserting the runner: a run is
+	 * accepted over REST, enqueued, and picked up by @JmsListener. With the
+	 * listener absent the submission still succeeded and returned a run id, and
+	 * the work simply never happened - the failure mode that looks exactly like
+	 * a slow queue.
+	 */
+	@Test
+	void theQueueHasAConsumerAndTheSqlPassResolvesToTheDuckDbService() {
+		assertEquals(1, context.getBeanNamesForType(ValidationMessageListener.class).length,
+				"without this nothing drains the validation queue");
+		assertEquals(1, context.getBeanNamesForType(ValidationRunner.class).length,
+				"four of its five passes never needed MySQL");
+		assertEquals(1, context.getBeanNamesForType(SqlAssertionValidationService.class).length,
+				"exactly one implementation, so ValidationRunner's injection is unambiguous");
+		assertEquals(DuckDbValidationService.class,
+				context.getBean(SqlAssertionValidationService.class).getClass());
+		assertEquals(1, context.getBeanNamesForType(ReleaseAcquisitionService.class).length,
+				"acquisition carries no engine condition - it downloads and unzips");
+	}
+
 	@Test
 	void theSubmissionPathIsRegisteredAndTheCrudControllersAreNot() {
 		assertEquals(1, context.getBeanNamesForType(TestUploadFileController.class).length,

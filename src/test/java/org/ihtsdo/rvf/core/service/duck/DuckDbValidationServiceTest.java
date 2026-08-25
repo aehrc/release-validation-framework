@@ -3,6 +3,7 @@ package org.ihtsdo.rvf.core.service.duck;
 import org.ihtsdo.rvf.core.data.model.TestRunItem;
 import org.ihtsdo.rvf.core.data.model.TestType;
 import org.ihtsdo.rvf.core.data.model.ValidationReport;
+import org.ihtsdo.rvf.core.service.ReleaseAcquisitionService;
 import org.ihtsdo.rvf.core.service.ValidationReportService;
 import org.ihtsdo.rvf.core.service.WhitelistService;
 import org.ihtsdo.rvf.core.service.config.MysqlExecutionConfig;
@@ -294,7 +295,8 @@ class DuckDbValidationServiceTest {
 	}
 
 	private DuckDbValidationService service() {
-		return new DuckDbValidationService(reportService, whitelistService, storeFile.toString(),
+		return new DuckDbValidationService(reportService, whitelistService,
+				new ReleaseAcquisitionService(), storeFile.toString(),
 				corpus.toString(), work.toString(), "qa_result");
 	}
 
