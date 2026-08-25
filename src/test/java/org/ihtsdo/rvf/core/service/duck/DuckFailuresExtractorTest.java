@@ -17,6 +17,7 @@ import java.sql.DriverManager;
 import java.sql.Statement;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -41,7 +42,9 @@ class DuckFailuresExtractorTest {
 	private static final String QA_RESULT = "rvf_results.qa_result";
 
 	private Connection con;
-	private AssertionService assertionService;
+	/** Stands in for AssertionService: the duck path has no such bean. */
+	private final List<Assertion> assertionList = new ArrayList<>();
+	private final java.util.function.Supplier<List<Assertion>> assertions = () -> assertionList;
 	private WhitelistService whitelistService;
 
 	@BeforeEach
@@ -64,7 +67,6 @@ class DuckFailuresExtractorTest {
 					+ "concept_id BIGINT, details VARCHAR, component_id VARCHAR, "
 					+ "table_name VARCHAR, skip_module_check BOOLEAN)");
 		}
-		assertionService = mock(AssertionService.class);
 		whitelistService = mock(WhitelistService.class);
 	}
 
@@ -102,7 +104,7 @@ class DuckFailuresExtractorTest {
 		insertQaResult(7L, "11111111-1111-1111-1111-111111111111", 1L, null, null, false);
 		insertQaResult(7L, "11111111-1111-1111-1111-111111111111", 2L, null, null, false);
 
-		DuckFailuresExtractor extractor = new DuckFailuresExtractor(con, QA_RESULT, whitelistService, assertionService);
+		DuckFailuresExtractor extractor = new DuckFailuresExtractor(con, QA_RESULT, whitelistService, assertions);
 		when(whitelistService.isWhitelistDisabled()).thenReturn(true);
 
 		List<TestRunItem> items = List.of(
@@ -125,7 +127,7 @@ class DuckFailuresExtractorTest {
 		// No qa_result rows for this assertion (it never got that far) and a
 		// failure message set: -1L says testsIncomplete rather than reading as a
 		// clean pass, which a bare 0L would.
-		DuckFailuresExtractor extractor = new DuckFailuresExtractor(con, QA_RESULT, whitelistService, assertionService);
+		DuckFailuresExtractor extractor = new DuckFailuresExtractor(con, QA_RESULT, whitelistService, assertions);
 		when(whitelistService.isWhitelistDisabled()).thenReturn(true);
 
 		TestRunItem failed = item("33333333-3333-3333-3333-333333333333");
@@ -144,7 +146,7 @@ class DuckFailuresExtractorTest {
 			insertQaResult(7L, uuid, i, null, null, false);
 		}
 
-		DuckFailuresExtractor extractor = new DuckFailuresExtractor(con, QA_RESULT, whitelistService, assertionService);
+		DuckFailuresExtractor extractor = new DuckFailuresExtractor(con, QA_RESULT, whitelistService, assertions);
 		when(whitelistService.isWhitelistDisabled()).thenReturn(true);
 
 		TestRunItem testItem = item(uuid);
@@ -170,10 +172,10 @@ class DuckFailuresExtractorTest {
 			expected.add(i);
 		}
 
-		DuckFailuresExtractor extractor = new DuckFailuresExtractor(con, QA_RESULT, whitelistService, assertionService, 2);
+		DuckFailuresExtractor extractor = new DuckFailuresExtractor(con, QA_RESULT, whitelistService, assertions, 2);
 		when(whitelistService.isWhitelistDisabled()).thenReturn(false);
-		when(assertionService.findAll()).thenReturn(List.of(assertion(uuid)));
-		when(assertionService.getAllAssertionGroups()).thenReturn(Collections.emptyList());
+		assertionList.clear();
+		assertionList.addAll(List.of(assertion(uuid)));
 		when(whitelistService.checkComponentFailuresAgainstWhitelist(any())).thenReturn(Collections.emptyList());
 
 		TestRunItem testItem = item(uuid);
@@ -200,15 +202,18 @@ class DuckFailuresExtractorTest {
 		// concept 300 -> mod-excluded, but skipModuleCheck=true bypasses the filter.
 		insertQaResult(7L, uuid, 300L, "300", "prospective.concept_s", true);
 
+		// The module filter applies only to assertions in common-authoring or
+		// common-edition. The MySQL extractor discovered that by joining every
+		// assertion to every AssertionGroup row; the store-backed source resolves
+		// membership once and hands it over on the Assertion itself, so the group
+		// is set here rather than stubbed onto a repository.
 		Assertion assertionInGroup = assertion(uuid);
-		AssertionGroup group = new AssertionGroup();
-		group.setName("common-authoring");
-		group.getAssertions().add(assertionInGroup);
+		assertionInGroup.setGroups(Set.of("common-authoring"));
 
-		DuckFailuresExtractor extractor = new DuckFailuresExtractor(con, QA_RESULT, whitelistService, assertionService);
+		DuckFailuresExtractor extractor = new DuckFailuresExtractor(con, QA_RESULT, whitelistService, assertions);
 		when(whitelistService.isWhitelistDisabled()).thenReturn(false);
-		when(assertionService.findAll()).thenReturn(List.of(assertionInGroup));
-		when(assertionService.getAllAssertionGroups()).thenReturn(List.of(group));
+		assertionList.clear();
+		assertionList.addAll(List.of(assertionInGroup));
 		when(whitelistService.checkComponentFailuresAgainstWhitelist(any())).thenReturn(Collections.emptyList());
 
 		TestRunItem testItem = item(uuid);
@@ -233,10 +238,10 @@ class DuckFailuresExtractorTest {
 		String uuid = "77777777-7777-7777-7777-777777777777";
 		insertQaResult(7L, uuid, 100L, "100", "prospective.concept_s", false);
 
-		DuckFailuresExtractor extractor = new DuckFailuresExtractor(con, QA_RESULT, whitelistService, assertionService);
+		DuckFailuresExtractor extractor = new DuckFailuresExtractor(con, QA_RESULT, whitelistService, assertions);
 		when(whitelistService.isWhitelistDisabled()).thenReturn(false);
-		when(assertionService.findAll()).thenReturn(List.of(assertion(uuid)));
-		when(assertionService.getAllAssertionGroups()).thenReturn(Collections.emptyList());
+		assertionList.clear();
+		assertionList.addAll(List.of(assertion(uuid)));
 		when(whitelistService.checkComponentFailuresAgainstWhitelist(any())).thenReturn(Collections.emptyList());
 
 		TestRunItem testItem = item(uuid);
@@ -266,10 +271,10 @@ class DuckFailuresExtractorTest {
 				"prospective.concept_s where 1=0 union all select * from prospective.concept_s --",
 				false);
 
-		DuckFailuresExtractor extractor = new DuckFailuresExtractor(con, QA_RESULT, whitelistService, assertionService);
+		DuckFailuresExtractor extractor = new DuckFailuresExtractor(con, QA_RESULT, whitelistService, assertions);
 		when(whitelistService.isWhitelistDisabled()).thenReturn(false);
-		when(assertionService.findAll()).thenReturn(List.of(assertion(uuid)));
-		when(assertionService.getAllAssertionGroups()).thenReturn(Collections.emptyList());
+		assertionList.clear();
+		assertionList.addAll(List.of(assertion(uuid)));
 		when(whitelistService.checkComponentFailuresAgainstWhitelist(any())).thenReturn(Collections.emptyList());
 
 		TestRunItem testItem = item(uuid);
@@ -288,6 +293,6 @@ class DuckFailuresExtractorTest {
 	@Test
 	void aQaResultTableNameThatIsNotAnIdentifierIsRejectedAtConstruction() {
 		assertThrows(IllegalArgumentException.class, () -> new DuckFailuresExtractor(
-				con, "qa_result; drop table concept_s", whitelistService, assertionService));
+				con, "qa_result; drop table concept_s", whitelistService, assertions));
 	}
 }

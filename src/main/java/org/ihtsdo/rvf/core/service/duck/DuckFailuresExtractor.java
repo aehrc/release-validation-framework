@@ -5,7 +5,6 @@ import org.ihtsdo.rvf.core.data.model.Assertion;
 import org.ihtsdo.rvf.core.data.model.AssertionGroup;
 import org.ihtsdo.rvf.core.data.model.FailureDetail;
 import org.ihtsdo.rvf.core.data.model.TestRunItem;
-import org.ihtsdo.rvf.core.service.AssertionService;
 import org.ihtsdo.rvf.core.service.WhitelistService;
 import org.ihtsdo.rvf.core.service.config.MysqlExecutionConfig;
 import org.ihtsdo.rvf.core.service.whitelist.WhitelistItem;
@@ -24,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 /**
@@ -62,22 +62,30 @@ public class DuckFailuresExtractor {
 	private final Connection connection;
 	private final String qaResultTable;
 	private final WhitelistService whitelistService;
-	private final AssertionService assertionService;
+	private final Supplier<List<Assertion>> assertionsWithGroups;
 	private final int whitelistBatchSize;
 
 	public DuckFailuresExtractor(Connection connection, String qaResultTable,
-			WhitelistService whitelistService, AssertionService assertionService) {
+			WhitelistService whitelistService, Supplier<List<Assertion>> assertionsWithGroups) {
 		// 1000 mirrors MysqlFailuresExtractor's @Value("${rvf.assertion.whitelist.batchsize:1000}")
 		// default; this class has no Spring context to read that property from.
-		this(connection, qaResultTable, whitelistService, assertionService, 1000);
+		this(connection, qaResultTable, whitelistService, assertionsWithGroups, 1000);
 	}
 
+	/**
+	 * @param assertionsWithGroups assertions carrying their group names. A
+	 *        supplier rather than an AssertionService because that bean is
+	 *        MySQL-backed and does not exist when rvf.execution.engine=duckdb -
+	 *        taking it would have made this class boot-time dependent on the
+	 *        database the whole path exists to stop needing.
+	 *        DuckAssertionSource::findAll satisfies it from the store.
+	 */
 	public DuckFailuresExtractor(Connection connection, String qaResultTable,
-			WhitelistService whitelistService, AssertionService assertionService, int whitelistBatchSize) {
+			WhitelistService whitelistService, Supplier<List<Assertion>> assertionsWithGroups, int whitelistBatchSize) {
 		this.connection = connection;
 		this.qaResultTable = requireIdentifier(qaResultTable, "qaResultTable");
 		this.whitelistService = whitelistService;
-		this.assertionService = assertionService;
+		this.assertionsWithGroups = assertionsWithGroups;
 		this.whitelistBatchSize = whitelistBatchSize;
 	}
 
@@ -352,14 +360,11 @@ public class DuckFailuresExtractor {
 	}
 
 	private List<Assertion> getAssertionsAndJoinGroups() {
-		List<Assertion> assertions = assertionService.findAll();
-		List<AssertionGroup> assertionGroups = assertionService.getAllAssertionGroups();
-		assertionGroups.forEach(assertionGroup -> assertionGroup.getAssertions().forEach(a -> assertions.forEach(b -> {
-			if (a.getUuid().toString().equals(b.getUuid().toString())) {
-				b.addGroup(assertionGroup.getName());
-			}
-		})));
-		return assertions;
+		// MysqlFailuresExtractor joins assertions to groups here with a triple
+		// nested forEach over every assertion and every group. The store-backed
+		// source has already done it - group membership is resolved once, at
+		// construction, by the same AssertionGroupImporter rule engine.
+		return assertionsWithGroups.get();
 	}
 
 }
