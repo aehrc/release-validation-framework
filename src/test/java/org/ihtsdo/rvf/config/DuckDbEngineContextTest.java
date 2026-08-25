@@ -7,6 +7,7 @@ import org.ihtsdo.rvf.core.service.MysqlValidationService;
 import org.ihtsdo.rvf.core.service.ReleaseDataManager;
 import org.ihtsdo.rvf.core.service.RvfDynamicDataSource;
 import org.ihtsdo.rvf.core.service.ValidationRunner;
+import org.ihtsdo.rvf.core.service.duck.DuckDbValidationService;
 import org.ihtsdo.rvf.importer.RvfAssertionsDatabasePrimerService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -86,6 +87,18 @@ class DuckDbEngineContextTest {
 		assertEquals(0, context.getBeanNamesForType(MysqlValidationService.class).length);
 		assertEquals(0, context.getBeanNamesForType(ValidationRunner.class).length,
 				"the MySQL orchestrator goes with them; the DuckDB runner is not wired yet");
+	}
+
+	@Test
+	void theDuckDbValidationServiceIsThereInsteadAndCanBeBuilt() {
+		// The one bean this mode ADDS. Worth asserting for two reasons: its
+		// condition is the mirror image of @ConditionalOnMysqlEngine and has to
+		// be spelled right in the opposite direction, and Spring builds
+		// singletons eagerly - so a bean present here is also a bean whose
+		// constructor ran without a datasource, an AssertionService or a
+		// configured store.
+		assertEquals(1, context.getBeanNamesForType(DuckDbValidationService.class).length,
+				"the DuckDB validation service replaces MysqlValidationService in this mode");
 	}
 
 	@Test

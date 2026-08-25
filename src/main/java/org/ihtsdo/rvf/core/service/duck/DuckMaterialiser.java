@@ -79,7 +79,7 @@ public final class DuckMaterialiser {
 	public static Result materialise(Connection con, Path releaseDir, String schema,
 			Map<String, String> tableColumns) throws SQLException, IOException {
 		long t0 = System.currentTimeMillis();
-		Map<String, Path> files = releaseFiles(releaseDir);
+		Map<String, List<Path>> files = releaseFiles(releaseDir);
 		List<String> loaded = new ArrayList<>();
 		int emptyFiles = 0;
 		long rows = 0;
@@ -87,7 +87,7 @@ public final class DuckMaterialiser {
 		try (Statement st = con.createStatement()) {
 			st.execute("CREATE SCHEMA IF NOT EXISTS " + schema);
 
-			for (Map.Entry<String, Path> e : files.entrySet()) {
+			for (Map.Entry<String, List<Path>> e : files.entrySet()) {
 				String table = e.getKey();
 				String columns = tableColumns.get(table);
 				if (columns == null) {
@@ -104,13 +104,22 @@ public final class DuckMaterialiser {
 				// hypothetical: fix-long-terms.sh empties any description file
 				// with no term at or over the length limit, which is every AU
 				// daily build's sct2_Description_Delta-en.
-				if (Files.size(e.getValue()) == 0) {
-					LOGGER.info("empty file {} - {} left as an empty table",
-							e.getValue().getFileName(), table);
-					emptyFiles++;
+				List<Path> loadable = new ArrayList<>();
+				for (Path file : e.getValue()) {
+					if (Files.size(file) == 0) {
+						LOGGER.info("empty file {} - not loaded into {}",
+								file.getFileName(), table);
+						emptyFiles++;
+					} else {
+						loadable.add(file);
+					}
+				}
+				if (loadable.isEmpty()) {
+					// Every file for this table was empty; the placeholder pass
+					// below still gives it a queryable, zero-row table.
 					continue;
 				}
-				rows += load(st, schema, table, e.getValue(), columns);
+				rows += load(st, schema, table, loadable, columns);
 				loaded.add(table);
 			}
 
@@ -137,12 +146,34 @@ public final class DuckMaterialiser {
 		}
 	}
 
-	private static long load(Statement st, String schema, String table, Path file, String columns)
-			throws SQLException {
+	/**
+	 * Loads every file that maps to this table, as ONE relation.
+	 *
+	 * <p>A list, not a single path, because the mapping is many-to-one and the
+	 * releases where it is are not exotic. RVF's own regression fixture for the
+	 * Swiss edition ships five Language Snapshot files (-de-ch, -en, -fr-ch,
+	 * -fr, -it-ch) and four Description Snapshot files, and every one of them
+	 * maps to langrefset_s / description_s. MySQL issues one
+	 * {@code load data local infile ... into table} per file, so all of them
+	 * land; keying by table and taking one path silently loads the last and
+	 * discards the rest, which is four fifths of a release's language refset
+	 * missing with nothing anywhere reporting it. An English-only edition never
+	 * shows the difference, which is why this survived AU parity testing.
+	 *
+	 * <p>read_csv takes the list directly rather than this appending file by
+	 * file, so the ORDER BY still sorts the whole relation - loading the first
+	 * file sorted and inserting the others after it would leave DuckDB's
+	 * row-group statistics useless for pruning.
+	 */
+	private static long load(Statement st, String schema, String table, List<Path> files,
+			String columns) throws SQLException {
 		String spec = columnSpec(columns);
 		String sort = sortKey(table, columns);
-		String sql = "CREATE OR REPLACE TABLE " + schema + "." + table + " AS SELECT * FROM read_csv('"
-				+ file.toAbsolutePath() + "', delim='\t', header=true, columns={" + spec + "}, "
+		String fileList = files.stream()
+				.map(f -> "'" + f.toAbsolutePath() + "'")
+				.collect(java.util.stream.Collectors.joining(", "));
+		String sql = "CREATE OR REPLACE TABLE " + schema + "." + table + " AS SELECT * FROM read_csv(["
+				+ fileList + "], delim='\t', header=true, columns={" + spec + "}, "
 				// RF2 is not quoted or escaped. Leaving DuckDB's defaults in
 				// place makes a term containing a double quote swallow the rest
 				// of the line.
@@ -177,12 +208,17 @@ public final class DuckMaterialiser {
 	}
 
 	/**
-	 * Every RF2 .txt under the release, keyed by the table RVF would load it
+	 * Every RF2 .txt under the release, grouped by the table RVF would load it
 	 * into. Sorted so the load order - and therefore any failure - is
 	 * reproducible run to run.
+	 *
+	 * <p>A list per table, because the RF2-name-to-table mapping is many-to-one:
+	 * the language and description files carry a language suffix that the mapper
+	 * matches with a wildcard, so a multilingual edition has several files per
+	 * table. See {@link #load}.
 	 */
-	static Map<String, Path> releaseFiles(Path releaseDir) throws IOException {
-		Map<String, Path> out = new LinkedHashMap<>();
+	static Map<String, List<Path>> releaseFiles(Path releaseDir) throws IOException {
+		Map<String, List<Path>> out = new LinkedHashMap<>();
 		try (Stream<Path> walk = Files.walk(releaseDir)) {
 			List<Path> txt = walk.filter(Files::isRegularFile)
 					.filter(p -> p.getFileName().toString().endsWith(".txt"))
@@ -191,7 +227,7 @@ public final class DuckMaterialiser {
 			for (Path p : txt) {
 				String table = RF2FileTableMapper.getLegacyTableName(p.getFileName().toString());
 				if (table != null) {
-					out.put(table, p);
+					out.computeIfAbsent(table, t -> new ArrayList<>()).add(p);
 				}
 			}
 		}

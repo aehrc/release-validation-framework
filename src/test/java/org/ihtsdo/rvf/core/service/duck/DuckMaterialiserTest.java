@@ -32,6 +32,9 @@ class DuckMaterialiserTest {
 				+ "term VARCHAR, casesignificanceid BIGINT");
 	}
 
+	private static final String DESCRIPTION_HEADER =
+			"id\teffectiveTime\tactive\tmoduleId\tconceptId\tlanguageCode\ttypeId\tterm\tcaseSignificanceId\n";
+
 	@Test
 	void emptyRf2FileBecomesAnEmptyTableRatherThanAFailedLoad(@TempDir Path release) throws Exception {
 		// fix-long-terms.sh empties any description file with no term at or over
@@ -76,6 +79,32 @@ class DuckMaterialiserTest {
 				assertEquals("BIGINT", rs.getString(1));
 				assertTrue(rs.getBoolean(2), "an SCTID above 2^53 must compare exactly");
 			}
+		}
+	}
+
+	@Test
+	void everyFileMappingToATableIsLoaded(@TempDir Path release) throws Exception {
+		// The RF2-name-to-table mapping is many-to-one, and not rarely: RVF's
+		// own regression fixture for the Swiss edition ships five Language
+		// Snapshot files and four Description Snapshot files, all of which
+		// MySQL loads into the same table with one "load data local infile"
+		// each. Keying a release by table name and keeping one path per key
+		// loads the last file and discards the rest - four fifths of a
+		// language refset gone, with no error anywhere. An English-only
+		// edition has one file per table and never shows it.
+		write(release, "Snapshot/Terminology/sct2_Description_Snapshot-en_CH1000195_20260831.txt",
+				DESCRIPTION_HEADER
+				+ "101013\t20260831\t1\t900000000000207008\t138875005\ten\t900000000000003001\tSNOMED CT Concept\t900000000000020002\n");
+		write(release, "Snapshot/Terminology/sct2_Description_Snapshot-fr_CH1000195_20260831.txt",
+				DESCRIPTION_HEADER
+				+ "101014\t20260831\t1\t900000000000207008\t138875005\tfr\t900000000000003001\tConcept SNOMED CT\t900000000000020002\n");
+
+		Map<String, String> columns = Map.of("description_s", COLUMNS.get("description_d"));
+		try (Connection con = connect()) {
+			DuckMaterialiser.Result r = DuckMaterialiser.materialise(con, release, "prospective", columns);
+			assertEquals(1, r.tablesLoaded(), "two files, one table");
+			assertEquals(2, r.rows(), "both languages, not just whichever sorted last");
+			assertEquals(2, count(con, "description_s"));
 		}
 	}
 
