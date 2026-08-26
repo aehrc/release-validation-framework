@@ -15,6 +15,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.stream.Collectors;
@@ -104,10 +105,27 @@ public class DuckDescriptionService implements DescriptionService {
 		return findByExactTerm(exactTerm, false);
 	}
 
+	/**
+	 * Memo for {@link #findByExactTerm}, keyed by term and activity.
+	 *
+	 * <p>Sampling a scoped run put this method at the top by a wide margin, even
+	 * with an index on {@code description(term)}: the rules ask it of every
+	 * description they look at, and {@code findMatchingDescriptionInHierarchy}
+	 * asks it again. It cannot be scoped away - the question is "does this term
+	 * exist ANYWHERE else in the release" - but the release does not change
+	 * during a run, so the answer is a pure function of the term.
+	 */
+	private final Map<String, Set<Description>> byExactTerm = new ConcurrentHashMap<>();
+
 	private Set<Description> findByExactTerm(String exactTerm, boolean active) {
 		if (exactTerm == null || exactTerm.trim().isEmpty()) {
 			return Collections.emptySet();
 		}
+		return byExactTerm.computeIfAbsent((active ? "1\u0000" : "0\u0000") + exactTerm,
+				k -> loadByExactTerm(exactTerm, active));
+	}
+
+	private Set<Description> loadByExactTerm(String exactTerm, boolean active) {
 		Set<Description> out = new HashSet<>();
 		try (PreparedStatement ps = dataset.getConnection().prepareStatement(
 				"SELECT id, effectiveTime, active, moduleId, conceptId, languageCode, typeId, term, "

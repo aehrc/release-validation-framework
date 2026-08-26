@@ -24,6 +24,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Collection;
 import java.util.Set;
 
 /**
@@ -138,6 +139,61 @@ public class DuckDroolsDataset implements Closeable {
 	 */
 	private static final Set<String> REQUIRED_VIEWS = Set.of("concept", "description_raw");
 
+	/** Temp table holding the ids of the concepts under validation. */
+	static final String SCOPE_TABLE = "drools_scope";
+
+	/**
+	 * Materialises the validation scope as a table the prefetch queries join to.
+	 *
+	 * <p>A table, not an {@code IN (...)} list: the scope is thousands of ids on
+	 * a real edition, and DuckDB plans a join against a small table far better
+	 * than a huge disjunction - quite apart from parameter limits.
+	 *
+	 * <p>Loaded with the Appender for the same reason
+	 * {@code deriveStatedRelationships} uses it: DuckDB's JDBC executeBatch
+	 * loops and executes once per row, so it is not a bulk path.
+	 */
+	void materialiseScope(Collection<String> conceptIds) {
+		try (Statement s = connection.createStatement()) {
+			s.execute("CREATE OR REPLACE TABLE " + SCOPE_TABLE + " (id VARCHAR)");
+		} catch (SQLException e) {
+			throw new IllegalStateException("could not create " + SCOPE_TABLE, e);
+		}
+		try (DuckDBAppender ap = ((DuckDBConnection) connection)
+				.createAppender(DuckDBConnection.DEFAULT_SCHEMA, SCOPE_TABLE)) {
+			for (String id : conceptIds) {
+				ap.beginRow();
+				ap.append(id);
+				ap.endRow();
+			}
+			ap.flush();
+		} catch (SQLException e) {
+			throw new IllegalStateException("could not load " + SCOPE_TABLE, e);
+		}
+		try (Statement s = connection.createStatement()) {
+			s.execute("CREATE INDEX idx_scope_id ON " + SCOPE_TABLE + "(id)");
+		} catch (SQLException e) {
+			LOGGER.debug("no index on {}: {}", SCOPE_TABLE, e.getMessage());
+		}
+	}
+
+	/** Runs {@code sql} and hands each row to {@code consumer}. */
+	void eachRow(String sql, RowConsumer consumer) {
+		try (Statement st = connection.createStatement();
+			 ResultSet rs = st.executeQuery(sql)) {
+			while (rs.next()) {
+				consumer.accept(rs);
+			}
+		} catch (SQLException e) {
+			throw new IllegalStateException("query failed: " + sql, e);
+		}
+	}
+
+	@FunctionalInterface
+	interface RowConsumer {
+		void accept(ResultSet rs) throws SQLException;
+	}
+
 	private void createViews(Set<String> directories) throws SQLException {
 		// A release can be split across several extracted directories (the
 		// package itself plus its extension dependency), so every view unions
@@ -169,6 +225,12 @@ public class DuckDroolsDataset implements Closeable {
 			// a full scan of the materialised table, which is better than
 			// re-reading the CSV but still linear in the edition.
 			indexIfPresent(s, "concept", "id");
+			// term, because findActiveDescriptionByExactTerm searches the WHOLE
+			// release by term - it cannot be scoped, since the question it
+			// answers is "does this term exist anywhere else". Sampling put it
+			// among the top costs of a scoped run: without this index every call
+			// scans ~2.9M descriptions.
+			indexIfPresent(s, "description", "term");
 			indexIfPresent(s, "description", "id");
             indexIfPresent(s, "description", "conceptId");
 			indexIfPresent(s, "inferred_relationship", "sourceId");
