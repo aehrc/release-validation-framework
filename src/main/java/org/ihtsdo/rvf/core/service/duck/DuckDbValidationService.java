@@ -153,7 +153,7 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 	private final ValidationReportService reportService;
 	private final WhitelistService whitelistService;
 	private final ReleaseAcquisitionService acquisitionService;
-	private final String storeFile;
+	private final DuckStoreLocator storeLocator;
 	private final String corpusRoot;
 	private final String workDirectory;
 	private final String qaResultTable;
@@ -161,14 +161,14 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 	public DuckDbValidationService(ValidationReportService reportService,
 			WhitelistService whitelistService,
 			ReleaseAcquisitionService acquisitionService,
-			@Value("${rvf.duck.store:}") String storeFile,
+			DuckStoreLocator storeLocator,
 			@Value("${rvf.assertion.resource.local.path:}") String corpusRoot,
 			@Value("${rvf.duck.work.directory:${java.io.tmpdir}}") String workDirectory,
 			@Value("${rvf.qa.result.table.name:qa_result}") String qaResultTableName) {
 		this.reportService = reportService;
 		this.whitelistService = whitelistService;
 		this.acquisitionService = acquisitionService;
-		this.storeFile = storeFile;
+		this.storeLocator = storeLocator;
 		this.corpusRoot = corpusRoot;
 		this.workDirectory = workDirectory;
 		this.qaResultTable = QA_RESULT_SCHEMA + "." + qaResultTableName;
@@ -367,8 +367,9 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 	private ValidationStatusReport run(Connection connection, MysqlExecutionConfig executionConfig,
 			ReleaseDirectories releases, String reportStorage, ValidationStatusReport statusReport,
 			long timeStart) throws IOException {
-		DuckStore store = DuckStore.read(Path.of(storeFile));
-		LOGGER.info("DuckDB assertion store loaded from {}: {}", storeFile, store.generatorDescription());
+		DuckStore store = storeLocator.load();
+		LOGGER.info("DuckDB assertion store loaded from {}: {}", storeLocator.description(),
+				store.generatorDescription());
 
 		String lastItemLoadAttempted = "Item Unknown";
 		try {

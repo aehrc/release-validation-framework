@@ -46,7 +46,6 @@ spec:
           env:
             - { name: RVF_EXECUTION_ENGINE, value: "duckdb" }
             - { name: RVF_EXECUTION_ISWORKER, value: "false" }
-            - { name: RVF_DUCK_STORE, value: "/store/store.json" }
             - { name: RVF_ASSERTION_RESOURCE_LOCAL_PATH, value: "/app/snomed-release-validation-assertions" }
             - { name: RVF_DROOLS_RULE_DIRECTORY, value: "/app/snomed-drools-rules" }
             - { name: SPRING_ACTIVEMQ_BROKER_URL, value: "tcp://activemq:61616" }
@@ -60,12 +59,9 @@ spec:
             - { name: RVF_VALIDATION_JOB_STORAGE_LOCAL_PATH, value: "jobs/" }   # NB ResourceConfiguration.normalisePath strips a leading "/" - this is relative to CWD (/app)
             - { name: JAVA_TOOL_OPTIONS, value: "-Xmx1500m" }
           volumeMounts:
-            - { name: store, mountPath: /store }
             - { name: jobs, mountPath: /app/jobs }
           resources: { requests: { memory: 1Gi, cpu: 250m }, limits: { memory: 2Gi } }
       volumes:
-        - name: store
-          configMap: { name: duck-store }
         - name: jobs
           hostPath: { path: /var/lib/rvf-jobs, type: DirectoryOrCreate }
 ---
@@ -94,7 +90,6 @@ spec:
           env:
             - { name: RVF_EXECUTION_ENGINE, value: "duckdb" }
             - { name: RVF_EXECUTION_ISWORKER, value: "true" }
-            - { name: RVF_DUCK_STORE, value: "/store/store.json" }
             - { name: RVF_ASSERTION_RESOURCE_LOCAL_PATH, value: "/app/snomed-release-validation-assertions" }
             - { name: RVF_DROOLS_RULE_DIRECTORY, value: "/app/snomed-drools-rules" }
             - { name: SPRING_ACTIVEMQ_BROKER_URL, value: "tcp://activemq:61616" }
@@ -106,13 +101,10 @@ spec:
             - { name: RVF_DUCK_WORK_DIRECTORY, value: "/work" }
             - { name: JAVA_TOOL_OPTIONS, value: "-Xmx4g" }
           volumeMounts:
-            - { name: store, mountPath: /store }
             - { name: jobs, mountPath: /app/jobs }
             - { name: work, mountPath: /work }
           resources: { requests: { memory: 1Gi, cpu: 1 }, limits: { memory: 5Gi, cpu: 2 } }
       volumes:
-        - name: store
-          configMap: { name: duck-store }
         - name: jobs
           hostPath: { path: /var/lib/rvf-jobs, type: DirectoryOrCreate }
         - name: work

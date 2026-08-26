@@ -329,7 +329,8 @@ class DuckDbValidationServiceExtensionTest {
 		runConfig.setRunId(config.getExecutionId());
 		ValidationStatusReport status = new ValidationStatusReport(runConfig);
 		new DuckDbValidationService(reportService, whitelistService,
-				new ReleaseAcquisitionService(), storeFile.toString(),
+				new ReleaseAcquisitionService(),
+				new DuckStoreLocator(storeFile.toString(), corpus.toString()),
 				corpus.toString(), work.toString(), "qa_result")
 				.runValidations(config, releases, "storage/", status);
 		return status;

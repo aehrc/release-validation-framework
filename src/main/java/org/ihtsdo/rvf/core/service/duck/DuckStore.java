@@ -133,6 +133,35 @@ public final class DuckStore {
 		return Collections.unmodifiableList(out);
 	}
 
+	/**
+	 * {@code assertion file name -> sha256 prefix of the MySQL it was compiled
+	 * from}, as recorded by the publisher.
+	 *
+	 * <p>This is what makes a store that ships INSIDE the artefact safe. The
+	 * store is a build output of one specific assertion corpus; move the corpus
+	 * pin without republishing and the two disagree silently, because nothing
+	 * downstream reads the corpus SQL any more - the run would execute the OLD
+	 * assertions and report them under the NEW corpus's identity. Comparing
+	 * these hashes against the corpus on disk turns that into a loud failure.
+	 *
+	 * <p>Assertions only. Pre-requisites are published from a separate input
+	 * that the corpus does not ship, so there is nothing on the corpus side to
+	 * compare them against.
+	 */
+	public Map<String, String> assertionSourceHashes() {
+		Map<String, String> out = new LinkedHashMap<>();
+		JsonNode node = root.path("assertions");
+		node.fieldNames().forEachRemaining(uuid -> {
+			JsonNode a = node.path(uuid);
+			String file = a.path("file").asText();
+			String sha = a.path("sha256").asText("");
+			if (!file.isEmpty() && !sha.isEmpty()) {
+				out.put(file, sha);
+			}
+		});
+		return Collections.unmodifiableMap(out);
+	}
+
 	/** Provenance: what built this store, from what corpus, when. */
 	public String generatorDescription() {
 		JsonNode g = root.path("generator");

@@ -8,6 +8,7 @@ import org.ihtsdo.rvf.core.service.WhitelistService;
 import org.ihtsdo.rvf.core.service.config.MysqlExecutionConfig;
 import org.ihtsdo.rvf.core.service.config.ValidationRunConfig;
 import org.ihtsdo.rvf.core.service.duck.DuckDbValidationService;
+import org.ihtsdo.rvf.core.service.duck.DuckStoreLocator;
 import org.ihtsdo.rvf.core.service.pojo.ValidationStatusReport;
 
 import java.io.PrintWriter;
@@ -91,7 +92,8 @@ public final class DuckValidationProbe {
 				// Real, not mocked: the probe calls runValidations directly, and
 				// the only thing it uses this for is createExecutionConfig, which
 				// is pure translation between two config objects.
-				new ReleaseAcquisitionService(), store,
+				new ReleaseAcquisitionService(),
+				new DuckStoreLocator(store, System.getProperty("probe.corpus", "")),
 				System.getProperty("probe.corpus", ""),
 				System.getProperty("probe.work", System.getProperty("java.io.tmpdir")),
 				"qa_result");

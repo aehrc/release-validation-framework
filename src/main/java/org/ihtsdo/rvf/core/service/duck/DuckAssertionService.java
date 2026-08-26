@@ -71,29 +71,29 @@ public class DuckAssertionService implements AssertionService {
 
 	private static final Logger LOGGER = LoggerFactory.getLogger(DuckAssertionService.class);
 
-	private final String storeFile;
+	private final DuckStoreLocator storeLocator;
 	private final String corpusRoot;
 
 	/**
 	 * The store is read on FIRST USE, not here.
 	 *
 	 * <p>Deliberate, and it mirrors {@link DuckDbValidationService}: Spring
-	 * builds singletons eagerly, so a constructor that insisted on a configured
-	 * store would make {@code rvf.duck.store} a condition of the application
-	 * STARTING rather than of a validation running. A deployment would then fail
-	 * to boot with a message about assertions, when what it wants to say is
-	 * "this run cannot proceed". The context test asserts the mode boots without
-	 * one for exactly that reason.
+	 * builds singletons eagerly, so a constructor that read the store would make
+	 * an unreadable one - or one that disagrees with the corpus - a condition of
+	 * the application STARTING rather than of a validation running. A deployment
+	 * would then fail to boot with a message about assertions, when what it
+	 * wants to say is "this run cannot proceed". The context test asserts the
+	 * mode boots without a corpus for exactly that reason.
 	 */
 	@Autowired
-	public DuckAssertionService(@Value("${rvf.duck.store:}") String storeFile,
+	public DuckAssertionService(DuckStoreLocator storeLocator,
 			@Value("${rvf.assertion.resource.local.path:}") String corpusRoot) {
-		this.storeFile = storeFile;
+		this.storeLocator = storeLocator;
 		this.corpusRoot = corpusRoot;
 	}
 
 	DuckAssertionService(DuckAssertionSource source) {
-		this.storeFile = null;
+		this.storeLocator = null;
 		this.corpusRoot = null;
 		this.loaded = source;
 	}
@@ -107,20 +107,15 @@ public class DuckAssertionService implements AssertionService {
 		}
 		synchronized (this) {
 			if (loaded == null) {
-				if (storeFile == null || storeFile.isBlank()) {
-					throw new IllegalStateException("rvf.duck.store is not set. With "
-							+ ExecutionEngine.PROPERTY + "=" + ExecutionEngine.DUCKDB
-							+ " the assertion corpus comes from the published store, and there is "
-							+ "no assertion database to fall back to.");
-				}
 				try {
-					loaded = DuckAssertionSource.from(Path.of(storeFile), Path.of(corpusRoot));
+					loaded = DuckAssertionSource.from(storeLocator.load(), Path.of(corpusRoot));
 				} catch (IOException e) {
-					throw new UncheckedIOException(
-							"Failed to read the DuckDB assertion store " + storeFile, e);
+					throw new UncheckedIOException("Failed to read the DuckDB assertion store "
+							+ storeLocator.description(), e);
 				}
 				LOGGER.info("DuckDB assertion corpus: {} assertions in {} groups from {}",
-						loaded.findAll().size(), loaded.populatedGroupNames().size(), storeFile);
+						loaded.findAll().size(), loaded.populatedGroupNames().size(),
+						storeLocator.description());
 			}
 			return loaded;
 		}

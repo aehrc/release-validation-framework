@@ -92,7 +92,14 @@ public final class DuckAssertionSource {
 
 	/** Convenience for the on-disk layout: a store file and a corpus root. */
 	public static DuckAssertionSource from(Path storeFile, Path corpusRoot) throws IOException {
-		DuckStore store = DuckStore.read(storeFile);
+		return from(DuckStore.read(storeFile), corpusRoot);
+	}
+
+	/**
+	 * For a store already read - by {@link DuckStoreLocator}, which may have
+	 * taken it off the classpath rather than a path.
+	 */
+	public static DuckAssertionSource from(DuckStore store, Path corpusRoot) throws IOException {
 		try (InputStream groups = Files.newInputStream(corpusRoot.resolve("groups.xml"));
 				InputStream policies = Files.newInputStream(corpusRoot.resolve("policies.xml"))) {
 			return from(store, groups, policies);
