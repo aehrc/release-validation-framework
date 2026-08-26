@@ -103,6 +103,25 @@ public class ScopeTimingHarness {
 		long ms = System.currentTimeMillis() - t0;
 		System.out.printf("  %,d ms (%.1f min)   %,d violations%n", ms, ms / 60000.0, found.size());
 
+		// -Dscope.out=<file> dumps every finding. A rule breakdown says WHICH
+		// rule fires; only the findings say whether it is right to.
+		String out = System.getProperty("scope.out", "");
+		if (!out.isBlank()) {
+			StringBuilder sb = new StringBuilder("severity\tconceptId\tcomponentId\tmessage\n");
+			for (InvalidContent v : found) {
+				sb.append(v.getSeverity()).append('\t')
+				  .append(v.getConceptId()).append('\t')
+				  .append(v.getComponentId()).append('\t')
+				  .append(String.valueOf(v.getMessage()).replace('\t', ' ')).append('\n');
+			}
+			try {
+				java.nio.file.Files.writeString(java.nio.file.Path.of(out + "." + label.split(" ")[0] + ".tsv"), sb);
+				System.out.println("  wrote " + out + "." + label.split(" ")[0] + ".tsv");
+			} catch (java.io.IOException e) {
+				System.out.println("  could not write findings: " + e.getMessage());
+			}
+		}
+
 		TreeMap<String, Integer> byRule = new TreeMap<>();
 		int errors = 0;
 		for (InvalidContent v : found) {
