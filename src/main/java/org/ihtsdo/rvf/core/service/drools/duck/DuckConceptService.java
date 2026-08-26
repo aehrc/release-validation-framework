@@ -50,18 +50,35 @@ public class DuckConceptService implements ConceptService {
 	}
 
 	/**
-	 * Memo for {@link #isActive}. Rules ask it of every destination of every
-	 * relationship, so the same handful of ids are asked thousands of times -
-	 * sampling a scoped run put this among the top costs.
+	 * Every active concept id, read once.
+	 *
+	 * <p>The memo below is per-id, so on a scoped run it warms in a few hundred
+	 * lookups. On the full snapshot it never warms - the rules ask about the
+	 * destination of every relationship in the edition, which is most of the
+	 * edition - and each miss was a point lookup. Sampling put it at 11% of all
+	 * time. One scan of the id column answers all of them, and the set is a few
+	 * tens of MB against the 7 GB the unbatched prefetch used to hold.
 	 */
-	private final Map<String, Boolean> activeById = new ConcurrentHashMap<>();
+	private volatile Set<String> activeIds;
+
+	private Set<String> activeIds() {
+		Set<String> cached = activeIds;
+		if (cached != null) {
+			return cached;
+		}
+		synchronized (this) {
+			if (activeIds == null) {
+				activeIds = dataset.queryStrings("SELECT id FROM concept WHERE active = '1'");
+			}
+			return activeIds;
+		}
+	}
 
 	@Override
 	public boolean isActive(String conceptId) {
 		// Reference: concept != null && concept.isActive(). A concept absent
 		// from the release is not active, rather than an error.
-		return activeById.computeIfAbsent(conceptId, id -> dataset.queryExists(
-				"SELECT 1 FROM concept WHERE id = ? AND active = '1' LIMIT 1", id));
+		return activeIds().contains(conceptId);
 	}
 
 	@Override
@@ -166,27 +183,53 @@ public class DuckConceptService implements ConceptService {
 	 */
 	private final Map<String, Set<String>> statedAncestors = new ConcurrentHashMap<>();
 
+	/**
+	 * Always a COPY of the memo entry, never the entry itself.
+	 *
+	 * <p>{@link #findTopLevelHierarchiesOfConcept} calls {@code retainAll} on
+	 * what this returns - the incumbent hands back a fresh mutable set, so that
+	 * is legitimate. Handing back the cached set instead meant the first call to
+	 * findTopLevelHierarchiesOfConcept permanently truncated the memo to just
+	 * the top level hierarchies, and every later ancestor query for that concept
+	 * silently returned the wrong answer.
+	 *
+	 * <p>The parity harness did not catch it: it exercises one method at a time
+	 * over all concepts, so every ancestor comparison ran before any of them had
+	 * been corrupted. Ordering, not coverage, is what hid it.
+	 */
 	@Override
 	public Set<String> findStatedAncestorsOfConcept(Concept concept) {
-		return statedAncestors.computeIfAbsent(concept.getId(),
-				id -> loadStatedAncestorsOfConcept(concept));
+		if (concept == null) {
+			return new HashSet<>();
+		}
+		return new HashSet<>(ancestorsOf(concept.getId()));
 	}
 
-	private Set<String> loadStatedAncestorsOfConcept(Concept concept) {
-		if (concept == null || Constants.ROOT_CONCEPT.equals(concept.getId())) {
-			return Collections.emptySet();
-		}
-		// Returns a mutable set: findTopLevelHierarchiesOfConcept calls
-		// retainAll on the result, exactly as the incumbent does.
-		return new HashSet<>(dataset.queryStrings(
-				"SELECT ancestor_id FROM stated_ancestor WHERE concept_id = ?", concept.getId()));
+	/**
+	 * The memoised lookup, by id.
+	 *
+	 * <p>Keyed on the id rather than the Concept so {@link
+	 * #findStatedAncestorsOfConcepts} can share it. That matters: the plural
+	 * used to build an IN list of every requested id, which produces a DIFFERENT
+	 * SQL string on every call and so can never be cached or re-planned - it was
+	 * 28% of all time on the full snapshot. One constant-shape query per
+	 * distinct concept, memoised, replaces it.
+	 */
+	private Set<String> ancestorsOf(String conceptId) {
+		return statedAncestors.computeIfAbsent(conceptId, id -> {
+			if (Constants.ROOT_CONCEPT.equals(id)) {
+				return Set.of();
+			}
+			return Set.copyOf(dataset.queryStrings(
+					"SELECT ancestor_id FROM stated_ancestor WHERE concept_id = ?", id));
+		});
 	}
 
 	@Override
 	public Set<String> findTopLevelHierarchiesOfConcept(Concept concept) {
-		Set<String> statedAncestors = findStatedAncestorsOfConcept(concept);
-		statedAncestors.retainAll(getAllTopLevelHierarchies());
-		return statedAncestors;
+		Set<String> ancestors = findStatedAncestorsOfConcept(concept);
+		ancestors.retainAll(getAllTopLevelHierarchies());
+		return ancestors;
 	}
 
 	@Override
@@ -194,21 +237,15 @@ public class DuckConceptService implements ConceptService {
 		if (conceptIds == null || conceptIds.isEmpty()) {
 			return Collections.emptySet();
 		}
-		// The incumbent loops one concept at a time; one IN query is the same
-		// union. ROOT is excluded to match findStatedAncestorsOfConcept, which
-		// returns empty for it.
-		StringBuilder in = new StringBuilder();
-		for (int i = 0; i < conceptIds.size(); i++) {
-			in.append(i == 0 ? "?" : ",?");
+		// The union of the per-concept answers, which is what the IN query
+		// computed - but taken through the memo, so a concept asked about twice
+		// is queried once and the SQL string is the same every time. ROOT
+		// contributes nothing, matching findStatedAncestorsOfConcept.
+		Set<String> out = new HashSet<>();
+		for (String conceptId : conceptIds) {
+			out.addAll(ancestorsOf(conceptId));
 		}
-		String sql = "SELECT DISTINCT ancestor_id FROM stated_ancestor "
-				+ "WHERE concept_id IN (" + in + ") AND concept_id <> ?";
-		Object[] params = new Object[conceptIds.size() + 1];
-		for (int i = 0; i < conceptIds.size(); i++) {
-			params[i] = conceptIds.get(i);
-		}
-		params[conceptIds.size()] = Constants.ROOT_CONCEPT;
-		return dataset.queryStrings(sql, params);
+		return out;
 	}
 
 	@Override
@@ -279,8 +316,15 @@ public class DuckConceptService implements ConceptService {
 
 	public Collection<Concept> allConcepts() {
 		List<Concept> out = new ArrayList<>();
+		// ORDER BY id so batching is reproducible. Without it DuckDB is free to
+		// return a parallel scan in any order, which puts different concepts in
+		// batch 1 on different runs - and then a per-batch finding count cannot
+		// be compared against a previous run at all. The sort costs once; a
+		// batch count that silently means something different every run costs
+		// every future comparison.
 		try (PreparedStatement ps = dataset.getConnection().prepareStatement(
-				"SELECT id, effectiveTime, active, moduleId, definitionStatusId FROM concept");
+				"SELECT id, effectiveTime, active, moduleId, definitionStatusId FROM concept "
+				+ "ORDER BY id");
 			 ResultSet rs = ps.executeQuery()) {
 			while (rs.next()) {
 				out.add(conceptFrom(rs));
@@ -380,11 +424,11 @@ public class DuckConceptService implements ConceptService {
 	 * slower than the in-heap backend doing the same work in the same heap. The
 	 * fix is not a bigger heap; it is to hold one batch at a time.
 	 *
-	 * <p>{@link #activeById} deliberately SURVIVES. It answers a question about
-	 * the release rather than about the scope, it is asked of every destination
-	 * of every relationship, and one boolean per concept is bounded by the
-	 * edition at a few tens of MB. The other four are per-concept object graphs
-	 * and are what actually grow without limit.
+	 * <p>{@link #activeIds} deliberately SURVIVES, as does the FSN memo in the
+	 * description service. Both answer questions about the RELEASE rather than
+	 * about the scope, both are bounded by the edition rather than by the number
+	 * of batches, and both are read constantly. The four cleared below are
+	 * per-concept object graphs, and they are what actually grow without limit.
 	 */
 	public void releaseScope() {
 		prefetched = null;

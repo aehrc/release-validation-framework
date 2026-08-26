@@ -16,6 +16,7 @@ import java.nio.file.Path;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -94,6 +95,44 @@ class DuckBatchedRunTest {
 					"batching changed the findings. A rule is joining two working-memory "
 							+ "facts across concepts, so it only fires when both land in the "
 							+ "same batch - see the class javadoc.");
+		}
+	}
+
+	/**
+	 * The regression test for a memo that its own caller mutated.
+	 *
+	 * <p>{@code findTopLevelHierarchiesOfConcept} calls {@code retainAll} on what
+	 * {@code findStatedAncestorsOfConcept} returns, which is legitimate - the
+	 * incumbent hands back a fresh mutable set. Returning the cache entry instead
+	 * meant the first call truncated the memo to the top level hierarchies, and
+	 * every later ancestor query for that concept answered from the wreckage.
+	 *
+	 * <p>Order is the whole test. Ask, narrow, ask again - the second ask must
+	 * match the first. The parity harness compared both methods across all
+	 * 722,404 concepts and saw nothing, because it runs one method at a time and
+	 * so did every ancestor comparison before any entry was corrupted.
+	 */
+	@Test
+	void narrowingTheAncestorsDoesNotCorruptTheCache() throws Exception {
+		writeRelease();
+		try (DuckDroolsDataset dataset = new DuckDroolsDataset(
+				Set.of(release.toAbsolutePath().toString()), "20260831")) {
+			DuckConceptService concepts = new DuckConceptService(dataset);
+			Concept c = concepts.findById("100000001");
+
+			// A COPY, not the returned set. When the defect is present the
+			// returned set IS the cache entry, so retainAll below mutates it
+			// too - and comparing it against the later read compares an object
+			// with itself, which passes no matter how broken the cache is.
+			Set<String> before = new HashSet<>(concepts.findStatedAncestorsOfConcept(c));
+			assertFalse(before.isEmpty(), "fixture concept has no stated ancestors, so this "
+					+ "test cannot detect the truncation it exists for");
+
+			concepts.findTopLevelHierarchiesOfConcept(c);
+
+			assertEquals(before, concepts.findStatedAncestorsOfConcept(c),
+					"the ancestor set changed after findTopLevelHierarchiesOfConcept ran - "
+							+ "it is handing out the cache entry rather than a copy");
 		}
 	}
 

@@ -11,9 +11,12 @@ import org.ihtsdo.drools.service.TestResourceProvider;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Set;
@@ -54,12 +57,38 @@ public class DuckDescriptionService implements DescriptionService {
 		this.testResourceProvider = testResourceProvider;
 	}
 
+	/**
+	 * Memo for {@link #getFSNs}.
+	 *
+	 * <p>Sampling the full snapshot put getFSNs at 25% of all time. The reason
+	 * it is worth memoising rather than optimising is the call site: the FSN
+	 * uniqueness rule builds its message with
+	 * {@code getFSNs(Collections.singleton(d2.moduleId), US_EN)}, so the
+	 * argument is a MODULE id and there are a handful of modules in a release.
+	 * The same few answers were being recomputed for every duplicate term in
+	 * the edition.
+	 */
+	private final Map<String, Set<String>> fsnsByKey = new ConcurrentHashMap<>();
+
 	@Override
 	public Set<String> getFSNs(Set<String> conceptIds, String... languageRefsetIds) {
-		Set<String> fsns = new HashSet<>();
 		if (conceptIds == null || conceptIds.isEmpty()) {
-			return fsns;
+			return new HashSet<>();
 		}
+		// Sorted, so two calls with the same ids in a different iteration order
+		// share an entry rather than each paying for a query.
+		List<String> ids = new ArrayList<>(conceptIds);
+		Collections.sort(ids);
+		String key = String.join("\u0000", ids) + "\u0001"
+				+ String.join("\u0000", languageRefsetIds == null ? new String[0] : languageRefsetIds);
+		// A defensive copy on the way out: callers are free to mutate what they
+		// are given, and the incumbent hands back a fresh set every time.
+		return new HashSet<>(fsnsByKey.computeIfAbsent(key,
+				k -> loadFSNs(conceptIds, languageRefsetIds)));
+	}
+
+	private Set<String> loadFSNs(Set<String> conceptIds, String... languageRefsetIds) {
+		Set<String> fsns = new HashSet<>();
 		StringBuilder in = new StringBuilder();
 		for (int i = 0; i < conceptIds.size(); i++) {
 			in.append(i == 0 ? "?" : ",?");
@@ -128,6 +157,8 @@ public class DuckDescriptionService implements DescriptionService {
 	 */
 	public void releaseScope() {
 		byExactTerm.clear();
+		// fsnsByKey is deliberately NOT cleared: it is keyed by module rather
+		// than by concept, so it holds a handful of entries for the whole run.
 	}
 
 	private Set<Description> findByExactTerm(String exactTerm, boolean active) {
@@ -138,28 +169,55 @@ public class DuckDescriptionService implements DescriptionService {
 				k -> loadByExactTerm(exactTerm, active));
 	}
 
+	/**
+	 * One query, not one plus one per row.
+	 *
+	 * <p>This used to load the matching descriptions and then call
+	 * {@code acceptabilityOf} for each - a textbook N+1, and sampling the full
+	 * snapshot put it at 19% of all time in the JVM. A term that matches 40
+	 * descriptions cost 41 round trips. The LEFT JOIN makes it one, and the join
+	 * has to be LEFT: a description with no language refset row is still a
+	 * description, and an inner join would silently drop it from the uniqueness
+	 * rules that ask this question.
+	 */
 	private Set<Description> loadByExactTerm(String exactTerm, boolean active) {
-		Set<Description> out = new HashSet<>();
+		Map<String, DuckDomain.DuckDescription> out = new LinkedHashMap<>();
+		Map<String, Map<String, String>> acceptability = new HashMap<>();
 		try (PreparedStatement ps = dataset.getConnection().prepareStatement(
-				"SELECT id, effectiveTime, active, moduleId, conceptId, languageCode, typeId, term, "
-				+ "caseSignificanceId, is_text_definition FROM description "
-				+ "WHERE term = ? AND active = ?")) {
+				"SELECT d.id, d.effectiveTime, d.active, d.moduleId, d.conceptId, d.languageCode, "
+				+ "d.typeId, d.term, d.caseSignificanceId, d.is_text_definition, "
+				+ "l.refsetId, l.acceptabilityId "
+				+ "FROM description d "
+				+ "LEFT JOIN language_refset l "
+				+ "  ON l.referencedComponentId = d.id AND l.active = '1' "
+				+ "WHERE d.term = ? AND d.active = ?")) {
 			ps.setString(1, exactTerm);
 			ps.setString(2, active ? "1" : "0");
 			try (ResultSet rs = ps.executeQuery()) {
 				while (rs.next()) {
 					String id = rs.getString(1);
+					// The join multiplies rows by acceptability entries, so the
+					// map both de-duplicates the descriptions and accumulates
+					// each one's refset entries as they arrive.
+					Map<String, String> acc = acceptability.computeIfAbsent(id, k -> new HashMap<>());
+					String refsetId = rs.getString(11);
+					if (refsetId != null) {
+						acc.put(refsetId, rs.getString(12));
+					}
+					if (out.containsKey(id)) {
+						continue;
+					}
 					String et = rs.getString(2);
-					out.add(new DuckDomain.DuckDescription(id, et, "1".equals(rs.getString(3)),
+					out.put(id, new DuckDomain.DuckDescription(id, et, "1".equals(rs.getString(3)),
 							rs.getString(4), et != null && !et.isEmpty(), rs.getString(5), rs.getString(6),
 							rs.getString(7), rs.getString(8), rs.getString(9), rs.getBoolean(10),
-							acceptabilityOf(id)));
+							acc));
 				}
 			}
 		} catch (SQLException e) {
 			throw new IllegalStateException("findByExactTerm failed", e);
 		}
-		return out;
+		return new HashSet<>(out.values());
 	}
 
 	private Map<String, String> acceptabilityOf(String descriptionId) {
