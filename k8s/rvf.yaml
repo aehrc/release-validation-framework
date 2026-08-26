@@ -1,0 +1,119 @@
+apiVersion: v1
+kind: Namespace
+metadata: { name: rvf }
+---
+# The broker. RVF is queue-driven: the API enqueues, workers consume.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: activemq, namespace: rvf }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: activemq } }
+  template:
+    metadata: { labels: { app: activemq } }
+    spec:
+      containers:
+        - name: activemq
+          image: apache/activemq-classic:6.1.4
+          ports: [{ containerPort: 61616 }, { containerPort: 8161 }]
+          resources: { requests: { memory: 512Mi, cpu: 200m }, limits: { memory: 1Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: activemq, namespace: rvf }
+spec:
+  selector: { app: activemq }
+  ports:
+    - { name: openwire, port: 61616, targetPort: 61616 }
+    - { name: console, port: 8161, targetPort: 8161 }
+---
+# The API. rvf.execution.isWorker=false, so no JMS listener: this pod accepts
+# validations and serves reports, and never executes one.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: rvf-api, namespace: rvf }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: rvf-api } }
+  template:
+    metadata: { labels: { app: rvf-api } }
+    spec:
+      containers:
+        - name: rvf
+          image: rvf-duck:local
+          imagePullPolicy: Never
+          ports: [{ containerPort: 8080 }]
+          env:
+            - { name: RVF_EXECUTION_ENGINE, value: "duckdb" }
+            - { name: RVF_EXECUTION_ISWORKER, value: "false" }
+            - { name: RVF_DUCK_STORE, value: "/store/store.json" }
+            - { name: RVF_ASSERTION_RESOURCE_LOCAL_PATH, value: "/app/snomed-release-validation-assertions" }
+            - { name: RVF_DROOLS_RULE_DIRECTORY, value: "/app/snomed-drools-rules" }
+            - { name: SPRING_ACTIVEMQ_BROKER_URL, value: "tcp://activemq:61616" }
+            # DroolsRulesValidationService builds an S3 client in @PostConstruct
+            # and the AWS SDK will not construct one without a region - so this
+            # is required to start, regardless of engine or whether Drools runs.
+            - { name: AWS_REGION, value: "us-east-1" }
+            # Shared with the worker. The result of a run this pod never
+            # executed has to be readable here, or the API 404s for work its
+            # own workers completed.
+            - { name: RVF_VALIDATION_JOB_STORAGE_LOCAL_PATH, value: "jobs/" }   # NB ResourceConfiguration.normalisePath strips a leading "/" - this is relative to CWD (/app)
+            - { name: JAVA_TOOL_OPTIONS, value: "-Xmx1500m" }
+          volumeMounts:
+            - { name: store, mountPath: /store }
+            - { name: jobs, mountPath: /app/jobs }
+          resources: { requests: { memory: 1Gi, cpu: 250m }, limits: { memory: 2Gi } }
+      volumes:
+        - name: store
+          configMap: { name: duck-store }
+        - name: jobs
+          hostPath: { path: /var/lib/rvf-jobs, type: DirectoryOrCreate }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: rvf-api, namespace: rvf }
+spec:
+  selector: { app: rvf-api }
+  ports: [{ port: 8080, targetPort: 8080 }]
+---
+# The worker. Same image, isWorker=true, more memory - which is the whole point
+# of splitting the roles.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: rvf-worker, namespace: rvf }
+spec:
+  replicas: 3
+  selector: { matchLabels: { app: rvf-worker } }
+  template:
+    metadata: { labels: { app: rvf-worker } }
+    spec:
+      containers:
+        - name: rvf
+          image: rvf-duck:local
+          imagePullPolicy: Never
+          env:
+            - { name: RVF_EXECUTION_ENGINE, value: "duckdb" }
+            - { name: RVF_EXECUTION_ISWORKER, value: "true" }
+            - { name: RVF_DUCK_STORE, value: "/store/store.json" }
+            - { name: RVF_ASSERTION_RESOURCE_LOCAL_PATH, value: "/app/snomed-release-validation-assertions" }
+            - { name: RVF_DROOLS_RULE_DIRECTORY, value: "/app/snomed-drools-rules" }
+            - { name: SPRING_ACTIVEMQ_BROKER_URL, value: "tcp://activemq:61616" }
+            # DroolsRulesValidationService builds an S3 client in @PostConstruct
+            # and the AWS SDK will not construct one without a region - so this
+            # is required to start, regardless of engine or whether Drools runs.
+            - { name: AWS_REGION, value: "us-east-1" }
+            - { name: RVF_VALIDATION_JOB_STORAGE_LOCAL_PATH, value: "jobs/" }   # NB ResourceConfiguration.normalisePath strips a leading "/" - this is relative to CWD (/app)
+            - { name: RVF_DUCK_WORK_DIRECTORY, value: "/work" }
+            - { name: JAVA_TOOL_OPTIONS, value: "-Xmx4g" }
+          volumeMounts:
+            - { name: store, mountPath: /store }
+            - { name: jobs, mountPath: /app/jobs }
+            - { name: work, mountPath: /work }
+          resources: { requests: { memory: 1Gi, cpu: 1 }, limits: { memory: 5Gi, cpu: 2 } }
+      volumes:
+        - name: store
+          configMap: { name: duck-store }
+        - name: jobs
+          hostPath: { path: /var/lib/rvf-jobs, type: DirectoryOrCreate }
+        - name: work
+          emptyDir: {}
