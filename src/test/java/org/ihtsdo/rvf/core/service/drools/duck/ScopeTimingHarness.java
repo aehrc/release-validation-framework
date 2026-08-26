@@ -91,15 +91,14 @@ public class ScopeTimingHarness {
 							Collection<Concept> scope, DuckConceptService c,
 							DuckDescriptionService d, DuckRelationshipService r, String label) {
 		System.out.printf("%n=== %s: %,d concepts ===%n", label, scope.size());
-		// Load the scope's object graph up front, so rule execution does no
-		// per-accessor queries. Reported inside the run's time deliberately -
-		// it is part of what the scope costs, not a setup freebie.
-		long tp = System.currentTimeMillis();
-		c.prefetch(scope);
-		System.out.printf("  prefetch %,d ms%n", System.currentTimeMillis() - tp);
+		// Batched deliberately, and the prefetch is inside the measured window:
+		// loading the scope's object graph is part of what the scope costs, not
+		// a setup freebie. -Dscope.batch=<n> overrides the batch size; 0 means
+		// one batch, which is what pinned an 8 GB heap on the full snapshot.
+		int batch = Integer.getInteger("scope.batch", DuckBatchedRun.DEFAULT_BATCH_SIZE);
 		long t0 = System.currentTimeMillis();
-		List<InvalidContent> found = validator.getRuleExecutor()
-				.execute(ruleSets, null, scope, c, d, r, true, true);
+		List<InvalidContent> found = DuckBatchedRun.execute(validator.getRuleExecutor(),
+				ruleSets, null, scope, c, d, r, true, true, batch);
 		long ms = System.currentTimeMillis() - t0;
 		System.out.printf("  %,d ms (%.1f min)   %,d violations%n", ms, ms / 60000.0, found.size());
 

@@ -246,6 +246,21 @@
     <build>
         <plugins>
             <!--
+                The same add-opens flag the jar manifest and the jib image
+                already set. Tests need it too: snomed-owl-toolkit builds an OWLOntologyManager
+                through Guice, whose cglib fails with ExceptionInInitializerError
+                on a modern JDK without it. Only tests that deserialise axioms hit
+                this, so it went unnoticed until DuckBatchedRunTest built a real
+                dataset.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <argLine>--add-opens=java.base/java.lang=ALL-UNNAMED</argLine>
+                </configuration>
+            </plugin>
+            <!--
                 Add the Add-Opens to the manifest file to allow snomed-owl-toolkit to work with java 17
                 Remove this when the owl-api is updated to use version 5
             -->

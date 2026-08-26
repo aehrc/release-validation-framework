@@ -368,6 +368,31 @@ public class DuckConceptService implements ConceptService {
 				p.annotations().values().stream().mapToInt(List::size).sum());
 	}
 
+	/**
+	 * Drops everything held for the current scope, so the next batch starts
+	 * from a flat heap.
+	 *
+	 * <p>Needed because the per-scope memos are what make a batch fast and what
+	 * make a whole edition impossible. Measured: prefetching all 722,404
+	 * concepts in one call loads 2,265,530 descriptions and 7,581,616
+	 * relationships, pins an 8 GB heap at 7.35 GB and puts the JVM into
+	 * near-continuous GC - a 36 second concurrent mark cycle - which is 70x
+	 * slower than the in-heap backend doing the same work in the same heap. The
+	 * fix is not a bigger heap; it is to hold one batch at a time.
+	 *
+	 * <p>{@link #activeById} deliberately SURVIVES. It answers a question about
+	 * the release rather than about the scope, it is asked of every destination
+	 * of every relationship, and one boolean per concept is bounded by the
+	 * edition at a few tens of MB. The other four are per-concept object graphs
+	 * and are what actually grow without limit.
+	 */
+	public void releaseScope() {
+		prefetched = null;
+		byId.clear();
+		descriptions.clear();
+		statedAncestors.clear();
+	}
+
 	/** Acceptability for every description of every in-scope concept, in one query. */
 	private Map<String, Map<String, String>> bulkAcceptability() {
 		Map<String, Map<String, String>> out = new HashMap<>();

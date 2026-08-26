@@ -117,6 +117,19 @@ public class DuckDescriptionService implements DescriptionService {
 	 */
 	private final Map<String, Set<Description>> byExactTerm = new ConcurrentHashMap<>();
 
+	/**
+	 * Drops the term memo between batches.
+	 *
+	 * <p>Keyed by term rather than by concept, so it is bounded by the number of
+	 * DISTINCT terms the rules have asked about - which over a whole edition is
+	 * millions of entries, each holding a Set of Description objects. Within one
+	 * batch the reuse is what makes the method affordable; across all batches it
+	 * is the largest single retainer in the run.
+	 */
+	public void releaseScope() {
+		byExactTerm.clear();
+	}
+
 	private Set<Description> findByExactTerm(String exactTerm, boolean active) {
 		if (exactTerm == null || exactTerm.trim().isEmpty()) {
 			return Collections.emptySet();

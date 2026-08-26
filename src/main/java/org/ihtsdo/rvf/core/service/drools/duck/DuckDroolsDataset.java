@@ -240,6 +240,58 @@ public class DuckDroolsDataset implements Closeable {
 	}
 
 	/**
+	 * The RF2 columns each optional relation must present when the release does
+	 * not ship it.
+	 *
+	 * <p>An empty placeholder is not enough on its own: it has to have the right
+	 * SHAPE. The bulk prefetch selects named columns, so a placeholder carrying
+	 * only {@code id} turns a legitimately absent refset into
+	 * {@code Binder Error: Table "a" does not have a column named
+	 * "referencedComponentId"} - the run dies at prefetch rather than
+	 * validating a release that is perfectly valid without that file.
+	 *
+	 * <p>Component annotations are the live case: the refset is recent, AU ships
+	 * it, and plenty of editions do not.
+	 */
+	private static final Map<String, List<String>> EMPTY_COLUMNS = Map.of(
+			"text_definition_raw", List.of("id", "effectiveTime", "active", "moduleId",
+					"conceptId", "languageCode", "typeId", "term", "caseSignificanceId"),
+			"inferred_relationship", List.of("id", "effectiveTime", "active", "moduleId",
+					"sourceId", "destinationId", "relationshipGroup", "typeId",
+					"characteristicTypeId", "modifierId"),
+			"language_refset", List.of("id", "effectiveTime", "active", "moduleId", "refsetId",
+					"referencedComponentId", "acceptabilityId"),
+			"association_refset", List.of("id", "effectiveTime", "active", "moduleId", "refsetId",
+					"referencedComponentId", "targetComponentId"),
+			"owl_refset", List.of("id", "effectiveTime", "active", "moduleId", "refsetId",
+					"referencedComponentId", "owlExpression"),
+			"module_dependency", List.of("id", "effectiveTime", "active", "moduleId", "refsetId",
+					"referencedComponentId", "sourceEffectiveTime", "targetEffectiveTime"),
+			"annotation_refset", List.of("id", "effectiveTime", "active", "moduleId", "refsetId",
+					"referencedComponentId", "languageDialectCode", "typeId", "value"));
+
+	/**
+	 * A zero-row relation with the columns {@code name} would have had.
+	 *
+	 * <p>Every column is VARCHAR because {@code READ_OPTS} sets
+	 * {@code all_varchar}: a placeholder typed differently from the real file
+	 * would behave differently in comparisons, which is a worse failure than the
+	 * missing column because it is silent.
+	 */
+	private static String emptyRelation(String name) {
+		List<String> columns = EMPTY_COLUMNS.get(name);
+		if (columns == null) {
+			return "SELECT NULL AS id WHERE false";
+		}
+		StringBuilder sb = new StringBuilder("SELECT ");
+		for (int i = 0; i < columns.size(); i++) {
+			sb.append(i == 0 ? "" : ", ")
+			  .append("CAST(NULL AS VARCHAR) AS ").append(columns.get(i));
+		}
+		return sb.append(" WHERE false").toString();
+	}
+
+	/**
 	 * A view over a glob, unioned across every extracted directory. Missing
 	 * files are tolerated: a release legitimately may not ship a given refset,
 	 * and DuckDB errors on a glob that matches nothing, so absent globs are
@@ -281,7 +333,7 @@ public class DuckDroolsDataset implements Closeable {
 						+ "release. Check the directory really holds an RF2 Snapshot.");
 			}
 			LOGGER.warn("No files matched {} in {} - '{}' will be empty", glob, directories, name);
-			return "CREATE OR REPLACE TABLE " + name + " AS SELECT NULL AS id WHERE false";
+			return "CREATE OR REPLACE TABLE " + name + " AS " + emptyRelation(name);
 		}
 		// A TABLE, not a VIEW. The Drools service interface is point lookups -
 		// RuleExecutor.checkComponentsIntegrity calls findById per component -
