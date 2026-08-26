@@ -39,11 +39,13 @@ Every request needs `X-AUTH-username`, `X-AUTH-roles`, `X-AUTH-token`.
 
 ## Store provisioning
 
-Currently a ConfigMap (`duck-store`, ~633KB) mounted at `/store`, with
-`RVF_DUCK_STORE=/store/store.json`. Note `kubectl apply` fails on this — the
-last-applied-configuration annotation exceeds 262144 bytes — so it is created
-with `kubectl create configmap`. **For a real image, bake the store in at build
-time and drop the ConfigMap.**
+None needed. The precompiled assertion store is baked into the artefact at
+`src/main/resources/duck/store.json`, and both pods verify it against the
+corpus they ship — look for `Assertion store bundled /duck/store.json verified
+against 360 corpus files` at startup of the first run. See `duck/README.md`.
+
+`RVF_DUCK_STORE` still overrides it if you want to mount a different corpus's
+store without rebuilding.
 
 ## Loading the image without a registry
 
@@ -63,8 +65,8 @@ The route that worked:
 
 ## Known gaps
 
-- Store is a ConfigMap, not baked into the image.
-- `hostPath` shared storage; needs S3 before replicas > 1 across nodes.
+- `hostPath` shared storage; needs S3 (`rvf.validation.job.storage.useCloud=true`)
+  before replicas can span nodes.
 - Drools rules path: the image ships them at `/app/snomed-drools-rules` but the
   default property is `../snomed-drools-rules`; the manifest overrides
   `RVF_DROOLS_RULE_DIRECTORY`. Drools itself is still disabled per request.
@@ -105,18 +107,11 @@ the lot.
     mvn -o package -DskipTests jib:dockerBuild \
         -Djib.from.platforms=linux/arm64 -Djib.to.image=rvf-duck:local
 
-    # 2. publish the store from the assertion corpus  (aehrc/rvf, duck/)
-    $VENV/bin/python publish_store.py \
-        --scripts   <corpus>/scripts \
-        --prerequisites ../testscripts/pre_requisites \
-        --ddl create-tables-mysql.sql --manifest-root <corpus> \
-        --no-derive-uuids --out store.json
-
-    # 3. load image into the node's containerd (see above), then
-    kubectl create configmap duck-store -n rvf --from-file=store.json
+    # 2. load the image into the node's containerd (see above), then
     kubectl apply -f k8s/rvf.yaml
+    # the store ships inside the image - nothing to provision
 
-    # 4. submit
+    # 3. submit
     kubectl -n rvf port-forward svc/rvf-api 8080:8080 &
     curl -X POST http://127.0.0.1:8080/run-post \
       -H "X-AUTH-username: me" -H "X-AUTH-roles: ROLE_USER" -H "X-AUTH-token: t" \
