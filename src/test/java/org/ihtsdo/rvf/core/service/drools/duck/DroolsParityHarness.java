@@ -9,6 +9,8 @@ import org.ihtsdo.drools.validator.rf2.SnomedDroolsComponentRepository;
 import org.ihtsdo.drools.validator.rf2.domain.DroolsConcept;
 import org.ihtsdo.drools.validator.rf2.service.DroolsConceptService;
 import org.ihtsdo.drools.validator.rf2.service.DroolsRelationshipService;
+import org.ihtsdo.otf.resourcemanager.ManualResourceConfiguration;
+import org.ihtsdo.otf.resourcemanager.ResourceConfiguration;
 import org.ihtsdo.otf.resourcemanager.ResourceManager;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 
@@ -48,7 +50,7 @@ import java.util.TreeSet;
  *   mvn -q test-compile
  *   mvn -q exec:java -Dexec.classpathScope=test \
  *       -Dexec.mainClass=org.ihtsdo.rvf.core.service.drools.duck.DroolsParityHarness \
- *       -Dexec.args="&lt;extracted-rf2-dir&gt; &lt;rules-dir&gt; &lt;effectiveTime&gt; [ruleSet]"
+ *       -Dexec.args="&lt;extracted-rf2-dir&gt; &lt;rules-dir&gt; &lt;effectiveTime&gt; &lt;test-resources&gt; [ruleSet]"
  * </pre>
  *
  * Exits non-zero on any difference, so it can gate.
@@ -59,15 +61,20 @@ public class DroolsParityHarness {
 	private static final String ROOT = "138875005";
 
 	public static void main(String[] args) throws Exception {
-		if (args.length < 3) {
+		if (args.length < 4) {
+			// test-resources is REQUIRED. An empty ResourceManager loads zero
+			// semantic tags and zero case-significant words, which disarms every
+			// rule that consults them rather than failing. Both backends would
+			// then agree - on nothing - and the parity claim would be worthless.
 			System.err.println("usage: DroolsParityHarness <extracted-rf2-dir> <rules-dir> "
-					+ "<effectiveTime yyyyMMdd> [ruleSetName]");
+					+ "<effectiveTime yyyyMMdd> <test-resources-dir> [ruleSetName]");
 			System.exit(64);
 		}
 		Set<String> dirs = Set.of(args[0]);
 		String rulesDir = args[1];
 		String effectiveTime = args[2];
-		Set<String> ruleSets = Set.of(args.length > 3 ? args[3] : "common-authoring");
+		ResourceManager testResourceManager = localResourceManager(args[3]);
+		Set<String> ruleSets = Set.of(args.length > 4 ? args[4] : "common-authoring");
 
 		System.out.println("release   : " + dirs);
 		System.out.println("rules     : " + rulesDir);
@@ -75,9 +82,10 @@ public class DroolsParityHarness {
 		System.out.println("rule sets : " + ruleSets);
 		System.out.println();
 
-		DroolsRF2Validator validator = new DroolsRF2Validator(rulesDir, blankResourceManager());
+		System.out.println("resources : " + args[3]);
+		DroolsRF2Validator validator = new DroolsRF2Validator(rulesDir, testResourceManager);
 		TestResourceProvider testResources =
-				validator.getRuleExecutor().newTestResourceProvider(blankResourceManager());
+				validator.getRuleExecutor().newTestResourceProvider(testResourceManager);
 
 		int failures = 0;
 		failures += levelTwo(dirs, effectiveTime, testResources);
@@ -313,6 +321,22 @@ public class DroolsParityHarness {
 	 * would only add a variable (and an S3 dependency) without testing anything
 	 * this harness is for.
 	 */
+	/** Relativised, because ResourceManager NPEs on an absolute local path. */
+	private static ResourceManager localResourceManager(String path) {
+		java.nio.file.Path p = java.nio.file.Paths.get(path);
+		String rel = path;
+		if (p.isAbsolute()) {
+			java.nio.file.Path cwd = java.nio.file.Paths.get(System.getProperty("user.dir"));
+			rel = (p.startsWith(cwd) ? cwd.relativize(p) : p).toString();
+		}
+		if (!rel.endsWith("/")) {
+			rel = rel + "/";
+		}
+		return new ResourceManager(new ManualResourceConfiguration(
+				true, false, new ResourceConfiguration.Local(rel), null),
+				new PathMatchingResourcePatternResolver());
+	}
+
 	private static ResourceManager blankResourceManager() {
 		return new ResourceManager(DroolsRF2Validator.BLANK_RESOURCES_CONFIGURATION,
 				new PathMatchingResourcePatternResolver());
