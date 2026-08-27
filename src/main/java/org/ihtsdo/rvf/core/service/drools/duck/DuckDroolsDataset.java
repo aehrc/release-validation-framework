@@ -67,12 +67,45 @@ public class DuckDroolsDataset implements Closeable {
 	/** RF2 columns are read as text. SCTIDs exceed 2^53 and must never go via a float. */
 	private static final String READ_OPTS = "delim='\\t', header=true, all_varchar=true, ignore_errors=false";
 
+	/**
+	 * The base connection. DDL, appenders and the dataset's own queries use this
+	 * one directly, and they all run single-threaded during the build.
+	 */
 	private final Connection connection;
+
+	/**
+	 * A connection per rule-executor thread, over the same in-memory database.
+	 *
+	 * <p>DuckDB serialises statements on a single JDBC connection, so ten Drools
+	 * worker threads sharing one connection execute their accessor queries one
+	 * at a time no matter how many cores are free. That is invisible in a
+	 * profile taken per-thread - every thread genuinely IS inside
+	 * {@code duckdb_jdbc_execute}; they are just queued behind each other.
+	 *
+	 * <p>{@code duplicate()} is DuckDB's supported way to get a second
+	 * connection to the SAME database instance, so every thread sees the tables
+	 * the build created, including {@link #SCOPE_TABLE}.
+	 */
+	private final ThreadLocal<Connection> threadConnection;
+
+	/** Every duplicate handed out, so {@link #close} can close them. */
+	private final List<Connection> duplicates =
+			java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+
 	private final String currentEffectiveTime;
 
 	public DuckDroolsDataset(Set<String> rf2SnapshotDirectories, String currentEffectiveTime) throws SQLException {
 		this.currentEffectiveTime = currentEffectiveTime;
 		this.connection = DriverManager.getConnection("jdbc:duckdb:");
+		this.threadConnection = ThreadLocal.withInitial(() -> {
+			try {
+				Connection c = ((DuckDBConnection) connection).duplicate();
+				duplicates.add(c);
+				return c;
+			} catch (SQLException e) {
+				throw new IllegalStateException("could not duplicate the DuckDB connection", e);
+			}
+		});
 		long start = System.currentTimeMillis();
 		createViews(rf2SnapshotDirectories);
 		deriveStatedRelationships();
@@ -80,8 +113,15 @@ public class DuckDroolsDataset implements Closeable {
 		LOGGER.info("DuckDB Drools dataset ready in {}ms", System.currentTimeMillis() - start);
 	}
 
+	/**
+	 * The calling thread's connection.
+	 *
+	 * <p>Callers are the Drools services, which run on the rule executor's
+	 * worker pool. Handing every thread the same connection made DuckDB the
+	 * serialisation point for the whole run.
+	 */
 	public Connection getConnection() {
-		return connection;
+		return threadConnection.get();
 	}
 
 	public String getCurrentEffectiveTime() {
@@ -576,6 +616,19 @@ public class DuckDroolsDataset implements Closeable {
 
 	@Override
 	public void close() {
+		// Duplicates first: the base connection owns the in-memory database, and
+		// closing it while a worker's duplicate is still open leaks the duplicate
+		// rather than releasing the database.
+		synchronized (duplicates) {
+			for (Connection c : duplicates) {
+				try {
+					c.close();
+				} catch (SQLException e) {
+					LOGGER.warn("Failed to close a duplicated DuckDB connection", e);
+				}
+			}
+			duplicates.clear();
+		}
 		try {
 			connection.close();
 		} catch (SQLException e) {
