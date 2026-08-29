@@ -1,9 +1,21 @@
 package org.ihtsdo.rvf.core.service;
 
+import java.sql.*;
+import java.util.Map;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+
+import javax.naming.ConfigurationException;
 import org.apache.commons.dbcp.BasicDataSource;
 import org.ihtsdo.otf.RF2Constants;
 import org.ihtsdo.rvf.core.data.model.*;
 import org.ihtsdo.rvf.core.service.config.MysqlExecutionConfig;
+import org.ihtsdo.rvf.core.service.util.MySqlQueryTransformer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,14 +25,13 @@ import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 
 import jakarta.annotation.Resource;
-import javax.naming.ConfigurationException;
-import java.sql.*;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.regex.Pattern;
+import org.ihtsdo.rvf.config.ConditionalOnMysqlEngine;
 
 
 @Service
+@ConditionalOnMysqlEngine
 public class AssertionExecutionService {
 
 	private static final String FAILED_TO_FIND_RVF_DB_SCHEMA = "Failed to find rvf db schema for ";
@@ -236,7 +247,6 @@ public List<TestRunItem> executeAssertionsConcurrently(List<Assertion> assertion
 				&& !(sqlStatement.contains("like") || sqlStatement.contains("as"));
 	}
 
-
 	private String[] splitCommand(ExecutionCommand command) {
 		String[] parts = {""};
 		if (command.getStatements().isEmpty()) {
@@ -251,43 +261,10 @@ public List<TestRunItem> executeAssertionsConcurrently(List<Assertion> assertion
 	}
 
 	private List<String> transformSql(List<String> parts, Assertion assertion, MysqlExecutionConfig config) throws ConfigurationException {
-		List<String> result = new ArrayList<>();
-		String defaultCatalog = dataSource.getDefaultCatalog();
-		String prospectiveSchema = config.getProspectiveVersion();
-		final String[] nameParts = config.getProspectiveVersion().split("_");
-		String defaultModuleId = StringUtils.hasLength(config.getDefaultModuleId()) ? config.getDefaultModuleId() : RF2Constants.SCTID_CORE_MODULE;
-		String includedModules = CollectionUtils.isEmpty(config.getIncludedModules()) ? "NULL" : String.join(",", config.getIncludedModules());
-		String version = (nameParts.length >= 3 ? nameParts[2] : NOT_SUPPLIED);
-
-		String previousReleaseSchema = config.getPreviousVersion();
-		String dependencyReleaseSchema = config.getExtensionDependencyVersion() == null ? "NULL" : config.getExtensionDependencyVersion();
-		validateSchemas(config, prospectiveSchema, previousReleaseSchema);
-
-		for ( String part : parts) {
-			logger.debug("Original sql statement: {}", part);
-			final Pattern commentPattern = Pattern.compile("/\\*.*?\\*/", Pattern.DOTALL);
-			part = commentPattern.matcher(part).replaceAll("");
-			// replace all substitutions for exec
-			part = part.replace("<RUNID>", String.valueOf(config.getExecutionId()));
-			part = part.replace("<ASSERTIONUUID>", String.valueOf(assertion.getAssertionId()));
-			part = part.replace("<MODULEID>", defaultModuleId);
-			part = part.replace("<INCLUDED_MODULES>", includedModules);
-			part = part.replace("<VERSION>", version);
-			// watch out for any 's that users might have introduced
-			part = part.replace("qa_result", defaultCatalog+ "." + qaResulTableName);
-			part = part.replace("<PROSPECTIVE>", prospectiveSchema);
-			part = part.replace("<TEMP>", prospectiveSchema);
-			part = part.replace("<INTERNATIONAL_MODULES>", RF2Constants.SCTID_CORE_MODULE);
-			part = part.replace("<PREVIOUS>", previousReleaseSchema);
-			part = part.replace("<DEPENDENCY>", dependencyReleaseSchema);
-			part = part.replace("<DELTA>", DELTA_TABLE_SUFFIX);
-			part = part.replace("<SNAPSHOT>", SNAPSHOT_TABLE_SUFFIX);
-			part = part.replace("<FULL>", FULL_TABLE_SUFFIX);
-			part = part.trim();
-			logger.debug("Transformed sql statement: {}", part);
-			result.add(part);
-		}
-		return result;
+		String qaResult = dataSource.getDefaultCatalog()+ "." + qaResulTableName;
+		MySqlQueryTransformer queryTransformer = new MySqlQueryTransformer();
+		Map configMap = Map.of("qa_result", qaResult, "<ASSERTIONUUID>", String.valueOf(assertion.getAssertionId()));
+		return queryTransformer.transformSql(parts, config, configMap);
 	}
 
 	private static void validateSchemas(MysqlExecutionConfig config, String prospectiveSchema, String previousReleaseSchema) throws ConfigurationException {

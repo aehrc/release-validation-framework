@@ -3,11 +3,13 @@ package org.ihtsdo.rvf.importer;
 import com.facebook.presto.sql.parser.StatementSplitter;
 import org.apache.commons.io.IOUtils;
 import org.ihtsdo.otf.resourcemanager.ResourceManager;
+import org.ihtsdo.otf.rest.exception.BusinessServiceException;
 import org.ihtsdo.rvf.core.data.model.Assertion;
 import org.ihtsdo.rvf.core.data.model.ExecutionCommand;
 import org.ihtsdo.rvf.core.data.model.Test;
 import org.ihtsdo.rvf.core.data.model.TestType;
 import org.ihtsdo.rvf.core.service.AssertionService;
+import org.ihtsdo.rvf.core.service.util.MySqlQueryTransformer;
 import org.jdom2.Document;
 import org.jdom2.Element;
 import org.jdom2.JDOMException;
@@ -26,6 +28,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.*;
 
+import org.ihtsdo.rvf.config.ConditionalOnMysqlEngine;
+
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 /**
@@ -35,9 +39,11 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 	 */
 	@Service
 	@Transactional
+	@ConditionalOnMysqlEngine
 	public class AssertionsDatabaseImporter {
 
 		private static final String CREATE_PROCEDURE = "CREATE PROCEDURE";
+		private static final String CREATE_FUNCTION = "CREATE FUNCTION";
 		private static final Logger logger = LoggerFactory.getLogger(AssertionsDatabaseImporter.class);
 		private static final String RESOURCE_PATH_SEPARATOR = "/";
 
@@ -125,7 +131,21 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 			}
 			final String sqlString = IOUtils.toString(sqlInputStream, UTF_8);
 			// add test to assertion
-			addSqlTestToAssertion(assertion, sqlString);
+			if(isPreRequisitesSql(sqlFileName)){ //handle pre-requisites.sql
+				try {
+					addPreRequisiteSqlToAssertion(assertion, sqlString);
+				} catch (Exception e) {
+					String errorMsg = "Failed to add pre-requisite sql script test to assertion with uuid:" + assertion.getUuid();
+					logger.error(errorMsg, e);
+					throw new IllegalStateException(errorMsg, e);
+				}
+			} else{
+				addSqlTestToAssertion(assertion, sqlString);
+			}
+		}
+
+		private boolean isPreRequisitesSql(String sqlFileName){
+			return sqlFileName.equalsIgnoreCase("pre-requisites.sql");
 		}
 
 		private Assertion createAssertionFromElement(final Element element){
@@ -155,7 +175,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 				logger.debug("cleaning sql for assertion uuid {}", assertion.getUuid());
 				logger.debug("sql to be cleaned:");
 				logger.debug(cleanedSql);
-				if ( cleanedSql.startsWith(CREATE_PROCEDURE) || cleanedSql.startsWith(CREATE_PROCEDURE.toLowerCase())) {
+				if (cleanedSql.toUpperCase().startsWith(CREATE_PROCEDURE) || cleanedSql.toUpperCase().startsWith(CREATE_FUNCTION)) {
 					storedProcedureFound = true;
 				}
 				// Process SQL statement
@@ -198,6 +218,12 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 			uploadTest(assertion, sql, statements);
 		}
 
+		protected void addPreRequisiteSqlToAssertion(final Assertion assertion, String preRequisiteSql) throws BusinessServiceException {
+			MySqlQueryTransformer mySqlQueryTransformer = new MySqlQueryTransformer();
+			final List<String> sqlStatements = mySqlQueryTransformer.transformToStatements(preRequisiteSql);
+			uploadTest(assertion, preRequisiteSql, sqlStatements);
+		}
+
 		private void uploadTest (Assertion assertion, String originalSql, List<String> sqlStatements) {
 			final ExecutionCommand command = new ExecutionCommand();
 			command.setTemplate(originalSql);
@@ -223,7 +249,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 			boolean currOrPrevFound = false;
 			// Whether a RAT schema prefix was recognised at all. Without this the
 			// release-type suffix block below runs on tokens that never named a
-			// schema, and builds a qualifier with an empty schema.
+			// schema, and builds a qualifier with nothing in front of the dot.
 			boolean schemaPrefixFound = false;
 			if (ratSchema.startsWith("curr_")){
 				rvfSchema = "<PROSPECTIVE>";
@@ -245,9 +271,6 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 				// finally process token that represents temp tables - starts with v_
 				ratSchema = ratSchema.substring("v_".length());
 				rvfSchema = "<TEMP>" + "." + ratSchema;
-				// Deliberately NOT a schema prefix: <TEMP> has already produced a
-				// complete qualifier here, and appending a release-type suffix to
-				// it would corrupt a name that is already right.
 			}
 			// clean up conditions where tokenization produces schema mappings with ')' at the end
 			if (currOrPrevFound && ratSchema.endsWith(")")){

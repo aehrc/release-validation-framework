@@ -20,10 +20,12 @@ import org.springframework.web.bind.annotation.*;
 
 import jakarta.servlet.http.HttpServletResponse;
 import java.util.*;
+import org.ihtsdo.rvf.config.ConditionalOnMysqlEngine;
 
 @RestController
 @RequestMapping("/groups")
 @Tag(name = "Assertions Groups")
+@ConditionalOnMysqlEngine
 public class AssertionGroupController {
 
 	@Autowired
