@@ -282,16 +282,25 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 			// Unprefixed tokens used to land here too, and since rvfSchema was
 			// still "" the result was a qualifier with an empty schema:
 			//
-			//   relationship_s  ->  "" + "." + "relationship" + "_<SNAPSHOT>"
-			//                   ->  .relationship_s
+			//   langrefset_s  ->  "" + "." + "langrefset" + "_<SNAPSHOT>"
+			//                 ->  .langrefset_<SNAPSHOT>
 			//
 			// which is a syntax error wherever it is substituted, and it defeated
-			// the isEmpty() guard below by making rvfSchema non-empty. Three
-			// assertions have failed to execute on every run since at least May
-			// 2025 for exactly this reason - the stored procedures that retrieve
-			// ancestors and descendants, and the LOINC expression validation -
-			// because they name relationship_s, stated_relationship_s and
-			// expressionassociationrefset_s without a curr_ prefix.
+			// the isEmpty() guard below by making rvfSchema non-empty.
+			//
+			// Measured against the corpus pinned in checkout-resources.sh: five
+			// scripts name a table with a release-type suffix and no schema
+			// prefix, and four of those five are manifest-declared, so RVF runs
+			// them -
+			//
+			//   mrcm-attribute-range-refset-validate-concept-ids  mrcmattributerangerefset_s
+			//   mrcm-domain-refset-validate-concept-ids           mrcmdomainrefset_s
+			//   changes-are-in-exepected-modules-edition-proc     moduledependencyrefset_d
+			//   changes-are-in-exepected-modules-extension-proc   moduledependencyrefset_d
+			//
+			// the fifth, description-without-language-refset (langrefset_s), is
+			// one of the corpus scripts no manifest declares, so it never ran on
+			// either engine.
 			//
 			// Unqualified is already correct: the connection is opened with
 			// setDefaultCatalog(prospectiveVersion), so a bare table name resolves
