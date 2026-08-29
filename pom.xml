@@ -231,6 +231,16 @@
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers-mysql</artifactId>
         </dependency>
+        <!-- The DuckDB execution engine. Pinned to the same version as the
+             Python side (duckdb 1.5.5): the precompiled assertion store is
+             transpiled by sqlglot against one DuckDB dialect, and a runtime on a
+             different minor can parse it differently. -->
+        <dependency>
+            <groupId>org.duckdb</groupId>
+            <artifactId>duckdb_jdbc</artifactId>
+            <version>1.5.5.1</version>
+        </dependency>
+
     </dependencies>
 
     <build>
