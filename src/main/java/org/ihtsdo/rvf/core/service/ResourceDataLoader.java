@@ -19,8 +19,10 @@ import java.io.*;
 import java.nio.file.Files;
 import java.sql.Connection;
 import java.sql.SQLException;
+import org.ihtsdo.rvf.config.ConditionalOnMysqlEngine;
 
 @Service
+@ConditionalOnMysqlEngine
 public class ResourceDataLoader {
 	private static final String US_TO_GB_TERMS_MAP_FILENAME = "us-to-gb-terms-map.txt";
 	private static final String UTF_8 = "UTF-8";

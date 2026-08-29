@@ -34,8 +34,10 @@ import java.sql.*;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.ihtsdo.rvf.config.ConditionalOnMysqlEngine;
 
 @Service
+@ConditionalOnMysqlEngine
 public class ReleaseDataManager {
 
 	private static final Logger logger = LoggerFactory.getLogger(ReleaseDataManager.class);
@@ -115,8 +117,7 @@ public class ReleaseDataManager {
 	public void dropSchema(String schemaName) throws BusinessServiceException{
 		logger.info("Dropping schema {}", schemaName);
 		//clean database
-		try (Connection connection = dataSource.getConnection();
-			 Statement statement = connection.createStatement()) {
+		try (Statement statement = dataSource.getConnection().createStatement()) {
 			String dropStr = "drop database if exists " + schemaName + ";";
 			statement.execute(dropStr);
 			schemaNames.remove(schemaName);
@@ -482,8 +483,7 @@ public class ReleaseDataManager {
 		String schemaName = version.startsWith(RVF_DB_PREFIX) ? version : RVF_DB_PREFIX + version;
 		logger.info("Creating db schema {}", schemaName);
 		//clean and create database
-		try (Connection connection = dataSource.getConnection();
-			 Statement statement = connection.createStatement()) {
+		try (Statement statement = dataSource.getConnection().createStatement()) {
 			String dropStr = "drop database if exists " + schemaName + ";";
 			String createDbStr = "create database if not exists "+ schemaName + ";";
 			statement.execute(dropStr);
@@ -493,10 +493,9 @@ public class ReleaseDataManager {
 		}
 
 		try {
-			try (Connection connection = rvfDynamicDataSource.getConnection(schemaName);
-				 Statement statement = connection.createStatement()) {
+			try (Statement statement = rvfDynamicDataSource.getConnection(schemaName).createStatement()) {
 				statement.execute("use " + schemaName + ";");
-			}
+			} 
 			try (InputStreamReader reader = new InputStreamReader(getClass().getResourceAsStream("/sql/create-tables-mysql.sql"));
 				 Connection connection = rvfDynamicDataSource.getConnection(schemaName)) {
 				ScriptRunner runner = new ScriptRunner(connection);

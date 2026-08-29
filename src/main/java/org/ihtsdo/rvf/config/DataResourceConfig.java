@@ -30,7 +30,11 @@ public abstract class DataResourceConfig {
     @Autowired
     private AssertionsResourceConfig assertionsResourceConfig;
     
+    // Conditional on the engine rather than on the properties above: those stay
+    // resolvable in both modes (they are declared in application.properties), so
+    // their presence says nothing about whether a database is meant to exist.
     @Bean(name = "dataSource")
+    @ConditionalOnMysqlEngine
     public BasicDataSource getDataSource(DataSourceProperties dataSourceProperties) {
         BasicDataSource basicDataSource = new BasicDataSource();
         basicDataSource.setUrl(url);
