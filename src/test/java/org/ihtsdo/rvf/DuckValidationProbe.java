@@ -96,7 +96,10 @@ public final class DuckValidationProbe {
 				new DuckStoreLocator(store, System.getProperty("probe.corpus", "")),
 				System.getProperty("probe.corpus", ""),
 				System.getProperty("probe.work", System.getProperty("java.io.tmpdir")),
-				"qa_result");
+				"qa_result",
+				// Sizing knobs, so one JVM invocation is one benchmark point.
+				Integer.getInteger("probe.threads", 0),
+				System.getProperty("probe.memory", ""));
 
 		long t0 = System.currentTimeMillis();
 		ValidationStatusReport status = service.runValidations(config,

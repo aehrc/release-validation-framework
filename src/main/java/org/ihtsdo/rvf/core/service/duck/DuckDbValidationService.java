@@ -157,6 +157,8 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 	private final String corpusRoot;
 	private final String workDirectory;
 	private final String qaResultTable;
+	private final int duckThreads;
+	private final String duckMemoryLimit;
 
 	public DuckDbValidationService(ValidationReportService reportService,
 			WhitelistService whitelistService,
@@ -164,7 +166,9 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 			DuckStoreLocator storeLocator,
 			@Value("${rvf.assertion.resource.local.path:}") String corpusRoot,
 			@Value("${rvf.duck.work.directory:${java.io.tmpdir}}") String workDirectory,
-			@Value("${rvf.qa.result.table.name:qa_result}") String qaResultTableName) {
+			@Value("${rvf.qa.result.table.name:qa_result}") String qaResultTableName,
+			@Value("${rvf.duck.threads:0}") int duckThreads,
+			@Value("${rvf.duck.memory.limit:}") String duckMemoryLimit) {
 		this.reportService = reportService;
 		this.whitelistService = whitelistService;
 		this.acquisitionService = acquisitionService;
@@ -172,6 +176,43 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 		this.corpusRoot = corpusRoot;
 		this.workDirectory = workDirectory;
 		this.qaResultTable = QA_RESULT_SCHEMA + "." + qaResultTableName;
+		this.duckThreads = duckThreads;
+		this.duckMemoryLimit = duckMemoryLimit;
+	}
+
+	/**
+	 * Bound DuckDB to the CPU and memory this process was actually given.
+	 *
+	 * <p>DuckDB sizes its thread pool from the machine, and it does NOT observe
+	 * the restrictions a container or a scheduler imposes. Measured on this
+	 * codebase: under {@code taskset -c 0-1}, {@code nproc} reports 2 and the
+	 * JVM's {@code availableProcessors()} reports 2, while DuckDB still reports
+	 * {@code threads=10} - the host's core count.
+	 *
+	 * <p>Why that matters in production rather than in theory: a Kubernetes pod
+	 * with {@code limits.cpu: 2} on a 64-core node gets a CFS quota, not two
+	 * cores. DuckDB would start 64 worker threads inside a two-core budget, and
+	 * every one of them contends for the same quota - so the pod is throttled
+	 * hard and runs SLOWER than it would with two threads. The same applies to
+	 * an HPC allocation of a few cores on a many-core node.
+	 *
+	 * <p>{@code availableProcessors()} is the right source because the JVM does
+	 * observe both affinity and cgroup quotas, so it reports what this process
+	 * may actually use. {@code rvf.duck.threads} overrides it for benchmarking
+	 * or for deliberately oversubscribing; {@code rvf.duck.memory.limit} is left
+	 * unset by default, which keeps DuckDB's own heuristic.
+	 */
+	private void applyResourceLimits(Connection connection) throws SQLException {
+		int threads = duckThreads > 0 ? duckThreads : Runtime.getRuntime().availableProcessors();
+		try (Statement statement = connection.createStatement()) {
+			statement.execute("SET threads = " + threads);
+			if (duckMemoryLimit != null && !duckMemoryLimit.isBlank()) {
+				statement.execute("SET memory_limit = '" + duckMemoryLimit.replace("'", "") + "'");
+			}
+		}
+		LOGGER.info("DuckDB resource limits: threads={}{}", threads,
+				duckMemoryLimit == null || duckMemoryLimit.isBlank()
+						? "" : ", memory_limit=" + duckMemoryLimit);
 	}
 
 	/**
@@ -347,6 +388,7 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 			FileUtils.deleteQuietly(database.toFile());
 			Class.forName("org.duckdb.DuckDBDriver");
 			try (Connection connection = DriverManager.getConnection("jdbc:duckdb:" + database)) {
+				applyResourceLimits(connection);
 				return run(connection, executionConfig, releases, reportStorage, statusReport,
 						timeStart);
 			}

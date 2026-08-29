@@ -331,7 +331,7 @@ class DuckDbValidationServiceExtensionTest {
 		new DuckDbValidationService(reportService, whitelistService,
 				new ReleaseAcquisitionService(),
 				new DuckStoreLocator(storeFile.toString(), corpus.toString()),
-				corpus.toString(), work.toString(), "qa_result")
+				corpus.toString(), work.toString(), "qa_result", 0, "")
 				.runValidations(config, releases, "storage/", status);
 		return status;
 	}
