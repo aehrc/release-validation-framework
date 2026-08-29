@@ -21,10 +21,12 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
 import java.util.stream.Collectors;
+import org.ihtsdo.rvf.config.ConditionalOnMysqlEngine;
 
 @RestController
 @RequestMapping("/assertions")
 @Tag(name = "Assertions")
+@ConditionalOnMysqlEngine
 public class AssertionController {
 	@Autowired
 	private AssertionService assertionService;

@@ -15,6 +15,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.util.Collections;
+import org.ihtsdo.rvf.config.ConditionalOnMysqlEngine;
 
 /**
  * A controller that handles API calls for uploading and checking status of
@@ -25,6 +26,7 @@ import java.util.Collections;
 @RestController
 @RequestMapping("/releases")
 @Tag(name = "Published Releases")
+@ConditionalOnMysqlEngine
 public class ReleaseController {
 
 	private static final Logger logger = LoggerFactory.getLogger(ReleaseController.class);

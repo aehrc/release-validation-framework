@@ -32,6 +32,18 @@ import java.util.Map;
 /**
  * The controller that runs the automated regression test
  */
+/**
+ * Present in BOTH engines. Its only MySQL coupling was {@code AssertionService},
+ * whose sole implementation used to be the JPA one - which is why the entire
+ * submission path disappeared under {@code rvf.execution.engine=duckdb}, leaving
+ * an application that booted and could not be asked to validate anything.
+ * Any alternative engine has to supply that interface itself, so this
+ * controller stays engine-agnostic and is deliberately not conditional.
+ *
+ * <p>The assertion CRUD controllers are NOT: they reach ReleaseDataManager and
+ * AssertionGroupRepository, which administer a database DuckDB mode does not
+ * have.
+ */
 @RestController
 @Tag(name = "Automated Test")
 public class AutomatedTestController {
