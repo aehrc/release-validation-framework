@@ -1,0 +1,143 @@
+# How the DuckDB engine scales, and how to size a worker
+
+Measured 2026-08-30 on a 10-core Xeon 8358 / 23 GB Linux host,
+`catchup-upgraded@6b8a6997`, via `DuckValidationProbe` so that one JVM
+invocation is exactly one data point: no upload, no queue, no unzip. Release is
+the unpacked AU daily build (45,298,828 rows, 66 files). **Every configuration
+below produced an identical report — 220 tests, 60 failures — so these are
+timings of the same work, not of different work.**
+
+Reproduce with `/data/work/scripts/duck-scaling.sh`.
+
+## First, a defect this exposed
+
+DuckDB sizes its thread pool from the **machine**, ignoring affinity and cgroup
+quotas. Under `taskset -c 0-1` on this 10-core host, `nproc` says 2 and the JVM
+says 2, but DuckDB said `threads=10`.
+
+    1 core, DuckDB left to its own devices (10 threads)   674 s
+    1 core, threads bounded to what the process owns       259 s
+
+**2.6x slower purely from oversubscription**, and on Kubernetes it is worse than
+this test: a pod with `limits.cpu: 2` on a 64-core node would run 64 DuckDB
+threads inside a two-core CFS quota. Fixed in `6b8a6997`; threads now come from
+`Runtime.availableProcessors()`, which does observe both, with
+`rvf.duck.threads` to override. **Any sizing exercise before that fix was
+measuring contention, not capacity.**
+
+## Curve A — right-sized worker (cores == threads)
+
+| cores | wall | materialise | speedup | efficiency | gain vs previous |
+|---|---|---|---|---|---|
+| 1 | 259.1 s | 77.6 s | 1.00x | 100% | — |
+| 2 | 162.1 s | 44.2 s | 1.60x | 80% | 1.60x |
+| 4 | 114.4 s | 30.1 s | 2.26x | 57% | 1.42x |
+| 8 | 82.8 s | 16.7 s | 3.13x | 39% | 1.38x |
+
+It scales, but sub-linearly and predictably. Fitting Amdahl's law to the 8-core
+point gives a **serial fraction of 22.2%**, so:
+
+    theoretical ceiling            4.50x single core  =  58 s
+     16 cores  predicted   70 s   (3.69x)
+     32 cores  predicted   64 s   (4.05x)
+     64 cores  predicted   61 s   (4.26x)
+    128 cores  predicted   59 s   (4.38x)
+
+**Going from 8 to 128 cores is predicted to buy 82.8s -> 59s for 16x the CPU.**
+
+## Curve B — threads varied against fixed 10 cores
+
+| threads | wall | materialise | vs best |
+|---|---|---|---|
+| 1 | 258.3 s | 75.1 s | +225% |
+| 2 | 154.4 s | 42.7 s | +94% |
+| 4 | 102.1 s | 25.3 s | +29% |
+| **8** | **79.4 s** | 17.1 s | **best** |
+| 16 | 82.2 s | 15.6 s | +4% |
+| 32 | 89.7 s | 15.3 s | +13% |
+
+Two things worth noting. **Past 8 threads it gets worse, not flat** — 32 threads
+is 13% slower than 8. And the materialise phase keeps *improving* slightly
+(17.1 -> 15.3 s) while the total degrades, which locates the damage in the
+assertion phase: DuckDB already parallelises within a query, so extra threads
+there contend rather than help.
+
+Optimum is `threads ≈ cores`, slightly under. That is exactly what
+`availableProcessors()` gives, so the default needs no tuning.
+
+## Cold start (matters only for a job-per-run model)
+
+Time from process launch to serving a request, 253 MB fat jar, warm page cache,
+no image pull:
+
+    1 core  19.0 s        4 cores   9.0 s
+    2 cores 10.0 s        8 cores   8.9 s
+
+Flat from 4 cores up at about **9 s**. Add pod scheduling and, on a cold node,
+an image pull.
+
+## Sizing recommendation for AKS
+
+**4 cores / 6 GB is the value sweet spot; 8 cores / 8 GB if latency matters.**
+
+- 4 cores buys 2.26x for 4x the CPU (57% efficiency) and finishes a full edition
+  in ~114 s.
+- 8 cores buys 3.13x for 8x (39%) and finishes in ~83 s.
+- Beyond 16 cores you are paying for the 22% that cannot be parallelised.
+- Memory is flat across every configuration: peak RSS 3.47–4.04 GB, and it
+  *rises* only slightly with thread count. `-Xmx8g` with a 6–8 GB request is
+  ample; there is no need for the 12–15 GB the MySQL-era worker manifest asks
+  for.
+- **N small workers beat one big worker.** Two 4-core workers do two editions in
+  114 s; one 8-core worker does them in 166 s. Throughput per core is the thing
+  to maximise, and it is maximised at small worker sizes.
+
+## The two server/worker models, with these numbers
+
+**Listener claims work (what RVF does today).** `rvf.execution.isWorker=true`
+runs a `@JmsListener`; workers are long-lived and pull from ActiveMQ. Scaling is
+KEDA `ScaledObject` on queue depth. Pays cold start once per pod, not per job,
+and `queuePrefetch=1` already gives even distribution across a pool. Weakness: a
+pod outlives its jobs, so a leak or a poisoned state persists, and scale-in
+during a 83–259 s run kills that run unless `terminationGracePeriodSeconds`
+covers it.
+
+**Server starts and tasks a worker (job per run).** Cleaner isolation, per-run
+sizing, retry/backoff for free. Costs ~9 s of JVM boot per job — **11% overhead
+on an 83 s job, and that is acceptable**. The blocker is that RVF's worker never
+exits (see `HOSTING.md`), so this needs a one-shot mode first.
+
+**On your "5 minutes to scale for a 1 minute job" concern:** the JVM is not the
+problem at 9 s. The risk is entirely in the layers underneath —
+KEDA's polling interval (default 30 s, tunable to seconds), and the cluster
+autoscaler adding a node, which is minutes. **Keep a warm node pool sized for
+one or two concurrent runs** and the scale decision costs seconds; let the
+cluster scale nodes on demand and it costs minutes regardless of which worker
+model you choose.
+
+## The HPC experiment worth running
+
+The Amdahl fit above is a *prediction* from four points on ten cores. On a
+few-hundred-core node with large memory it can be tested directly, and it is
+worth testing because the prediction can fail in both directions: NUMA and
+memory-bandwidth limits would make it worse than predicted, while a phase that
+only parallelises at scale would make it better.
+
+`hpc/duck-scaling.sbatch` runs the same probe across cores/threads/memory. What
+to look for:
+
+1. **Where does the curve actually flatten?** Predicted ~16–32 cores.
+2. **Does oversubscription keep hurting at scale**, i.e. is `threads = cores`
+   still optimal at 64+, or does the optimum fall below the core count?
+3. **Is the 22% serial fraction stable**, or does it grow with core count (which
+   is what NUMA effects look like)?
+4. **Does the materialise phase keep scaling** after total wall time stops
+   improving? It was still improving at 32 threads here.
+5. **Memory:** peak RSS was flat at ~4 GB regardless of parallelism. If DuckDB's
+   default `memory_limit` (about 80% of a huge node's RAM) changes that, it is an
+   argument for setting `rvf.duck.memory.limit` in production.
+
+The honest expectation is that this finds a ceiling near 60 s and confirms that
+**a validation is not an HPC-shaped problem** — it is a 4-to-8-core job, and the
+throughput win comes from running many of them at once rather than any one of
+them faster.
