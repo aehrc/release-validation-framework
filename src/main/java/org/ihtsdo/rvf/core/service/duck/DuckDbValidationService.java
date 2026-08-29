@@ -722,20 +722,6 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 	}
 
 	/**
-	 * The resource assertions first, then the requested groups' - the order
-	 * {@code MysqlValidationService.runAssertionTests} uses, for the reason it
-	 * uses it: the {@code resource} category is infrastructure that builds the
-	 * shared intermediate tables (res_edited_active_concepts, tmp_pt, ancestors)
-	 * other assertions select from. Run them second and a dozen assertions fail
-	 * on a table nothing had created yet.
-	 *
-	 * <p>De-duplicated, which the MySQL service does not do. It gets away with
-	 * that because no resource assertion is in a requested group today; were one
-	 * ever added, MySQL would run it twice and so would this - and a second run
-	 * inserts a second copy of every finding, so the assertion's reported
-	 * failure count doubles. Cheap to prevent, invisible when it happens.
-	 */
-	/**
 	 * The resource assertions, and the requested groups' assertions, kept APART.
 	 *
 	 * <p>They have to stay apart because the resource set is not just "more
