@@ -2,7 +2,7 @@
  "formatVersion": 1,
  "generator": {
   "sqlglot": "30.15.0",
-  "python": "3.12.9"
+  "python": "3.12.3"
  },
  "sentinels": [
   {
@@ -246,6 +246,7 @@
   "crefset_d": "id VARCHAR, effectivetime VARCHAR, active VARCHAR, moduleid BIGINT, refsetid BIGINT, referencedcomponentid BIGINT, componentid BIGINT"
  },
  "ports": [
+  "CREATE OR REPLACE MACRO substring_index(str, delim, cnt) AS\n  CASE WHEN cnt >= 0\n       THEN array_to_string(list_slice(string_split(str, delim), 1, cnt), delim)\n       ELSE array_to_string(list_slice(string_split(str, delim),\n              -cnt * -1, len(string_split(str, delim))), delim)\n  END",
   "CREATE OR REPLACE TABLE rvfph_prospective_.dual AS SELECT 1 AS dummy",
   "CREATE OR REPLACE TABLE rvfph_prospective_.transitiveClosureTable AS\n        WITH RECURSIVE isa(sourceid, destinationid) AS (\n            SELECT DISTINCT sourceid, destinationid\n              FROM rvfph_prospective_.relationship_active\n             WHERE typeid = 116680003\n        ),\n        tc(sourceid, destinationid) AS (\n            SELECT sourceid, destinationid FROM isa\n            UNION\n            -- Join the working table against the BASE relation, never against\n            -- the CTE twice. A recursive reference resolves to the working\n            -- table (the rows added by the previous iteration), not the whole\n            -- accumulated result, so `tc a JOIN tc b` silently drops every path\n            -- that needs an old row joined to a new one - producing a closure\n            -- that looks plausible (5.3M rows) but is short by ~3M pairs.\n            SELECT isa.sourceid, tc.destinationid\n              FROM isa JOIN tc ON isa.destinationid = tc.sourceid\n        )\n        SELECT DISTINCT sourceid, destinationid FROM tc",
   "CREATE OR REPLACE MACRO isDescendentOf_cr(candidate, target) AS\n  (SELECT count(1) FROM (SELECT sourceid AS _src, destinationid AS _dst\n                           FROM rvfph_prospective_.transitiveClosureTable) _t\n    WHERE _t._src = candidate AND _t._dst = target)",
