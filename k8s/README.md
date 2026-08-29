@@ -1,8 +1,12 @@
-# DuckDB RVF on Kubernetes — API node + worker pool
+# DuckDB RVF deployment — one container, or an API node with a worker pool
 
-Proof-of-concept manifests for the split deployment (task #27). Verified on
-Docker Desktop k8s, 2026-08-26, image `rvf-duck:local` built from
-`rvf-catchup@b9f56899` with store published from `rvf@2846637`.
+Two supported shapes. **The single container is the default and needs no
+configuration at all**; the split exists for independent scaling, and is the
+only one of the two that needs a broker, shared storage, or this manifest.
+
+Split verified on Docker Desktop k8s, 2026-08-26, image `rvf-duck:local` built
+from `rvf-catchup@b9f56899` with store published from `rvf@2846637`. Single
+container verified on Linux, 2026-08-29, from `catchup-upgraded@50e654dc`.
 
 ## Shape
 
@@ -14,6 +18,67 @@ Docker Desktop k8s, 2026-08-26, image `rvf-duck:local` built from
 added for this. It gates `@JmsListener` on `ValidationMessageListener`, so
 `false` gives an API that accepts and enqueues but never executes, and `true`
 gives a headless consumer. Scaling the pool is `kubectl scale deploy/rvf-worker`.
+
+## Single container: API and worker in one process
+
+Nothing to enable. Two stock defaults already do it:
+
+    rvf.execution.isWorker=true
+    spring.activemq.broker-url=vm://localhost?broker.persistent=false
+
+`isWorker=true` means this process runs the `@JmsListener`, and the `vm://`
+broker is **in-JVM** — the queue exists inside the same heap, so submit and
+execute are one container with no ActiveMQ to deploy. The DuckDB engine needs no
+database, so there is no MySQL either:
+
+    java -Djava.io.tmpdir=/data/work/tmp -Daws.region=us-east-1 -Xmx8g \
+         -jar target/release-validation-framework-9.0.1.jar \
+         --rvf.execution.engine=duckdb \
+         --rvf.assertion.resource.local.path=./snomed-release-validation-assertions/
+
+That is the whole deployment. `AWS_REGION`/`-Daws.region` is required even with
+no cloud storage, because `DroolsRulesValidationService.init()` constructs an S3
+client eagerly and dies on startup without a region.
+
+Confirm it is one process doing both halves by the thread names in a single
+run: `nio-8080-exec-N` accepts and enqueues, `ntContainer#0-N` consumes, same
+pid.
+
+### Measured, single container, 2026-08-29 (Linux, 8 CPU / 23GB, -Xmx8g)
+
+Same input as the split run below — `amtv4-15912.zip`, 894MB,
+`releaseAsAnEdition=true`, no previous release, Drools/MRCM off, groups
+file+component+release-type:
+
+    POST /run-post accepted (upload over loopback)   7.8s
+    submit -> COMPLETE                               194s
+    RF2 files loaded                                 66
+
+    totalTestsRun 191, totalFailures 58, totalWarnings 1,
+    totalSkips 0, totalTestsIncomplete 54
+
+    reportSummary: ARCHIVE_STRUCTURAL 0 failures, SQL 58 failures
+
+**Byte-for-byte the same counts the split produced** (191/58/1/0/54), which is
+the point worth taking from this: the shape is a deployment choice and does not
+change the report. No MySQL, no ActiveMQ, no volume — absence of any
+Hikari/Hibernate/JPA/DataSource line in the startup log is how you confirm the
+DuckDB engine took over rather than falling back.
+
+### Choosing between the two
+
+| | single container | API + worker pool |
+|---|---|---|
+| broker | in-JVM `vm://` | ActiveMQ deployment |
+| shared storage | not needed, one filesystem | required, and see the `/app/jobs` trap below |
+| memory | one heap sized for the worker | 2Gi API, 12Gi+ workers |
+| scaling | one run at a time per container | `kubectl scale deploy/rvf-worker` |
+| use when | evaluating, local runs, single-tenant | concurrent runs, autoscaling, cost-shaping |
+
+The split's whole value is that the memory-hungry half scales independently: a
+validation wants ~12Gi while the API wants ~512Mi, so N workers on one API is
+much cheaper than N full-size instances. If you are not scaling, the split only
+adds a broker, a volume and two more failure modes.
 
 ## The one non-obvious requirement
 
