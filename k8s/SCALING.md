@@ -205,3 +205,52 @@ The honest expectation is that this finds a ceiling near 60 s and confirms that
 **a validation is not an HPC-shaped problem** — it is a 4-to-8-core job, and the
 throughput win comes from running many of them at once rather than any one of
 them faster.
+
+## MySQL versus DuckDB on identical resources (2026-08-30)
+
+Both engines, **same host, same 8 cores (`taskset -c 0-7`), same fat jar** with
+only `rvf.execution.engine` differing, same release
+(`amtv4-15912.zip`, 894 MB), same groups, `releaseAsAnEdition=true`, no previous
+release, Drools/MRCM off. Full REST path each time: `POST /run-post` to
+`GET /result` reporting COMPLETE.
+
+MySQL is a real MySQL 8.4.6 (generic tarball, run rootless - no Docker and no
+sudo on this host), 8 GB InnoDB buffer pool, assertion tables primed with all
+360 assertions. **Zero swap for the duration of both runs**, verified each
+minute; an earlier attempt on a 14 GB host swapped 943 MB and was discarded.
+
+    MySQL 8.4.6   1215 s
+    DuckDB         208 s
+    ------------------------
+                   5.8x
+
+### Correctness, which matters more than the ratio
+
+    assertions both engines actually executed   137
+    identical failure count                    136   (99.3%)
+    unexplained divergence                       1
+
+The one divergence is `component-centric-snapshot-refsets-descriptor-validation`
+- MySQL 8 findings, DuckDB 0. It joins `ancestors`, a table built by the
+resource-category assertions, so the hypothesis to test first is that the two
+engines build `ancestors` differently rather than that the assertion itself
+differs. It is NOT in `duck/known-divergences.json` and should be added as
+unexplained so the nightly gate fails on it.
+
+### The reporting difference worth knowing about
+
+53 assertions carry DuckDB's `-1` sentinel - "not executed", because no previous
+release was supplied - and RVF counts them as `totalTestsIncomplete: 54`.
+**MySQL reports those same assertions as PASSED**, with
+`totalTestsIncomplete: 2`.
+
+MySQL substitutes an empty placeholder schema for the absent release, so the
+statements run, compare against nothing, find nothing, and are reported as
+passes. DuckDB declines to run them and says so. DuckDB's behaviour is the honest
+one and MySQL's is a false pass, but it is a divergence in *reported* numbers
+that anyone comparing two reports has to know about - and it explains most of a
+naive "58 failures versus 24" reading.
+
+It also means the 5.8x is not flattered by DuckDB skipping work: the 53 it
+declined are the ones MySQL executed against empty tables, which is the cheapest
+thing MySQL did all run.
