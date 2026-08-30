@@ -276,8 +276,38 @@ public class ReleaseAcquisitionService {
 		}
 	}
 
+	/**
+	 * The module store's view of a filename, or null if it has no such release.
+	 *
+	 * <p>Null is the ONLY way {@link #downloadPreviousRelease} reaches its
+	 * fallback source, so a module store that cannot answer must return null
+	 * rather than propagate - otherwise supplying a previous release from plain
+	 * release storage is impossible.
+	 *
+	 * <p>An absent or empty module store throws rather than returning nothing:
+	 * {@code ModuleStorageCoordinator.doGetAllReleases} walks the store with
+	 * {@code ResourceManager.doListFilenames}, which calls {@code Arrays.stream}
+	 * on {@code File.listFiles()} - and that returns NULL, not an empty array,
+	 * for a directory that does not exist. The result is
+	 * {@code NullPointerException: Cannot read the array length because "array"
+	 * is null}, which says nothing about module storage and kills the run.
+	 *
+	 * <p>That is exactly the configuration of any deployment that keeps releases
+	 * on a filesystem rather than in a module store, so without this guard those
+	 * deployments cannot validate against a previous release at all.
+	 */
 	private ModuleMetadata findModuleMetadataByFilename(String filename) throws ModuleStorageCoordinatorException {
-		Map<String, List<ModuleMetadata>> allReleasesMap = moduleStorageCoordinator.getAllReleases();
+		Map<String, List<ModuleMetadata>> allReleasesMap;
+		try {
+			allReleasesMap = moduleStorageCoordinator.getAllReleases();
+		} catch (RuntimeException e) {
+			logger.warn("Module Storage Coordinator could not list releases ({}); "
+					+ "falling back to release storage for '{}'.", e.toString(), filename);
+			return null;
+		}
+		if (allReleasesMap == null) {
+			return null;
+		}
 		List<ModuleMetadata> allModuleMetadata = new ArrayList<>();
 		allReleasesMap.values().forEach(allModuleMetadata::addAll);
 		return allModuleMetadata.stream()
