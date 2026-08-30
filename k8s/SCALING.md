@@ -115,6 +115,70 @@ one or two concurrent runs** and the scale decision costs seconds; let the
 cluster scale nodes on demand and it costs minutes regardless of which worker
 model you choose.
 
+## Answered on 64 cores (Petrichor `c157`, 2026-08-30)
+
+Job 30698623, `--exclusive` on a 64-core / 502 GB node, release unpacked on
+node-local disk, Temurin 25 shipped because Petrichor offers only Java 8/11/16.
+20 configurations, **every one produced 220 tests / 60 failures / 45,298,828
+rows**, so these are timings of identical work. Raw data:
+`hpc/results-petrichor-64core.tsv`.
+
+### There is an optimum, and it is 16 cores
+
+| cores (= threads, pinned) | wall | speedup | efficiency | vs best |
+|---|---|---|---|---|
+| 1 | 175.2s | 1.00x | 100% | +252% |
+| 2 | 105.9s | 1.65x | 83% | +113% |
+| 4 | 69.9s | 2.51x | 63% | +40% |
+| 8 | 57.0s | 3.07x | 38% | +14% |
+| **16** | **49.8s** | **3.52x** | 22% | **fastest** |
+| 32 | 51.4s | 3.41x | 11% | +3% |
+| 48 | 57.8s | 3.03x | 6% | +16% |
+| 64 | 57.9s | 3.03x | 5% | +16% |
+
+**Past 16 cores it gets slower, not merely flatter.** 64 cores is 16% worse than
+16. The serial fraction re-fits at 23.7% against the 22.2% predicted from ten
+cores, so the model was right about the shape - but the Amdahl ceiling of 4.23x
+(41s) is never reached, because contention overtakes parallelism first.
+
+### Giving a worker the whole node is worse than pinning it
+
+The single most useful number here:
+
+    16 cores PINNED with taskset          49.8s
+    64 cores available, 16 DuckDB threads 56.6s
+
+**14% slower for having 4x the cores available**, at the same thread count. With
+64 cores visible the OS scatters 16 threads across sockets; pinned to 0-15 they
+share one. On Kubernetes the equivalent lever is a CPU *limit* plus
+`rvf.duck.threads` matching it - and note DuckDB cannot see either by itself,
+which is what `6b8a6997` fixes.
+
+### Oversubscription is milder at width, but never helps
+
+64 cores available: 16t 56.6s, 32t 56.7s, 64t 58.2s, 128t 59.1s, 256t 60.4s.
+Only +7% at 256 threads, against +13% for 32 threads on a 10-core box - a big
+node absorbs it. It still costs memory: peak RSS climbs 3.58 GB at 8 threads to
+7.10 GB at 256.
+
+### Memory is not a lever, confirmed on a 502 GB node
+
+`memory_limit` 8GB / 32GB / 128GB gave 58.1s / 58.5s / 57.8s - inside noise.
+Peak RSS never exceeded 7.1 GB in any configuration. There is no version of this
+workload that wants a big-memory node.
+
+### What this means for sizing
+
+**8 cores is the honest recommendation, 16 if latency matters.** 16 cores is the
+floor of the curve but buys only 14% over 8 for twice the CPU; 8 cores is within
+14% of the best time achievable at any width. Beyond 16 you are paying to go
+slower. Pin whatever you allocate.
+
+A validation is **not** an HPC-shaped problem: the fastest this workload can be
+made to run on a 64-core node is 49.8s, against 57.0s on eight cores of the same
+node. Throughput comes from running many validations at once, not from making one
+faster.
+
 ## The HPC experiment worth running
 
 The Amdahl fit above is a *prediction* from four points on ten cores. On a
