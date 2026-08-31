@@ -113,11 +113,40 @@ public class ValidationQueueManager {
 	private boolean saveUploadedFiles(final ValidationRunConfig config,
 			final Map<String, String> responseMap) throws IOException, NoSuchAlgorithmException, DecoderException {
 		
-		if (!jobResourceConfig.isUseCloud() && config.isProspectiveFileInS3()) {
-			responseMap.put(FAILURE_MESSAGE, "Can't process files from S3 as validation resource config is configured to use local files "
-					+ jobResourceConfig.toString());
-			reportService.writeState(State.FAILED, config.getStorageLocation());
-			return false;
+		if (config.isProspectiveFileInS3() && !jobResourceConfig.isUseCloud()) {
+			// "In S3" means the file is already IN the job store rather than
+			// attached to this request. With local job storage that store is a
+			// filesystem, and in a cluster it is a SHARED one - an Azure Files
+			// or NFS mount that the API node and every worker see - so the
+			// handoff works without any object store at all.
+			//
+			// The read path for it already existed and was simply unreachable:
+			// ReleaseAcquisitionService.downloadProspectiveReleaseFile falls
+			// through to jobResource.readResourceStreamOrNullIfNotExists(path)
+			// whenever useCloud is false. Refusing here forced every submission
+			// through a multipart upload instead, which is what the 1GB
+			// spring.servlet.multipart limit and any ingress body cap apply to -
+			// on an 853MB release that is the difference between a working
+			// deployment and a 413.
+			//
+			// Resolve it, and fail only when the object genuinely is not there.
+			// Checked HERE, while there is still a caller to tell, rather than in
+			// the worker minutes after this request answered 201.
+			String path = config.getProspectiveFileFullPath();
+			if (path == null || path.isBlank() || !validationJobResourceManager.doesObjectExist(path)) {
+				responseMap.put(FAILURE_MESSAGE, "Prospective file '" + path + "' is not in the validation"
+						+ " job store. This instance has local job storage, so the path is resolved under '"
+						+ jobResourceConfig.getLocal().getPath() + "' - write the release there, or submit it"
+						+ " as a multipart upload instead.");
+				reportService.writeState(State.FAILED, config.getStorageLocation());
+				return false;
+			}
+			if (config.getBucketName() != null && !config.getBucketName().isBlank()) {
+				LOGGER.warn("Ignoring bucketName '{}' - this instance has local job storage, so '{}' is read"
+						+ " from the local store.", config.getBucketName(), path);
+			}
+			// Nothing to stage: it is already where the worker will look.
+			return true;
 		}
 		if (!config.isProspectiveFileInS3()) {
 			String filename = config.getFile().getOriginalFilename();

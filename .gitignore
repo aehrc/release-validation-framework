@@ -33,3 +33,6 @@ snomed-drools-rules
 # Drools test resources are fetched from the canonical bucket by
 # fetch-test-resources.sh, not committed - they are IHTSDO's to version.
 /test-resources/
+
+# Local validation job store (uploads, state and reports written at runtime)
+shared-jobs/
