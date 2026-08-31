@@ -13,6 +13,8 @@ import org.ihtsdo.rvf.rest.controller.TestUploadFileController;
 import org.ihtsdo.rvf.rest.controller.AutomatedTestController;
 import org.ihtsdo.rvf.rest.controller.AssertionController;
 import org.ihtsdo.rvf.rest.controller.AssertionGroupController;
+import org.ihtsdo.rvf.rest.controller.AssertionAdministrationController;
+import org.ihtsdo.rvf.rest.controller.AssertionGroupAdministrationController;
 import org.ihtsdo.rvf.rest.controller.ReleaseController;
 import org.ihtsdo.rvf.core.service.duck.DuckAssertionService;
 import org.ihtsdo.rvf.core.service.AssertionServiceImpl;
@@ -146,7 +148,7 @@ class DuckDbEngineContextTest {
 	}
 
 	@Test
-	void theSubmissionPathIsRegisteredAndTheCrudControllersAreNot() {
+	void theSubmissionPathAndCatalogueReadsAreRegisteredAndTheCrudControllersAreNot() {
 		assertEquals(1, context.getBeanNamesForType(TestUploadFileController.class).length,
 				"nothing could submit a validation without this");
 		assertEquals(1, context.getBeanNamesForType(AutomatedTestController.class).length);
@@ -155,9 +157,21 @@ class DuckDbEngineContextTest {
 		assertEquals(DuckAssertionService.class,
 				context.getBean(AssertionService.class).getClass());
 
-		assertEquals(0, context.getBeanNamesForType(AssertionController.class).length,
+		// The catalogue is READABLE in this mode: validation-framework-browser-ui
+		// calls GET /assertions and GET /groups, and both resolve through
+		// AssertionService, which DuckAssertionService implements over the store.
+		assertEquals(1, context.getBeanNamesForType(AssertionController.class).length,
+				"the assertion browser reads the catalogue and needs no database");
+		assertEquals(1, context.getBeanNamesForType(AssertionGroupController.class).length,
+				"group listing goes through AssertionService, not the JPA repository");
+
+		// Writing to it, and executing against loaded MySQL release data, do not
+		// exist here. Withdrawing the beans answers 404 rather than a 500 from
+		// DuckAssertionService's read-only guard.
+		assertEquals(0, context.getBeanNamesForType(AssertionAdministrationController.class).length,
 				"assertion CRUD administers a database this mode does not have");
-		assertEquals(0, context.getBeanNamesForType(AssertionGroupController.class).length);
+		assertEquals(0, context.getBeanNamesForType(AssertionGroupAdministrationController.class).length,
+				"group membership is addressed by a numeric id the store has no equivalent for");
 		assertEquals(0, context.getBeanNamesForType(ReleaseController.class).length);
 	}
 
