@@ -34,6 +34,14 @@ public class ColumnPatternTester {
 	public static final String COMPLIANT_FILENAME = "RF2 Compliant filename";
 
 	/**
+	 * Lines per unit of parallel work. Large enough that the per-batch overhead
+	 * disappears against the per-line work, small enough that a file yields many
+	 * batches: the largest file of a real edition is 4.17M lines, so 2,000 gives
+	 * about 2,000 batches to spread over the cores.
+	 */
+	private static final int LINE_BATCH_SIZE = 2_000;
+
+	/**
 	 * A hand-written equivalent of one of the patterns above, or null when there
 	 * is none and the regex engine must be used.
 	 *
@@ -155,10 +163,22 @@ public class ColumnPatternTester {
 		// for each config file (should only the one)
 		final List<String> fileNames = resourceManager.getFileNames();
 		final SchemaFactory schemaFactory = new SchemaFactory();
-		try (ExecutorService executor = Executors.newCachedThreadPool()) {
+		// Two pools, deliberately. The outer one is unbounded and holds one task
+		// per file, each of which spends most of its life reading and waiting; the
+		// inner one is fixed at the core count and does the validation. Nothing
+		// submitted to the inner pool submits further work, so an outer task
+		// waiting on inner tasks cannot starve them - the deadlock that a single
+		// shared pool would risk.
+		final int cores = Runtime.getRuntime().availableProcessors();
+		try (ExecutorService executor = Executors.newCachedThreadPool();
+			 ExecutorService lineWorkers = Executors.newFixedThreadPool(cores)) {
+			// Caps lines held in memory across every file at once, so a 1GB file
+			// cannot be read faster than it is validated.
+			final Semaphore batchPermits = new Semaphore(cores * 4);
 			List<Future<Long>> tasks = new ArrayList<>();
 			for (final String fileName : resourceManager.getFileNamesLargestFirst()) {
-				Future<Long> task = executor.submit(() -> runTestForFile(fileName, schemaFactory));
+				Future<Long> task = executor.submit(
+						() -> runTestForFile(fileName, schemaFactory, lineWorkers, batchPermits));
 				tasks.add(task);
 			}
 
@@ -177,7 +197,8 @@ public class ColumnPatternTester {
 		}
 	}
 
-	private long runTestForFile(String fileName, SchemaFactory schemaFactory) {
+	private long runTestForFile(String fileName, SchemaFactory schemaFactory,
+			ExecutorService lineWorkers, Semaphore batchPermits) {
 		final Date startTime = new Date();
 		long linesTested = 0;
 		if (fileName == null) {
@@ -208,37 +229,61 @@ public class ColumnPatternTester {
 		List<Field> fields = tableSchema.getFields();
 		if (fields != null) {
 			try (BufferedReader reader = resourceManager.getReader(fileName, StandardCharsets.UTF_8)) {
-				String line;
-				long lineNumber = 0;
-
-				String[] columnData;
 				final int configColumnCount = fields.size();
 
-				while ((line = reader.readLine()) != null) {
-					int columnIndex = 0;
+				// The header is processed first and alone, because it can REDEFINE
+				// the schema: populateExtendedRefsetAdditionalFieldNames replaces
+				// the field list that every data line is then validated against.
+				final String header = reader.readLine();
+				if (header != null) {
 					linesTested++;
-					lineNumber++;
-					columnData = line.split("\t", -1);
-
-					final int dataColumnCount = columnData.length;
-
-					if (!(validateRow(startTime, fileName, line, lineNumber, configColumnCount, dataColumnCount))) {
-						continue;
-					}
-					//check whether header fields not containing null values due to specific additional fields
-					if ( (lineNumber == 1) && havingAdditionalFields(tableSchema)) {
-						schemaFactory.populateExtendedRefsetAdditionalFieldNames(tableSchema, line);
-						fields = tableSchema.getFields();
-					}
-					for (final Field column : fields) {
-						final String value = columnData[columnIndex];
-						if (lineNumber == 1) {
-							// Test header value
-							testHeaderValue(value, column, startTime, fileName, columnIndex);
-						} else {
-							testDataValue(lineNumber + "-" + columnIndex, lineNumber, value, column, startTime, fileName, coreFileKind);
+					if (validateRow(startTime, fileName, header, 1, configColumnCount, header.split("\t", -1).length)) {
+						if (havingAdditionalFields(tableSchema)) {
+							schemaFactory.populateExtendedRefsetAdditionalFieldNames(tableSchema, header);
+							fields = tableSchema.getFields();
 						}
-						columnIndex++;
+						final String[] headerData = header.split("\t", -1);
+						int columnIndex = 0;
+						for (final Field column : fields) {
+							testHeaderValue(headerData[columnIndex], column, startTime, fileName, columnIndex);
+							columnIndex++;
+						}
+					}
+
+					// Data lines, in batches across the worker pool. One file's
+					// lines therefore use every core, which is what stops the
+					// largest file setting the floor for the whole phase.
+					final List<Field> dataFields = fields;
+					final List<Future<?>> batches = new ArrayList<>();
+					List<String> batch = new ArrayList<>(LINE_BATCH_SIZE);
+					long firstLineOfBatch = 2;
+					long lineNumber = 1;
+					String line;
+					while ((line = reader.readLine()) != null) {
+						lineNumber++;
+						linesTested++;
+						batch.add(line);
+						if (batch.size() == LINE_BATCH_SIZE) {
+							batches.add(submitBatch(batch, firstLineOfBatch, dataFields, configColumnCount,
+									startTime, fileName, coreFileKind, lineWorkers, batchPermits));
+							batch = new ArrayList<>(LINE_BATCH_SIZE);
+							firstLineOfBatch = lineNumber + 1;
+						}
+					}
+					if (!batch.isEmpty()) {
+						batches.add(submitBatch(batch, firstLineOfBatch, dataFields, configColumnCount,
+								startTime, fileName, coreFileKind, lineWorkers, batchPermits));
+					}
+					for (final Future<?> b : batches) {
+						try {
+							b.get();
+						} catch (InterruptedException e) {
+							Thread.currentThread().interrupt();
+							validationLog.executionError("Interrupted validating {}", fileName);
+							break;
+						} catch (ExecutionException e) {
+							validationLog.executionError("Problem validating {}", fileName, e);
+						}
 					}
 				}
 			} catch (final IOException e) {
@@ -253,6 +298,56 @@ public class ColumnPatternTester {
 		}
 		return linesTested;
 		
+	}
+
+	/**
+	 * Hands one batch of data lines to the worker pool.
+	 *
+	 * <p>The permit is taken BEFORE submitting and released by the task, so a
+	 * reader that outruns the validators blocks here rather than filling the heap
+	 * with unvalidated lines.
+	 */
+	private Future<?> submitBatch(final List<String> batch, final long firstLineNumber,
+			final List<Field> fields, final int configColumnCount, final Date startTime,
+			final String fileName, final Rf2CoreFileKind coreFileKind,
+			final ExecutorService lineWorkers, final Semaphore batchPermits) {
+		try {
+			batchPermits.acquire();
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			return CompletableFuture.completedFuture(null);
+		}
+		return lineWorkers.submit(() -> {
+			try {
+				validateBatch(batch, firstLineNumber, fields, configColumnCount, startTime, fileName, coreFileKind);
+			} finally {
+				batchPermits.release();
+			}
+		});
+	}
+
+	/**
+	 * Exactly what the sequential loop did to each data line, for a contiguous
+	 * run of them. Line numbers are carried in rather than counted, so a report
+	 * row names the same line it always did regardless of which thread produced
+	 * it.
+	 */
+	private void validateBatch(final List<String> batch, final long firstLineNumber,
+			final List<Field> fields, final int configColumnCount, final Date startTime,
+			final String fileName, final Rf2CoreFileKind coreFileKind) {
+		long lineNumber = firstLineNumber;
+		for (final String line : batch) {
+			final String[] columnData = line.split("\t", -1);
+			if (validateRow(startTime, fileName, line, lineNumber, configColumnCount, columnData.length)) {
+				int columnIndex = 0;
+				for (final Field column : fields) {
+					testDataValue(lineNumber + "-" + columnIndex, lineNumber, columnData[columnIndex],
+							column, startTime, fileName, coreFileKind);
+					columnIndex++;
+				}
+			}
+			lineNumber++;
+		}
 	}
 
 	private boolean havingAdditionalFields(final TableSchema tableSchema) {
