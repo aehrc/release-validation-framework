@@ -210,3 +210,29 @@ never in conversation, which is why it does not feel decided.
   embedded worker, which is the zero-config default. Deploy the split when a
   second concurrent consumer actually exists.
 
+### Both fixes confirmed on a real international run, 2026-09-01
+
+An INT edition (`SnomedCT_InternationalRF2_PRODUCTION_20260801T120000Z`, 556 MB)
+through the MySQL engine with no `includedModules` - i.e. the exact shape the
+gate bug broke. COMPLETE in 360 s, 104 tests, 1 failure, 1 incomplete.
+
+**The module gate.** `component-centric-snapshot-language-valid-moduleid` now
+passes with 0 having taken the *international* arm. What the broken rendering
+did to its *extension* arm on the same run, confirmed directly against
+MySQL 8:
+
+    SELECT 1 WHERE 1 NOT IN ()   ->  ERROR 1064 (42000)
+    SELECT 1 WHERE 'NULL'='NULL' ->  gate open
+
+So pre-fix that assertion did not quietly pass on an international run - it
+died on a syntax error and was reported as `-1`, which is the same sentinel
+IHTSDO#77 is about. Two of our own defects were compounding: the empty
+rendering produced the error, and the `-1` reporting hid it as "not run"
+rather than "broken".
+
+**The schema leak.** After the run reached COMPLETE the per-run schema was
+already gone - only `rvf_master`, `rvf_emptyrf2snapshot` and the two
+deliberately-kept AU previous releases remain. Pre-fix it would have sat there
+until the next run started, which for a nightly is a day, and forever if the
+pod is replaced.
+
