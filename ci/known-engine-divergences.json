@@ -66,11 +66,15 @@
         "IHTSDO #74). Before that change the cursor never saw it."
       ],
       "notThePlan": [
-        "This is recorded so the gate is usable, NOT because the behaviour is right.",
-        "MySQL abandoning the assertion means it validates nothing on an AU release,",
-        "and the fix belongs in the assertions corpus: the cursor should skip tables",
-        "with no id column. Raised as a finding against IHTSDO #74, which is what",
-        "surfaces it."
+        "FIXED, pending the corpus change landing. IHTSDO/snomed-release-validation-assertions#6",
+        "adds an exists clause on information_schema.columns so the cursor yields only",
+        "tables the procedure can query. Verified against the AU edition: MySQL then",
+        "executes cleanly with 0 findings, agreeing exactly with DuckDB's 0, and",
+        "identifier_d is the only table filtered out.",
+        "",
+        "This entry stays only until that PR merges and the corpus this repo pins moves",
+        "past it. At that point it belongs in removedAllowances - the gate should start",
+        "failing if the divergence reappears."
       ],
       "slug": "mysql-errors-on-identifier-having-no-id-column",
       "directionNote": "MySQL -1 against DuckDB 0, so the tool reads it as candidate-higher. The arithmetic is on the sentinel, not on findings: MySQL abandoned the assertion and DuckDB executed it and found nothing.",
@@ -118,5 +122,12 @@
     "allowUncovered": 0,
     "categories": {}
   },
-  "removedAllowances": []
+  "removedAllowances": [
+    {
+      "pending": "02cf4438-170e-4b6b-b5da-624ef730a8e0",
+      "fixedBy": "IHTSDO/snomed-release-validation-assertions#6",
+      "moveWhen": "the pinned assertion corpus includes that commit",
+      "evidence": "MySQL executes the assertion cleanly with 0 findings, matching DuckDB"
+    }
+  ]
 }
