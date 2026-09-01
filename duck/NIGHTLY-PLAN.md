@@ -225,3 +225,51 @@ pipeline run.
 * **No caching of the prospective release.** Different every night.
 * **No cache without a fingerprint.** Column drift is real and silent.
 * **No archiving of `results.json`.** It is what the links resolve through.
+
+## Outcome, 2026-09-01
+
+| phase | status |
+|---|---|
+| 1 Retention | **done** - `failures.parquet` beside every report, job-store reaper at 7 days |
+| 2 Release store | **done** - `GET /releases` engine-agnostic, releases kept by filename |
+| 3 Cache | **done** - `DuckReleaseCache`, previous/dependency only, off by default |
+| 4 Measure on AKS | **open, and only doable there** - see below |
+
+Cumulative on the same AU edition and request: **339s -> 224s**, findings
+identical at every step.
+
+* Structural single-pass work: 339s -> 257s (1.32x), 149 tests / 13 failures /
+  1 incomplete unchanged, 0 assertions differing.
+* Release cache: the previous-release step 21,378ms -> 34ms. End-to-end 235s ->
+  224s, but structural-phase variance was +11s between the same two runs, so the
+  end-to-end figure is one sample, not a measurement.
+
+### Phase 4 cannot be done on this host
+
+Node-local versus shared-mount cache is a question about SMB throughput against
+local NVMe, and there is no Azure Files mount here - `shared-jobs/` is local disk
+wearing the name. Measuring it here would produce a number that means nothing.
+What is settled and does transfer:
+
+* A cached file is 1.57GB per edition; the budget is `rvf.duck.cache.max-gb`.
+* Concurrency is safe either way: many readers OR one writer, verified, with
+  publication by atomic rename.
+* Eviction of an attached file is safe on POSIX; the inode outlives the unlink.
+
+So the default stays node-local, and Phase 4 runs when there is a cluster.
+
+### What the measurements say to do next, in value order
+
+1. **Structural testing is still ~49% of the run** (127s of 257s). PR #27
+   (line-splitting across cores, a further 1.38x) was declined upstream because
+   it costs real concurrency machinery for a modest gain. On our nightly, where
+   structural is half the wall clock, that trade is better than it was for SI.
+2. **MySQL leaks per-run schemas.** Four abandoned schemas held 41GB and a run
+   died with "No space left on device" mid-measurement. `dropSchema` exists;
+   something is not calling it on the failure path. Costs nothing to fix and
+   prevents an outage.
+3. **The cache earns more with a dependency edition than a previous one.** An
+   extension nightly attaches the same International edition every night for a
+   month, shared across every extension - a strictly better hit rate than
+   `previous`, which changes with each release. Untested here because these runs
+   had no dependency release.
