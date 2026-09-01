@@ -64,16 +64,17 @@ public class MysqlValidationService implements SqlAssertionValidationService {
 	}
 
 	public ValidationStatusReport runRF2MysqlValidations(ValidationRunConfig validationConfig, ValidationStatusReport statusReport) throws BusinessServiceException, ExecutionException, InterruptedException {
-		// Clean up the prospective databases if any
-		for (String legacyVersion : this.schemasToRemove) {
-			this.releaseDataManager.dropSchema(legacyVersion);
-		}
-		this.schemasToRemove.clear();
+		// A safety net, not the cleanup. Anything still listed here belongs to a
+		// run in THIS process that did not reach its own finally block.
+		dropRegisteredSchemas();
 		this.releaseDataManager.truncateQAResult();
 
 		MysqlExecutionConfig executionConfig = releaseVersionLoader.createExecutionConfig(validationConfig);
 		String reportStorage = validationConfig.getStorageLocation();
 		String lastItemLoadAttempted = "Item Unknown";
+		// Outer try: whatever happens, this run drops the schemas it created,
+		// AFTER the assertions have run against them.
+		try {
 		try {
 			// prepare release data for testing
 			lastItemLoadAttempted = "Previous Release - " + executionConfig.getPreviousVersion();
@@ -96,8 +97,6 @@ public class MysqlValidationService implements SqlAssertionValidationService {
 			releaseVersionLoader.loadProspectiveVersion(validationConfig.getLocalProspectiveFile(), statusReport, executionConfig, validationConfig.getStorageLocation());
 			if (releaseVersionLoader.isUnknownVersion(executionConfig.getProspectiveVersion())) {
 				statusReport.addFailureMessage("Failed to load prospective release " + executionConfig.getProspectiveVersion());
-			} else  {
-				schemasToRemove.add(executionConfig.getProspectiveVersion());
 			}
 		} catch (Exception e) {
 			String errorMsg = String.format("Failed to load data (%s) into MySql", lastItemLoadAttempted);
@@ -106,6 +105,22 @@ public class MysqlValidationService implements SqlAssertionValidationService {
 			statusReport.addFailureMessage(errorMsgWithCause);
 			statusReport.getReportSummary().put(TestType.SQL.name(), errorMsgWithCause);
 			return statusReport;
+		} finally {
+			// NOTE the nesting: this finally wraps the LOADS ONLY, and exists just
+			// to register what the loads created. The schemas are dropped by the
+			// outer finally, after the assertions have run against them.
+			//
+			// The prospective schema is per-run - its name carries the execution
+			// id - so nothing will ever come back for it. Registered HERE rather
+			// than after a successful load, because a load that fails part way has
+			// still created it: that is how four abandoned schemas came to hold
+			// 41GB, and how a later run died with "No space left on device".
+			//
+			// ValidationVersionLoader.loadProspectiveVersion sets the name before
+			// it loads anything, so this is populated on the failure path too.
+			if (executionConfig.getProspectiveVersion() != null) {
+				schemasToRemove.add(executionConfig.getProspectiveVersion());
+			}
 		}
 		if (executionConfig.isExtensionValidation() && !executionConfig.isReleaseAsAnEdition()) {
 			LOGGER.info("Run extension release validation with config {}", executionConfig);
@@ -115,6 +130,31 @@ public class MysqlValidationService implements SqlAssertionValidationService {
 			runAssertionTests(statusReport, executionConfig, reportStorage);
 		}
 		return statusReport;
+		} finally {
+			// Dropped at the END of the run that made them, not at the start of
+			// whichever run happens to come next. The previous arrangement left a
+			// full edition on disk - 9 to 13GB - for as long as the instance sat
+			// idle, which for a nightly is all day, and forever if the process was
+			// replaced in between.
+			dropRegisteredSchemas();
+		}
+	}
+
+	/**
+	 * Drops every schema registered by the current run and forgets them.
+	 *
+	 * <p>Best effort per schema: one that cannot be dropped must not stop the
+	 * others, or a single stuck schema keeps the whole set on disk.
+	 */
+	private void dropRegisteredSchemas() {
+		for (String schema : new HashSet<>(this.schemasToRemove)) {
+			try {
+				this.releaseDataManager.dropSchema(schema);
+			} catch (Exception e) {
+				LOGGER.warn("Could not drop schema {}: {}", schema, e.toString());
+			}
+		}
+		this.schemasToRemove.clear();
 	}
 
 
