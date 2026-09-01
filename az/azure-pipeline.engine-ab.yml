@@ -154,6 +154,31 @@ stages:
                 fi
                 ci/engine_ab_stack.sh "${ARGS[@]}"
 
+
+          - task: Bash@3
+            displayName: 'Build the container image (jib, no daemon)'
+            condition: succeeded()
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                # jib needs no Docker daemon, which is why this works on the
+                # k8s agent pool. buildTar keeps the image local; publishing is
+                # a separate, deliberate step.
+                mvn -B -ntp jib:buildTar -DskipTests \
+                    -Djib.from.platforms=linux/amd64 \
+                    -Ddocker.registry=ontoserver.azurecr.io \
+                    -Ddocker.image.prefix=aehrc-rvf \
+                    -Ddocker.image.tag=$(Build.SourceVersion)
+                ls -la target/jib-image.tar
+
+          - task: PublishPipelineArtifact@1
+            displayName: 'Publish the image tarball'
+            condition: succeeded()
+            inputs:
+              targetPath: 'target/jib-image.tar'
+              artifact: 'rvf-image'
+
           - task: PublishTestResults@2
             displayName: 'Publish the comparison as test results'
             condition: always()
