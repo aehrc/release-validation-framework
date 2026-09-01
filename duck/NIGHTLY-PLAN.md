@@ -273,3 +273,67 @@ So the default stays node-local, and Phase 4 runs when there is a cluster.
    month, shared across every extension - a strictly better hit rate than
    `previous`, which changes with each release. Untested here because these runs
    had no dependency release.
+
+## Scope decided, 2026-09-01
+
+**The nightly runs everything, against a deployed DuckDB RVF with workers doing
+the assertion execution:** our assertions, SI's assertions, MRCM and Drools.
+
+### This needs no code change
+
+`ValidationRunner` submits three independent tasks to one executor:
+
+    SQL Assertions   -> SqlAssertionValidationService  (the engine seam)
+    Drools           -> if validationConfig.isEnableDrools()
+    MRCM Validation  -> if validationConfig.isEnableMRCMValidation()
+
+Only the first goes through the engine seam. **Drools and MRCM are gated on
+request flags, not on engine**, and read the extracted RF2 files directly, so
+they behave identically under `rvf.execution.engine=duckdb`. So the nightly is
+one request with `enableDrools=true`, `enableMRCMValidation=true` and the union
+of assertion groups.
+
+Note in passing: `testTypeFailuresCount` records `-1` for Drools and MRCM when
+they are *not requested* (ValidationRunner:266-267). So `-1` already carries a
+third meaning - "not asked for", alongside "not executed" and, until today's
+fix, "died on a SQL error". More weight than one sentinel should carry, and
+another argument for IHTSDO#77.
+
+### The one real constraint: the store must cover both corpora
+
+The DuckDB engine reads a **precompiled store**, and the bundled
+`src/main/resources/duck/store.json` is built from ONE corpus - currently
+IHTSDO's, 360 assertions / 819 statements, verified by
+`BundledStoreMatchesCorpusTest`.
+
+aehrc's own AU assertions are not in it. They are delivered separately, as the
+~200 scripts in the `rvf-k8s-job-helm-chart` the ADO nightly pulls. So running
+"ours and SI's" requires a store published from the **union**:
+
+    publish_store.py --manifest-root <corpus with both sets> --out store.json
+
+`rvf.duck.store=/path/to/store.json` overrides the bundled one, so this needs
+no rebuild of the artefact to try.
+
+**Unverified, and it decides how much work this is:** whether aehrc's ~200
+scripts are additional to IHTSDO's 360 or an overlapping subset, and whether
+any assertion UUID collides. Comparing the chart's script names against the
+corpus manifest answers it in minutes, but needs the chart - which needs ADO
+access. Until then the size of this task is unknown, and it is the only part
+of the decided scope that is not already proven.
+
+### Cost of the decided scope
+
+Measured separately on the AU edition, 8 cores:
+
+| component | wall |
+|---|---|
+| SQL assertions, DuckDB | ~160-208 s |
+| structural testing | 29-33 s (inside the above) |
+| Drools, module-scoped | 674 s, 5,129 findings |
+| MRCM | one further pass |
+
+The three run concurrently, so the nightly is bounded by the slowest -
+**Drools at ~674 s**, not the SQL engine. Worth knowing before optimising SQL
+any further: on the decided scope, the assertion engine is no longer the long
+pole.
