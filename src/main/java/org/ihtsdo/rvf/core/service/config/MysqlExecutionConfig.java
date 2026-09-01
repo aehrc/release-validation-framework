@@ -2,6 +2,7 @@ package org.ihtsdo.rvf.core.service.config;
 
 import java.io.File;
 import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -14,7 +15,21 @@ public class MysqlExecutionConfig {
 	private List<String> groupNames;
 	private List<String> assertionExclusionList;
 	private String defaultModuleId;
-	private List<String> includedModules;
+	/**
+	 * Never null.
+	 *
+	 * <p>{@code MySqlQueryTransformer} joins this into every statement it
+	 * transforms and does not guard it, and the constructors are used directly by
+	 * the single-assertion and single-group execution endpoints - which never call
+	 * the setter. The result was that {@code POST /assertions/{id}/run} answered
+	 * with failureCount -1 and "NullPointerException: ... getIncludedModules() is
+	 * null" for every assertion, in MySQL mode, which is the only mode that
+	 * endpoint exists in.
+	 *
+	 * <p>Empty rather than null is also what every reader already means: each one
+	 * tests {@code CollectionUtils.isEmpty} before using it.
+	 */
+	private List<String> includedModules = new ArrayList<>();
 	private List<String> excludedRF2Files;
 	private int failureExportMax = 10;
 	private boolean firstTimeRelease;
@@ -91,7 +106,9 @@ public class MysqlExecutionConfig {
 	}
 
 	public void setIncludedModules(List<String> includedModules) {
-		this.includedModules = includedModules;
+		// Null-tolerant for the same reason the field is initialised: callers pass
+		// whatever the request carried, and the transformer cannot survive a null.
+		this.includedModules = includedModules == null ? new ArrayList<>() : includedModules;
 	}
 
 	public Long getExecutionId() {
