@@ -99,7 +99,7 @@ public final class DuckValidationProbe {
 				"qa_result",
 				// Sizing knobs, so one JVM invocation is one benchmark point.
 				Integer.getInteger("probe.threads", 0),
-				System.getProperty("probe.memory", ""));
+				System.getProperty("probe.memory", ""), false);
 
 		long t0 = System.currentTimeMillis();
 		ValidationStatusReport status = service.runValidations(config,

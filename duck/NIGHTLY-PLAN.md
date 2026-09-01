@@ -1,0 +1,195 @@
+# Nightly validation: keeping previous releases, and what to keep afterwards
+
+Plan of record, 2026-09-01. Every number here was measured on `dmc` (8 cores,
+DuckDB engine, real AU edition: 45.3M rows, 66 tables, 853MB zip).
+
+## What we are building towards
+
+A nightly job that exports a prospective release from Snowstorm and validates it
+against the last published release. For AMT that is not done today because it is
+too costly. Two separate cost problems, and only one of them is still open:
+
+* **Run cost** - already solved by the DuckDB engine. A full AU edition takes
+  **208s** end to end versus **1,215s** on MySQL 8.4.6 on the same 8 cores, and
+  leaves no 9-13GB schema behind.
+* **Repeated work** - still open. The previous release is materialised from
+  scratch every single night, and for a month of nightlies it is the *same*
+  release every time.
+
+## Measured facts the plan rests on
+
+| | value |
+|---|---|
+| materialise a full edition | **28.1s**, 45.3M rows, 66 tables |
+| resulting `.duckdb` file | **1.57 GB** |
+| source RF2 zip | 853 MB |
+| a nightly materialises prospective + previous | **~56s** of a ~208s run |
+| `results.json` per run | 37.1 KB |
+| uploaded release retained per run | 853 MB |
+| full failure detail, 1M rows, parquet+zstd | **20.8 MB**, written in 221ms |
+| same as CSV | 177.3 MB |
+
+Two behaviours of DuckDB that constrain the design, both tested here rather than
+assumed:
+
+1. **Many readers OR one writer, never both.** Three processes opened one file
+   read-only simultaneously and all succeeded. While any process holds a file
+   read-write, every other process is refused - *including read-only openers*:
+   `IO Error: Could not set lock on file ...: Conflicting lock is held`.
+2. **`ATTACH` satisfies the store's compiled literal, but only with the right
+   internal layout.** The store's sentinels resolve `<PREVIOUS>` to the bare
+   literal `previous`, so:
+
+   ```
+   cached file with tables in schema "previous"  ->  previous.concept_s        FAILS
+                                                     previous.previous.concept_s   OK
+   cached file with tables in schema "main"      ->  previous.concept_s        OK
+   ```
+
+   A cached release MUST therefore hold its tables in the default `main` schema.
+   Then `ATTACH '<file>' AS previous (READ_ONLY)` works with no change to
+   `DuckStore` or `DuckBinder`. Getting this wrong means patching sentinels.
+
+## Decisions
+
+### Keep the zips as the system of record; cache the materialised file as derived
+
+The zip is required regardless - provenance, re-runs, and RVF's own
+`previousRelease` resolution already reads a release **by filename** from release
+storage (the path fixed in `d34ffb81`). So the release store is the truth and the
+`.duckdb` cache is an evictable derivative. Never the other way round: a 1.57GB
+file that cannot be re-derived is a liability.
+
+### Cache the previous AND dependency editions, not the prospective
+
+Hit rate is what makes this worth building:
+
+* **previous** - changes monthly for AMT, so ~30 hits per rebuild.
+* **dependency** - the International edition an extension is built against; the
+  same file every night for a month, shared across *every* extension run.
+* **prospective** - different every night by definition. Never cache it.
+
+At 28.1s saved per hit, a month of AMT nightlies saves ~14 minutes of compute.
+That is not the headline; the headline is that it removes the only remaining
+piece of per-run rework, and it makes a same-day re-run nearly free.
+
+### The cache key must include a store fingerprint
+
+The materialiser loads some tables **positionally** where the shipped columns
+disagree with the declared ones - observed live on this edition:
+
+```
+extendedassociation_d is declared as [... targetcomponentid, value]
+                but its file has [... targetadministeredform, targetmanufacturedform]
+                - loading positionally, as MySQL does
+attributevaluemap_d  ... - loading positionally, as MySQL does
+identifier_d ships its columns as [alternateidentifier, ...] - loading by name, not position
+```
+
+So a cached file is only valid for the `tableColumns` map that produced it.
+Key on `{releaseFilename}-{sha256(store.tableColumns)[:12]}.duckdb` and a store
+change simply misses instead of silently mis-loading.
+
+### Node-local by default, and prove it before defaulting otherwise
+
+Whether the cache should live on the shared Azure Files mount or on node-local
+disk is an open measurement, not a preference: reading 1.57GB over SMB may lose
+to materialising from a 853MB zip on local NVMe. Default the cache directory to
+node-local (as `rvf.duck.work.directory` already is), make it configurable, and
+settle it with a measurement on AKS.
+
+### Retention: what to keep, and for how long
+
+The question was open; this is the answer we go with unless measurement says
+otherwise.
+
+| artefact | size/run | policy |
+|---|---|---|
+| `results.json` | 37 KB | **keep indefinitely.** The dashboard and CI links resolve through it; tiering it 404s them. 1,000 runs is 37 MB. |
+| `qa_result` full detail | ~21 MB per 1M failures | **new** - export to parquet+zstd before the run file is deleted. Tier to cool at 30 days, archive at 90. |
+| uploaded release zip | **853 MB** | **delete after N days, default 7.** This is the real growth: ~25 GB/month at one nightly. Re-fetchable from release storage. |
+| previous/dependency releases | 853 MB each | keep indefinitely - this is the point of the exercise. |
+| materialised cache | 1.57 GB each | evictable, LRU by total size, node-local. |
+| per-run `.duckdb` | 1.57 GB | already deleted, including `.wal` and `.tmp`. |
+
+**Why parquet rather than raising `failureExportMax`:** `results.json` is parsed
+*in the browser* by Release-Dashboard-UI, so inflating it degrades the viewer.
+Parquet is 8.5x smaller than CSV, and DuckDB queries it directly months later -
+verified with `read_parquet()`.
+
+**What is lost today, and this fixes:** only `failureCount` plus the first
+`failureExportMax` (default **10**) instances survive a run. "40,000 concepts
+failed, here are 10" is answerable; "which 40,000" is not. Note this is not a
+DuckDB regression - MySQL discards the same detail, because `qa_result` lives in
+`rvf_master` and `ddl-auto=create` wipes it on the next boot.
+
+## Phases
+
+Each phase stands alone and is independently verifiable. No phase depends on a
+later one.
+
+### Phase 1 - Retention and the failure archive
+
+1. Export `qa_result` to `{storageLocation}/rvf/failures.parquet` immediately
+   before the run database is deleted, in `DuckDbValidationService`.
+2. Add a job-store reaper: delete `files_to_validate/` contents older than
+   `rvf.validation.job.retention.days` (default 7), leaving `rvf/` intact.
+3. Property to disable both, because a deployment that wants today's behaviour
+   must be able to keep it.
+
+**Acceptance:** a completed run leaves `results.json` plus `failures.parquet`;
+the parquet is readable by `read_parquet()` and its row count equals the sum of
+`failureCount` before whitelisting; a run older than the window loses its
+uploaded zip and keeps its report.
+
+### Phase 2 - A release store addressable by name
+
+1. Releases the instance has been given are kept under
+   `rvf.release.storage.local.path` (already exists, already used by the
+   full-scope run) keyed by filename.
+2. Make `GET /releases` engine-agnostic: list the release store rather than
+   MySQL schema names. Today it is `@ConditionalOnMysqlEngine` and reports an
+   in-memory `Set<String>` of schema names.
+3. `previousRelease` and `dependencyRelease` continue to resolve by filename -
+   no change needed, this already works.
+
+**Acceptance:** with two editions in the store, `GET /releases` lists both in
+DuckDB mode; a nightly naming one of them as `previousRelease` completes and
+produces release-type findings rather than 53 `-1` not-executed sentinels.
+
+### Phase 3 - The materialised cache
+
+1. `DuckReleaseCache`: `get(releaseFile, storeFingerprint)` returns a path,
+   materialising into `main` on a miss.
+2. Build to `{key}.tmp` then atomic rename, so a concurrent reader never sees a
+   partial file - required by the single-writer lock.
+3. `ATTACH '<cached>' AS previous (READ_ONLY)` / `AS dependency (READ_ONLY)`
+   instead of materialising into the run file.
+4. LRU eviction on total bytes, `rvf.duck.cache.max-gb`, default off (0 = no
+   cache, today's behaviour).
+
+**Acceptance - the one that matters:** the same validation run cold and cached
+produces **byte-identical findings**. Then, and only then, the timing: expect
+~28s off a ~208s run per cached edition.
+
+### Phase 4 - Measure on the target infrastructure
+
+Cache on node-local disk versus on the shared mount versus no cache, on AKS,
+same release. Decide the default from the result. If the shared mount wins, the
+cache can be built once and shared by every worker - which the read-only lock
+behaviour permits.
+
+### Later, unlocked by Phase 2
+
+`POST /assertions/{id}/run` on DuckDB. It needs "a release addressable by name",
+which is exactly what Phase 2 provides, and it is the one genuinely useful
+endpoint still MySQL-only. Lets a rule author test one assertion without a full
+pipeline run.
+
+## What this plan deliberately does not do
+
+* **No shared writable DuckDB.** Tested: a writer locks out every other process
+  including readers. The cache is read-only files, one writer at build time.
+* **No caching of the prospective release.** Different every night.
+* **No cache without a fingerprint.** Column drift is real and silent.
+* **No archiving of `results.json`.** It is what the links resolve through.

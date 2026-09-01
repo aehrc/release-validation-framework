@@ -42,6 +42,7 @@ public class ValidationReportService {
 	private String resultsFilePath;
 	private String progressFilePath;
 	private String structureTestReportPath;
+	private String failureArchivePath;
 	private Gson prettyGson;
 	private ResourceManager resourceManager;
 	
@@ -56,6 +57,7 @@ public class ValidationReportService {
 		resultsFilePath = rvfRoot + "results.json";
 		progressFilePath = rvfRoot + "progress.txt";
 		structureTestReportPath = rvfRoot + "structure_validation.txt";
+		failureArchivePath = rvfRoot + "failures.parquet";
 		prettyGson = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
 		resourceManager = new ResourceManager(jobResourceConfig, cloudResourceLoader);
 	}
@@ -181,6 +183,31 @@ public class ValidationReportService {
 		resourceManager.writeResource(reportStorage + structureTestReportPath, new FileInputStream(file));
 	}
 	
+	/**
+	 * Stores the run's full failure detail beside its report.
+	 *
+	 * <p>{@code results.json} keeps only {@code failureCount} plus the first
+	 * {@code failureExportMax} instances - 10 by default - so "40,000 concepts
+	 * failed" is answerable afterwards and "which 40,000" is not. The rows exist
+	 * during the run, in the engine's {@code qa_result}, and are then thrown away
+	 * with the run database.
+	 *
+	 * <p>Parquet rather than a bigger {@code results.json}, because that file is
+	 * parsed IN THE BROWSER by Release-Dashboard-UI. Measured on a million
+	 * qa_result rows: 20.8MB as parquet+zstd against 177.3MB as CSV, and DuckDB
+	 * reads it back months later with {@code read_parquet()} without loading it
+	 * anywhere.
+	 */
+	public void writeFailureArchive(String reportStorage, File file) throws IOException {
+		try (InputStream in = new FileInputStream(file)) {
+			resourceManager.writeResource(reportStorage + failureArchivePath, in);
+		}
+	}
+
+	public InputStream getFailureArchive(String storageLocation) throws IOException {
+		return resourceManager.readResourceStreamOrNullIfNotExists(storageLocation + failureArchivePath);
+	}
+
 	public InputStream getStructureReport( Long runId, String storageLocation) throws IOException {
 			return resourceManager.readResourceStreamOrNullIfNotExists(storageLocation + structureTestReportPath);
 	}

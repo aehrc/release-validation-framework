@@ -159,6 +159,7 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 	private final String qaResultTable;
 	private final int duckThreads;
 	private final String duckMemoryLimit;
+	private final boolean archiveFailures;
 
 	public DuckDbValidationService(ValidationReportService reportService,
 			WhitelistService whitelistService,
@@ -168,7 +169,8 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 			@Value("${rvf.duck.work.directory:${java.io.tmpdir}}") String workDirectory,
 			@Value("${rvf.qa.result.table.name:qa_result}") String qaResultTableName,
 			@Value("${rvf.duck.threads:0}") int duckThreads,
-			@Value("${rvf.duck.memory.limit:}") String duckMemoryLimit) {
+			@Value("${rvf.duck.memory.limit:}") String duckMemoryLimit,
+			@Value("${rvf.duck.archive.failures:true}") boolean archiveFailures) {
 		this.reportService = reportService;
 		this.whitelistService = whitelistService;
 		this.acquisitionService = acquisitionService;
@@ -178,6 +180,7 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 		this.qaResultTable = QA_RESULT_SCHEMA + "." + qaResultTableName;
 		this.duckThreads = duckThreads;
 		this.duckMemoryLimit = duckMemoryLimit;
+		this.archiveFailures = archiveFailures;
 	}
 
 	/**
@@ -486,6 +489,7 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 		constructTestReport(statusReport, executionConfig, timeStart, items,
 				new DuckFailuresExtractor(connection, qaResultTable, whitelistService,
 						source::findAll));
+		archiveFailures(connection, reportStorage);
 		return statusReport;
 	}
 
@@ -927,6 +931,51 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 					+ "id BIGINT, run_id BIGINT, assertion_id VARCHAR, concept_id BIGINT, "
 					+ "details VARCHAR, component_id VARCHAR, table_name VARCHAR, "
 					+ "skip_module_check BOOLEAN)");
+		}
+	}
+
+	/**
+	 * Writes the run's FULL failure detail beside its report, before the run
+	 * database - and every row in it - is deleted.
+	 *
+	 * <p>Why this is not simply a larger {@code results.json}: that file keeps
+	 * {@code failureCount} plus the first {@code failureExportMax} instances, 10
+	 * by default, and it is parsed in the browser by Release-Dashboard-UI. So the
+	 * counts are durable and the rows behind them are not - "40,000 concepts
+	 * failed" survives a run and "which 40,000" does not. Note this is not a
+	 * DuckDB regression: MySQL loses the same rows, because its {@code qa_result}
+	 * lives in {@code rvf_master} and {@code ddl-auto=create} drops it on the next
+	 * boot.
+	 *
+	 * <p>Parquet+zstd because it is cheap enough not to need a policy decision -
+	 * measured at 20.8MB per million rows against 177.3MB as CSV - and because
+	 * DuckDB reads it back directly with {@code read_parquet()} without loading it
+	 * into anything.
+	 *
+	 * <p>Best-effort by design. A validation that ran and reported is not failed
+	 * by an archive that could not be written; the report is the deliverable and
+	 * this is a convenience beside it.
+	 */
+	private void archiveFailures(Connection connection, String reportStorage) {
+		if (!archiveFailures) {
+			return;
+		}
+		Path parquet = Path.of(workDirectory, "rvf_failures_" + System.nanoTime() + ".parquet");
+		try {
+			try (Statement st = connection.createStatement()) {
+				// COPY writes to the server's filesystem, which for an embedded
+				// engine is ours, so this lands locally and is then handed to the
+				// job store - the same route the structure report takes.
+				st.execute("COPY (SELECT * FROM " + qaResultTable + ") TO '" + parquet
+						+ "' (FORMAT PARQUET, COMPRESSION ZSTD)");
+			}
+			reportService.writeFailureArchive(reportStorage, parquet.toFile());
+			LOGGER.info("Archived failure detail to {}failures.parquet ({} KB)", reportStorage,
+					Files.size(parquet) / 1024);
+		} catch (Exception e) {
+			LOGGER.warn("Could not archive failure detail for {}: {}", reportStorage, e.toString());
+		} finally {
+			FileUtils.deleteQuietly(parquet.toFile());
 		}
 	}
 
