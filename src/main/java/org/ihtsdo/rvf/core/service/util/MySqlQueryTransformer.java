@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import org.springframework.util.CollectionUtils;
 
 public class MySqlQueryTransformer {
     private final Logger logger = LoggerFactory.getLogger(MySqlQueryTransformer.class);
@@ -50,7 +51,8 @@ public class MySqlQueryTransformer {
 
         final String[] nameParts = config.getProspectiveVersion().split("_");
         String version = (nameParts.length >= 3 ? nameParts[2] : "NOT_SUPPLIED");
-        String includedModules = config.getIncludedModules().stream().collect(Collectors.joining(","));
+        String includedModules = CollectionUtils.isEmpty(config.getIncludedModules())
+                ? "NULL" : String.join(",", config.getIncludedModules());
         String defaultModuleId = StringUtils.hasLength(config.getDefaultModuleId()) ? config.getDefaultModuleId() : RF2Constants.SCTID_CORE_MODULE;
         for( String part : parts) {
             if ((part.contains("<PREVIOUS>") && previousReleaseSchema == null)
@@ -72,6 +74,14 @@ public class MySqlQueryTransformer {
             // has zero uses in either corpus while <INCLUDED_MODULES> has three
             // in IHTSDO's, so the rename is the live name; <MODULEIDS> is kept
             // only because removing it is a separate cleanup with its own risk.
+            //
+            // An empty module set MUST render as the literal NULL, not as the
+            // empty string. The three assertions using it branch on
+            // `'NULL' = '<INCLUDED_MODULES>'` to mean "this is an international
+            // run", so the empty string turns that gate permanently false and
+            // the assertion passes without validating anything. DuckBinder
+            // already does this; extracting this class from
+            // AssertionExecutionService dropped it.
             part = part.replaceAll("<MODULEIDS>", includedModules);
             part = part.replaceAll("<INCLUDED_MODULES>", includedModules);
             // Added by IHTSDO after this fork diverged; used by one assertion in

@@ -168,4 +168,70 @@ public class MySqlQueryTransformerTest {
 
     }
 
+    /**
+     * An empty module set must render as the literal {@code NULL}.
+     *
+     * <p>Three assertions in IHTSDO's corpus branch on
+     * {@code 'NULL' = '<INCLUDED_MODULES>'} to mean "this is an international
+     * run" - that is the whole gate on
+     * component-centric-delta-metadata-only-in-model-module and
+     * file-centric-snapshot-simple-map-module-id, and one arm of
+     * component-centric-snapshot-language-valid-moduleid. Rendering the empty
+     * string instead makes the gate permanently false, so all three pass
+     * without validating anything on exactly the releases they exist for.
+     *
+     * <p>Uses a real config rather than the mock in this class's other tests:
+     * Mockito answers a {@code List} getter with an empty list, so a mock
+     * cannot tell the two renderings apart.
+     */
+    @Test
+    public void anInternationalRunRendersModulesAsNull() throws ConfigurationException {
+        MySqlQueryTransformer queryTransformer = new MySqlQueryTransformer();
+        MysqlExecutionConfig realConfig = new MysqlExecutionConfig(1L);
+        realConfig.setProspectiveVersion("rvf_int_20260731_1788232124359");
+
+        List<String> result = queryTransformer.transformSql(
+                List.of("select 1 where 'NULL' = '<INCLUDED_MODULES>'"),
+                realConfig, Map.of("qa_result", "qa_result", "<ASSERTIONUUID>", "xyz"));
+
+        assertEquals("select 1 where 'NULL' = 'NULL'", result.get(0),
+                "the international gate must be satisfied when no modules are set");
+    }
+
+    @Test
+    public void anExtensionRunRendersTheModulesThemselves() throws ConfigurationException {
+        MySqlQueryTransformer queryTransformer = new MySqlQueryTransformer();
+        MysqlExecutionConfig realConfig = new MysqlExecutionConfig(1L);
+        realConfig.setProspectiveVersion("rvf_au_20260831_1788232124359");
+        realConfig.setIncludedModules(List.of("32506021000036107", "161771000036108"));
+
+        List<String> result = queryTransformer.transformSql(
+                List.of("select 1 where moduleid not in (<INCLUDED_MODULES>)"),
+                realConfig, Map.of("qa_result", "qa_result", "<ASSERTIONUUID>", "xyz"));
+
+        assertEquals("select 1 where moduleid not in (32506021000036107,161771000036108)",
+                result.get(0));
+    }
+
+    /**
+     * The same run must not satisfy the international gate.
+     *
+     * <p>Pins the pair: with modules set the gate is false, without them it is
+     * true. A single-sided test would pass against a transformer that always
+     * emitted {@code NULL}.
+     */
+    @Test
+    public void anExtensionRunDoesNotSatisfyTheInternationalGate() throws ConfigurationException {
+        MySqlQueryTransformer queryTransformer = new MySqlQueryTransformer();
+        MysqlExecutionConfig realConfig = new MysqlExecutionConfig(1L);
+        realConfig.setProspectiveVersion("rvf_au_20260831_1788232124359");
+        realConfig.setIncludedModules(List.of("32506021000036107"));
+
+        List<String> result = queryTransformer.transformSql(
+                List.of("select 1 where 'NULL' = '<INCLUDED_MODULES>'"),
+                realConfig, Map.of("qa_result", "qa_result", "<ASSERTIONUUID>", "xyz"));
+
+        assertEquals("select 1 where 'NULL' = '32506021000036107'", result.get(0));
+    }
+
 }
