@@ -298,7 +298,7 @@ class DuckDbValidationServiceTest {
 		return new DuckDbValidationService(reportService, whitelistService,
 				new ReleaseAcquisitionService(),
 				new DuckStoreLocator(storeFile.toString(), corpus.toString()),
-				corpus.toString(), work.toString(), "qa_result", 0, "", false);
+				corpus.toString(), work.toString(), "qa_result", 0, "", false, "", 0);
 	}
 
 	private static MysqlExecutionConfig executionConfig(long runId) {

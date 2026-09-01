@@ -160,6 +160,7 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 	private final int duckThreads;
 	private final String duckMemoryLimit;
 	private final boolean archiveFailures;
+	private final DuckReleaseCache releaseCache;
 
 	public DuckDbValidationService(ValidationReportService reportService,
 			WhitelistService whitelistService,
@@ -170,7 +171,9 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 			@Value("${rvf.qa.result.table.name:qa_result}") String qaResultTableName,
 			@Value("${rvf.duck.threads:0}") int duckThreads,
 			@Value("${rvf.duck.memory.limit:}") String duckMemoryLimit,
-			@Value("${rvf.duck.archive.failures:true}") boolean archiveFailures) {
+			@Value("${rvf.duck.archive.failures:true}") boolean archiveFailures,
+			@Value("${rvf.duck.cache.directory:}") String cacheDirectory,
+			@Value("${rvf.duck.cache.max-gb:0}") double cacheMaxGb) {
 		this.reportService = reportService;
 		this.whitelistService = whitelistService;
 		this.acquisitionService = acquisitionService;
@@ -181,6 +184,14 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 		this.duckThreads = duckThreads;
 		this.duckMemoryLimit = duckMemoryLimit;
 		this.archiveFailures = archiveFailures;
+		// Default off. A cache that appeared without being asked for would change
+		// the disk footprint of an existing deployment by gigabytes.
+		Path cacheDir = Path.of(cacheDirectory == null || cacheDirectory.isBlank()
+				? workDirectory + "/release-cache" : cacheDirectory);
+		this.releaseCache = new DuckReleaseCache(cacheDir, (long) (cacheMaxGb * 1073741824L));
+		if (this.releaseCache.isEnabled()) {
+			LOGGER.info("Release cache enabled: {} with a {} GB budget", cacheDir, cacheMaxGb);
+		}
 	}
 
 	/**
@@ -895,8 +906,28 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 		}
 	}
 
+	/**
+	 * Puts a release into the run database, from the cache where that is allowed.
+	 *
+	 * <p>Only {@code previous} and {@code dependency} are cacheable, and the
+	 * restriction is not conservatism: they are the only schemas nothing writes
+	 * to. Every assertion phase runs against {@code prospective} or
+	 * {@code combined} - see the resource-assertion note on {@link Selection} for
+	 * why the intermediate tables are rebuilt per phase schema - so a read-only
+	 * attachment of either of those would fail on the first resource assertion.
+	 * The prospective release is also different every run, so there would be
+	 * nothing to hit.
+	 */
 	private void materialise(Connection connection, Path releaseDir, String schema, DuckStore store)
 			throws SQLException, IOException {
+		if (releaseCache != null && releaseCache.isEnabled() && isCacheable(schema)) {
+			Path cached = releaseCache.get(releaseDir, store.tableColumns());
+			if (cached != null) {
+				DuckReleaseCache.attach(connection, cached, schema);
+				LOGGER.info("Attached cached release {} as schema '{}'", cached.getFileName(), schema);
+				return;
+			}
+		}
 		DuckMaterialiser.Result result =
 				DuckMaterialiser.materialise(connection, releaseDir, schema, store.tableColumns());
 		LOGGER.info("Materialised {} as schema '{}': {} tables, {} rows, {} empty files, {} placeholders",
@@ -977,6 +1008,11 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 		} finally {
 			FileUtils.deleteQuietly(parquet.toFile());
 		}
+	}
+
+	/** See {@link #materialise}: only the schemas nothing writes to. */
+	private static boolean isCacheable(String schema) {
+		return PREVIOUS_SCHEMA.equals(schema) || DEPENDENCY_SCHEMA.equals(schema);
 	}
 
 	private Path databaseFile(Long runId) {
