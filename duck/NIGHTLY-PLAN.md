@@ -123,6 +123,38 @@ failed, here are 10" is answerable; "which 40,000" is not. Note this is not a
 DuckDB regression - MySQL discards the same detail, because `qa_result` lives in
 `rvf_master` and `ddl-auto=create` wipes it on the next boot.
 
+## Revision, 2026-09-01: measured, and reordered
+
+The plan above put the cache next. A phase-by-phase measurement of a real
+two-edition nightly says it should not be, and the estimate in this document was
+wrong by about 5x - recorded rather than quietly corrected.
+
+    received -> start structural              44s
+    start structural -> prospective unpacked 198s   <- 58% of the run
+    previous unpacked -> prospective mat.     23s
+    prospective mat. -> previous mat.         25s   <- all the cache can save
+    previous mat. -> archive written          45s
+    TOTAL                                    339s
+
+Caching the previous release saves **25s, 7%** - not the ~40% inferred from the
+gap between a one-edition and a two-edition run. That gap is mostly structural
+testing and unpacking a second edition.
+
+The structural work already written and raised as IHTSDO#75 was not on this
+branch. Cherry-picked, and re-measured on the same release and request:
+
+    phase                          before   after   delta
+    start structural -> unpacked     198s    127s    -71s
+    TOTAL                            339s    257s    -82s   (1.32x)
+
+with **identical findings** - 149 tests, 13 failures, 0 warnings, 1 incomplete,
+and per-assertion comparison showing nothing in one report and not the other, and
+nothing with a different bucket or count.
+
+The cache is still worth building. It is now ~21s of a 257s nightly, about 8%,
+and it removes the last piece of per-run rework - but it is an optimisation, not
+the thing that makes a nightly affordable.
+
 ## Phases
 
 Each phase stands alone and is independently verifiable. No phase depends on a
