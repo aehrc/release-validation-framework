@@ -1,0 +1,184 @@
+# Engine A/B: one release, both execution engines, gated on the difference.
+#
+# This is the check that has to pass before a change to the DuckDB engine is
+# believable. It runs the SAME jar twice with only rvf.execution.engine
+# differing, against one MySQL and one release, and fails on any divergence not
+# accounted for in ci/known-engine-divergences.json.
+#
+# Why not the existing duckdb-rvf pipeline: that one compares a separate Python
+# engine against a production daily-rvf report - different corpus, different
+# host, different release. Useful, but a divergence there has several possible
+# causes. Here the only variable is the engine.
+#
+# All the logic lives in ci/engine_ab_stack.sh and ci/engine_ab.py so it is the
+# same code a developer runs locally. This file supplies inputs and publishes
+# results; it deliberately contains no comparison logic of its own.
+#
+# NOTE: MySQL is the official generic Linux tarball run unprivileged, not a
+# service container, so this needs no Docker daemon and no sudo on the agent.
+
+name: 'engine-ab-$(Date:yyyyMMdd)$(Rev:.r)'
+
+trigger: none
+pr:
+  branches:
+    include:
+      - catchup-upgraded
+      - upstream/*
+
+parameters:
+  - name: release
+    displayName: 'Release blob to validate (within the releases container)'
+    type: string
+    default: 'amtv4-latest.zip'
+  - name: previousRelease
+    displayName: 'Previous release blob, or empty for a first-time release'
+    type: string
+    default: ''
+  - name: groups
+    displayName: 'Assertion groups'
+    type: string
+    default: 'release-type-validation file-centric-validation'
+  - name: mysqlVersion
+    displayName: 'MySQL tarball version'
+    type: string
+    default: '8.4.6'
+
+variables:
+  - group: ncts-release
+  - name: storageAccount
+    value: '$(azure.sibuilds.storage.account.name)'
+  - name: storageKey
+    value: '$(azure.accountKey.ontodevelop)'
+  - name: workdir
+    value: '$(Agent.TempDirectory)/engine-ab'
+  - name: MAVEN_OPTS
+    value: '-Dmaven.repo.local=$(Pipeline.Workspace)/.m2'
+
+stages:
+  - stage: EngineAB
+    displayName: 'MySQL vs DuckDB, one release'
+    jobs:
+      - job: Compare
+        pool:
+          name: ncts-k8s-dedicated-pool
+        # The MySQL leg loads whole editions and is the long pole: about 20
+        # minutes for one edition and appreciably more with a previous release.
+        timeoutInMinutes: 180
+        steps:
+          - checkout: self
+            fetchDepth: 1
+
+          - task: Bash@3
+            displayName: 'Show what is being compared'
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                echo "release          : ${{ parameters.release }}"
+                echo "previous release : ${{ parameters.previousRelease }}"
+                echo "groups           : ${{ parameters.groups }}"
+                echo "commit           : $(Build.SourceVersion)"
+                java -version 2>&1 | head -2
+
+          - task: Bash@3
+            displayName: 'Build the jar'
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                mvn -B -ntp package -DskipTests
+                ls -la target/release-validation-framework-*.jar
+
+          - task: Bash@3
+            displayName: 'Install MySQL (tarball, unprivileged)'
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                mkdir -p "$(workdir)"
+                cd "$(workdir)"
+                V='${{ parameters.mysqlVersion }}'
+                MAJOR="${V%.*}"
+                URL="https://dev.mysql.com/get/Downloads/MySQL-$MAJOR/mysql-$V-linux-glibc2.28-x86_64.tar.xz"
+                curl -fsSL -o mysql.tar.xz "$URL"
+                tar -xf mysql.tar.xz && mv "mysql-$V-linux-glibc2.28-x86_64" mysql8
+                # The generic tarball wants libaio; fetch it without root rather
+                # than requiring a package install on the agent.
+                mkdir -p libs
+                if ! ldd mysql8/bin/mysqld 2>/dev/null | grep -q 'libaio.*not found'; then
+                  echo "libaio already satisfied"
+                else
+                  apt-get download libaio1t64 2>/dev/null || apt-get download libaio1
+                  dpkg-deb -x libaio*.deb aio
+                  ln -sf "$PWD/aio/usr/lib/x86_64-linux-gnu/libaio.so.1t64" libs/libaio.so.1 2>/dev/null \
+                    || ln -sf "$PWD/aio/lib/x86_64-linux-gnu/libaio.so.1" libs/libaio.so.1
+                fi
+                LD_LIBRARY_PATH="$PWD/libs" mysql8/bin/mysqld --initialize-insecure \
+                  --basedir="$PWD/mysql8" --datadir="$PWD/mysqldata" --tmpdir="$PWD/mysqltmp"
+                echo "mysqld initialised"
+
+          - task: Bash@3
+            displayName: 'Fetch the release and its previous release'
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                mkdir -p "$(workdir)/bin" shared-jobs/releases store/previous
+                curl -fsSL https://aka.ms/downloadazcopy-v10-linux | tar xz -C "$(workdir)/bin" --strip-components=1
+                AZ="$(workdir)/bin/azcopy"
+                BASE="https://$(storageAccount).blob.core.windows.net/releases"
+                "$AZ" copy "$BASE/${{ parameters.release }}$(storageKey)" \
+                    "shared-jobs/releases/${{ parameters.release }}"
+                if [ -n '${{ parameters.previousRelease }}' ]; then
+                  # The previous release goes in the RELEASE store, not the job
+                  # store: that is what previousRelease resolves against, in both
+                  # engines.
+                  "$AZ" copy "$BASE/${{ parameters.previousRelease }}$(storageKey)" \
+                      "store/previous/${{ parameters.previousRelease }}"
+                fi
+                ls -la shared-jobs/releases store/previous
+
+          - task: Bash@3
+            displayName: 'Run the A/B and gate'
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                export WORK="$(workdir)"
+                export MYSQL_HOME="$(workdir)/mysql8"
+                export JAR=$(ls target/release-validation-framework-*.jar | head -1)
+                ARGS=(--release "releases/${{ parameters.release }}" --groups '${{ parameters.groups }}')
+                if [ -n '${{ parameters.previousRelease }}' ]; then
+                  ARGS+=(--previous "${{ parameters.previousRelease }}")
+                fi
+                ci/engine_ab_stack.sh "${ARGS[@]}"
+
+          - task: PublishTestResults@2
+            displayName: 'Publish the comparison as test results'
+            condition: always()
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: '$(workdir)/engine-ab.xml'
+              testRunTitle: 'MySQL vs DuckDB'
+              failTaskOnFailedTests: false
+
+          - task: PublishPipelineArtifact@1
+            displayName: 'Publish both reports and the comparison'
+            condition: always()
+            inputs:
+              targetPath: '$(workdir)'
+              artifact: 'engine-ab'
+              # The two engine reports are the evidence for every claim the gate
+              # makes, so they are published even when it fails - especially then.
+
+          - task: Bash@3
+            displayName: 'Logs on failure'
+            condition: failed()
+            inputs:
+              targetType: 'inline'
+              script: |
+                for f in "$(workdir)/ab-mysql.log" "$(workdir)/ab-duck.log"; do
+                  echo "=== $f ==="
+                  tail -80 "$f" 2>/dev/null || echo "(absent)"
+                done

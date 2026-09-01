@@ -1,0 +1,230 @@
+# RVF on AKS: one API deployment, a worker pool, and a shared Azure Files mount.
+#
+# The difference from k8s/rvf.yaml, which is the Docker Desktop proof, is storage.
+# That one uses hostPath, so every pod must land on the same node and the worker
+# pool cannot actually span the cluster. Here the job store is an Azure Files
+# share with ReadWriteMany, which is what makes the split real:
+#
+#   the API writes an uploaded release and reads reports it never produced,
+#   a worker reads that release and writes the report,
+#   any API replica can then serve it - which is what a dashboard link needs.
+#
+# Verified locally with two JVMs sharing one directory and one broker: the worker
+# read a release the API staged, and the API served the report the worker wrote.
+#
+# What is deliberately NOT on the share:
+#
+#   the DuckDB scratch directory  - a run materialises 1.57GB per edition and
+#                                   spills; over SMB that is the slowest thing
+#                                   in the run, and it is per-run data nothing
+#                                   else ever reads
+#   the release cache             - derived, evictable, and rebuilt in ~21s, so
+#                                   node-local is right until measured otherwise
+#
+# Sizing is measured, not guessed: 8 cores and 8GB per worker. On a 64-core node
+# the same edition took 57.9s against 49.8s at 16 cores and 57.0s at 8, so more
+# cores per worker buys nothing and several small workers beat one large one.
+---
+apiVersion: v1
+kind: Namespace
+metadata: { name: rvf }
+---
+# The handoff. ReadWriteMany is the requirement; azurefile-csi provides it.
+# Premium is worth it here: the API writes an 853MB release to this share and a
+# worker reads it back, and Standard tops out well below what that wants.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: { name: rvf-jobs, namespace: rvf }
+spec:
+  accessModes: [ReadWriteMany]
+  storageClassName: azurefile-csi-premium
+  resources:
+    requests:
+      # Uploaded releases dominate: 853MB each, and the reaper keeps 7 days of
+      # them by default (rvf.validation.job.retention.days). Reports are 37KB.
+      storage: 100Gi
+---
+# Published releases kept so a nightly can validate against the last one. Under
+# the DuckDB engine this is the whole of "RVF already has last month's release":
+# previousRelease resolves a FILENAME from here.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: { name: rvf-releases, namespace: rvf }
+spec:
+  accessModes: [ReadWriteMany]
+  storageClassName: azurefile-csi-premium
+  resources:
+    requests:
+      storage: 50Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: activemq, namespace: rvf }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: activemq } }
+  template:
+    metadata: { labels: { app: activemq } }
+    spec:
+      containers:
+        - name: activemq
+          image: apache/activemq-classic:6.1.4
+          ports: [{ containerPort: 61616 }, { containerPort: 8161 }]
+          resources: { requests: { memory: 512Mi, cpu: 200m }, limits: { memory: 1Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: activemq, namespace: rvf }
+spec:
+  selector: { app: activemq }
+  ports:
+    - { name: openwire, port: 61616, targetPort: 61616 }
+    - { name: console, port: 8161, targetPort: 8161 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: rvf-api, namespace: rvf }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: rvf-api } }
+  template:
+    metadata: { labels: { app: rvf-api } }
+    spec:
+      containers:
+        - name: rvf
+          image: ontoserver.azurecr.io/aehrc-rvf/rvf-duck:latest
+          ports: [{ containerPort: 8080 }]
+          env:
+            - { name: RVF_EXECUTION_ENGINE, value: "duckdb" }
+            # No JMS listener: this pod accepts validations and serves reports,
+            # and never executes one.
+            - { name: RVF_EXECUTION_ISWORKER, value: "false" }
+            - { name: RVF_ASSERTION_RESOURCE_LOCAL_PATH, value: "/app/snomed-release-validation-assertions" }
+            - { name: RVF_DROOLS_RULE_DIRECTORY, value: "/app/snomed-drools-rules" }
+            - { name: SPRING_ACTIVEMQ_BROKER_URL, value: "tcp://activemq:61616" }
+            # DroolsRulesValidationService builds an S3 client in @PostConstruct
+            # and the AWS SDK will not construct one without a region, so this is
+            # required to START regardless of engine or whether Drools runs.
+            - { name: AWS_REGION, value: "us-east-1" }
+            # NB ResourceConfiguration.normalisePath strips a leading "/", so
+            # every one of these paths is relative to the working directory
+            # (/app). An absolute value silently becomes relative.
+            - { name: RVF_VALIDATION_JOB_STORAGE_LOCAL_PATH, value: "jobs/" }
+            - { name: RVF_RELEASE_STORAGE_LOCAL_PATH, value: "releases/" }
+            - { name: RVF_RELEASE_STORAGE_USECLOUD, value: "false" }
+            # Uploaded releases are deleted after this many days; reports are
+            # kept. 0 disables. Only the API reaps - see the worker below.
+            - { name: RVF_VALIDATION_JOB_RETENTION_DAYS, value: "7" }
+            - { name: JAVA_TOOL_OPTIONS, value: "-Xmx1500m" }
+          volumeMounts:
+            - { name: jobs, mountPath: /app/jobs }
+            - { name: releases, mountPath: /app/releases }
+          readinessProbe:
+            httpGet: { path: /version, port: 8080 }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources: { requests: { memory: 1Gi, cpu: 250m }, limits: { memory: 2Gi } }
+      volumes:
+        - { name: jobs, persistentVolumeClaim: { claimName: rvf-jobs } }
+        - { name: releases, persistentVolumeClaim: { claimName: rvf-releases } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: rvf-api, namespace: rvf }
+spec:
+  selector: { app: rvf-api }
+  ports: [{ port: 8080, targetPort: 8080 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: rvf-worker, namespace: rvf }
+spec:
+  # Scaled by KEDA on queue depth below, not by replicas here. A validation runs
+  # for minutes after its request returned 201, so anything that scales on
+  # request rate or retires idle pods will kill runs in flight.
+  replicas: 1
+  selector: { matchLabels: { app: rvf-worker } }
+  template:
+    metadata: { labels: { app: rvf-worker } }
+    spec:
+      # A worker that is terminated mid-validation loses the run, and a full
+      # edition takes minutes. Long enough to finish what it started.
+      terminationGracePeriodSeconds: 600
+      containers:
+        - name: rvf
+          image: ontoserver.azurecr.io/aehrc-rvf/rvf-duck:latest
+          env:
+            - { name: RVF_EXECUTION_ENGINE, value: "duckdb" }
+            - { name: RVF_EXECUTION_ISWORKER, value: "true" }
+            - { name: RVF_ASSERTION_RESOURCE_LOCAL_PATH, value: "/app/snomed-release-validation-assertions" }
+            - { name: RVF_DROOLS_RULE_DIRECTORY, value: "/app/snomed-drools-rules" }
+            - { name: SPRING_ACTIVEMQ_BROKER_URL, value: "tcp://activemq:61616" }
+            - { name: AWS_REGION, value: "us-east-1" }
+            - { name: RVF_VALIDATION_JOB_STORAGE_LOCAL_PATH, value: "jobs/" }
+            - { name: RVF_RELEASE_STORAGE_LOCAL_PATH, value: "releases/" }
+            - { name: RVF_RELEASE_STORAGE_USECLOUD, value: "false" }
+            # Reaping is the API's job. Every worker doing it would be several
+            # processes walking one SMB share to the same end.
+            - { name: RVF_VALIDATION_JOB_RETENTION_DAYS, value: "0" }
+            # Node-local, NOT the share. A run materialises 1.57GB per edition
+            # here and spills; it is per-run data nothing else reads.
+            - { name: RVF_DUCK_WORK_DIRECTORY, value: "/work" }
+            # Materialised previous/dependency releases, node-local and
+            # evictable. Off (0) until the AKS measurement says node-local beats
+            # the share: one cached edition is 1.57GB and rebuilds in ~21s, so
+            # this is an ~8% saving, not a load-bearing one.
+            - { name: RVF_DUCK_CACHE_DIRECTORY, value: "/work/release-cache" }
+            - { name: RVF_DUCK_CACHE_MAX_GB, value: "0" }
+            # Matches the CPU limit. DuckDB sizes its pool from the machine, not
+            # the cgroup quota, so on a 64-core node an unset value gives 64
+            # threads inside a 2-core quota: measured 674s, against 259s once
+            # bounded.
+            - { name: RVF_DUCK_THREADS, value: "8" }
+            - { name: JAVA_TOOL_OPTIONS, value: "-Xmx8g" }
+          volumeMounts:
+            - { name: jobs, mountPath: /app/jobs }
+            - { name: releases, mountPath: /app/releases }
+            - { name: work, mountPath: /work }
+          # 8 cores and 8GB: the measured sweet spot. Peak RSS never exceeded
+          # 4.8GB in any configuration, so the limit is headroom, not a target.
+          resources:
+            requests: { memory: 6Gi, cpu: 4 }
+            limits: { memory: 10Gi, cpu: 8 }
+      volumes:
+        - { name: jobs, persistentVolumeClaim: { claimName: rvf-jobs } }
+        - { name: releases, persistentVolumeClaim: { claimName: rvf-releases } }
+        - name: work
+          emptyDir:
+            # Two materialised editions plus spill plus an unpacked release
+            # (5.4GB). Node ephemeral disk has to be able to back this.
+            sizeLimit: 40Gi
+---
+# Scale on QUEUE DEPTH. The worker has no CommandLineRunner and never exits, so
+# a Job per validation does not work without a new one-shot mode; and scaling on
+# CPU or requests would retire pods mid-run.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata: { name: rvf-worker, namespace: rvf }
+spec:
+  scaleTargetRef: { name: rvf-worker }
+  minReplicaCount: 1
+  maxReplicaCount: 6
+  # Long enough that a worker finishing a full edition is not scaled away.
+  cooldownPeriod: 900
+  pollingInterval: 30
+  triggers:
+    - type: activemq
+      metadata:
+        managementEndpoint: "activemq.rvf.svc:8161"
+        destinationName: "rvf-validation-queue"
+        brokerName: "localhost"
+        targetQueueSize: "1"
+      authenticationRef: { name: activemq-auth }
+---
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata: { name: activemq-auth, namespace: rvf }
+spec:
+  secretTargetRef:
+    - { parameter: username, name: activemq-credentials, key: username }
+    - { parameter: password, name: activemq-credentials, key: password }

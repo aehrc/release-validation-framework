@@ -1,0 +1,122 @@
+{
+  "_README": [
+    "Divergences between the MySQL and DuckDB execution engines that are ACCOUNTED",
+    "FOR, so the engine A/B gate can fail on the ones that are not.",
+    "",
+    "This baseline is separate from duck/known-divergences.json in the rvf repo,",
+    "and started empty. That one classifies a Python engine against a production",
+    "MySQL report - different corpus, different host, different release. This one",
+    "classifies two instances of ONE jar, on one host, validating one release,",
+    "with only rvf.execution.engine differing. The causes are not the same, so",
+    "inheriting its allowances would import excuses that do not apply.",
+    "",
+    "An entry is a claim that a difference is UNDERSTOOD, not that it is",
+    "acceptable. Each needs a direction, what it applies to, the cause, and the",
+    "evidence for that cause - a file and line, a measurement, or a reproduction.",
+    "'Both engines have always done this' is not evidence.",
+    "",
+    "The point is for this file to shrink. An entry removed because the underlying",
+    "defect was fixed belongs in removedAllowances with the commit that fixed it,",
+    "so nobody re-adds it.",
+    "",
+    "Keys are assertion UUIDs, because that is what the gate looks up. The slug field carries the human name."
+  ],
+  "directions": {
+    "candidate-higher": "DuckDB reports more failures than MySQL for an assertion",
+    "incumbent-higher": "MySQL reports more failures than DuckDB for an assertion"
+  },
+  "divergences": {
+    "02cf4438-170e-4b6b-b5da-624ef730a8e0": {
+      "direction": "candidate-higher",
+      "appliesTo": "file-centric-snapshot-inactivated-component-module, on any release that ships an Identifier file",
+      "assertionUuids": [
+        "02cf4438-170e-4b6b-b5da-624ef730a8e0"
+      ],
+      "observed": "MySQL failureCount -1 in assertionsWarning; DuckDB 0 in assertionsPassed",
+      "cause": [
+        "The assertion calls validate_inactivated_component_module, whose cursor is",
+        "'select table_name from information_schema.tables ... and table_name like",
+        "'%\\_d'' - every delta table in the schema - and the dynamic SQL it builds",
+        "selects t1.id.",
+        "",
+        "identifier_d has no id column. RF2 identifies those rows by",
+        "alternateidentifier, and the DDL declares",
+        "(identifierschemeid, alternateidentifier, effectivetime, active, moduleid,",
+        "referencedcomponentid). So MySQL raises",
+        "'Unknown column t1.id in field list' and the whole assertion is abandoned.",
+        "",
+        "The DuckDB engine does not iterate at runtime: publish_store.py unrolls the",
+        "procedure into one statement per table, and the unroller enumerated the 52",
+        "tables that actually have an id. identifier_d is not among them, so the",
+        "assertion runs over the tables it can answer for."
+      ],
+      "evidence": [
+        "MySQL report failureMessage: 'Error executing SQL command object Nested",
+        "exception : java.sql.SQLSyntaxErrorException: Unknown column t1.id in field list'",
+        "",
+        "scripts/resource/file-centric-inactivated-component-module-validation-proc.sql:23-26",
+        "declares the cursor; :78 selects t1.id.",
+        "",
+        "The store's unrolled form of 02cf4438 holds 56 statements over 52 tables and",
+        "does not name identifier_s or identifier_d - checked directly against",
+        "src/main/resources/duck/store.json.",
+        "",
+        "identifier_d exists in MySQL only because create-tables-mysql.sql now creates",
+        "it: it is one of the 12 tables added by the RF2-file-types change (fork PR #23,",
+        "IHTSDO #74). Before that change the cursor never saw it."
+      ],
+      "notThePlan": [
+        "This is recorded so the gate is usable, NOT because the behaviour is right.",
+        "MySQL abandoning the assertion means it validates nothing on an AU release,",
+        "and the fix belongs in the assertions corpus: the cursor should skip tables",
+        "with no id column. Raised as a finding against IHTSDO #74, which is what",
+        "surfaces it."
+      ],
+      "slug": "mysql-errors-on-identifier-having-no-id-column",
+      "directionNote": "MySQL -1 against DuckDB 0, so the tool reads it as candidate-higher. The arithmetic is on the sentinel, not on findings: MySQL abandoned the assertion and DuckDB executed it and found nothing.",
+      "class": "mysql-errors-on-identifier-having-no-id-column"
+    },
+    "26c25479-c3ba-47f2-9851-bb05ae42ad48": {
+      "direction": "incumbent-higher",
+      "appliesTo": "any assertion whose SQL names <PREVIOUS> or <DEPENDENCY> when that release was not supplied to the run",
+      "assertionUuids": [
+        "26c25479-c3ba-47f2-9851-bb05ae42ad48"
+      ],
+      "observed": "DuckDB failureCount -1 with 'Not run: requires <DEPENDENCY>, which was not supplied to this validation'; MySQL 0 in assertionsPassed",
+      "cause": [
+        "MySqlQueryTransformer drops any statement still naming a release the run does",
+        "not hold. The assertion then executes with fewer statements, finds nothing,",
+        "and is reported as PASSED - a pass for work that was never attempted.",
+        "",
+        "DuckBinder mirrors the drop but reports the assertion as not executed, which",
+        "is what -1 means. So DuckDB is the honest one here and the divergence is in",
+        "the incumbent's favour only in appearance."
+      ],
+      "evidence": [
+        "release-type-snapshot-owl-expression-successive-states.sql names <DEPENDENCY>;",
+        "this run supplied previousRelease and no dependencyRelease.",
+        "",
+        "Same mechanism as the 53 assertions that carry -1 on a first-time release",
+        "while MySQL reports them passed - measured on the AU edition."
+      ],
+      "notThePlan": [
+        "A pass that means 'not attempted' is the more dangerous of the two",
+        "behaviours. The DuckDB side needs no change; the reporting gap is worth",
+        "raising with SI separately, since Release-Dashboard-UI renders -1 literally."
+      ],
+      "slug": "duckdb-reports-not-run-where-mysql-false-passes",
+      "directionNote": "MySQL 0 against DuckDB -1, so the tool reads it as incumbent-higher. Again the sentinel, not findings: MySQL passed an assertion it never fully ran and DuckDB declined to.",
+      "class": "duckdb-reports-not-run-where-mysql-false-passes"
+    }
+  },
+  "coverage": {
+    "_README": [
+      "Assertions one engine reports that do not join to the other by assertionUuid.",
+      "Zero is the target: both engines read the same corpus, so a missing join is",
+      "an assertion one of them silently did not run."
+    ],
+    "allowUncovered": 0,
+    "categories": {}
+  },
+  "removedAllowances": []
+}
