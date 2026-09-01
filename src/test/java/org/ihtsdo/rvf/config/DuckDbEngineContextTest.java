@@ -18,6 +18,8 @@ import org.ihtsdo.rvf.rest.controller.AssertionGroupAdministrationController;
 import org.ihtsdo.rvf.rest.controller.ReleaseController;
 import org.ihtsdo.rvf.core.service.duck.DuckAssertionService;
 import org.ihtsdo.rvf.core.service.AssertionServiceImpl;
+import org.ihtsdo.rvf.core.service.ReleaseCatalogue;
+import org.ihtsdo.rvf.core.service.StoredReleaseCatalogue;
 import org.ihtsdo.rvf.core.messaging.ValidationMessageListener;
 import org.ihtsdo.rvf.core.service.SqlAssertionValidationService;
 import org.ihtsdo.rvf.core.service.ReleaseAcquisitionService;
@@ -172,7 +174,15 @@ class DuckDbEngineContextTest {
 				"assertion CRUD administers a database this mode does not have");
 		assertEquals(0, context.getBeanNamesForType(AssertionGroupAdministrationController.class).length,
 				"group membership is addressed by a numeric id the store has no equivalent for");
-		assertEquals(0, context.getBeanNamesForType(ReleaseController.class).length);
+		// /releases is the nightly's whole premise - "RVF already has last
+		// month's release" - so it is engine-agnostic now, backed by stored RF2
+		// packages here and by loaded schemas under MySQL.
+		assertEquals(1, context.getBeanNamesForType(ReleaseController.class).length,
+				"a nightly needs to know which releases it can compare against");
+		assertEquals(1, context.getBeanNamesForType(ReleaseCatalogue.class).length,
+				"exactly one catalogue - the stored-package one");
+		assertEquals(StoredReleaseCatalogue.class,
+				context.getBean(ReleaseCatalogue.class).getClass());
 	}
 
 	@Test
