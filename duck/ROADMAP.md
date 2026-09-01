@@ -154,3 +154,59 @@ Everything below in Phase 3 and 4 depends on someone with cluster access.
 4. **Authentication:** internal-only behind a header-injecting gateway, or
    something stronger?
 5. **Corpus baked or mounted** for the first deployment?
+
+## Update, 2026-09-01 (afternoon)
+
+Phase 1 is closed. Both defects that needed nobody are fixed, and a third was
+found while packaging them for upstream.
+
+**Raised:**
+
+| where | what |
+|---|---|
+| IHTSDO/release-validation-framework#77 | issue: an assertion that could not run is reported as passed, and `-1` reaches the dashboard |
+| aehrc/release-validation-framework#29 | PR: drop a run's schemas when the run ends (genuine upstream defect) |
+| IHTSDO/snomed-release-validation-assertions#6 | corpus fix, awaiting review |
+
+**Fixed on `catchup-upgraded`, not upstream-worthy - both are OUR regressions
+from `6f84a1ee`, which extracted `MySqlQueryTransformer` from
+`AssertionExecutionService`:**
+
+* `aedaf958` - the single-assertion endpoints NPE'd on a null module list.
+  Upstream guards this at `AssertionExecutionService:239`; the extraction
+  dropped the guard.
+* `bff28117` - an empty module set rendered as `""` instead of the literal
+  `NULL`, so three assertions that gate on `'NULL' = '<INCLUDED_MODULES>'`
+  passed without validating anything on international runs. `DuckBinder` was
+  always correct, so DuckDB was unaffected - which is why the AU A/B never
+  showed it. **AU is an extension: non-empty modules, both engines identical.**
+
+**What that says about the gate.** A shared-cause defect is invisible to an
+A/B, and a single-corpus A/B only exercises the module paths that corpus
+uses. The AU nightly cannot see international-only branches. Running the gate
+against an INT edition at least once is now worth more than another AU night.
+
+**Deployment topology - answering "was this ever decided":** yes, on
+2026-08-30, in `k8s/HOSTING.md`, `k8s/SCALING.md` and `k8s/README.md`, but
+never in conversation, which is why it does not feel decided.
+
+* **Chosen:** listener claims work. `rvf.execution.isWorker` is RVF's own
+  property, so the split needed no code change. KEDA `ScaledObject` on
+  ActiveMQ queue depth.
+* **Rejected for now:** job per run. It is the better model and is recorded as
+  such; cold start is only 9 s (11% of an 83 s run) so cost is not the
+  objection. The blocker is that RVF's worker never exits - no
+  `CommandLineRunner`, no `System.exit`. Needs a one-shot mode, which is a new
+  deployment contract rather than a bug fix.
+* **Idle:** `minReplicaCount: 1` today, so one worker always idle against a
+  0.24% duty cycle for a single nightly. `minReplicaCount: 0` removes it with
+  no code change; the API stays warm and holds the queue.
+* **Unproven, needs a cluster:** whether KEDA's ActiveMQ scaler counts
+  in-flight unacknowledged messages. If it does, queue depth stays non-zero
+  for the run and scale-in never targets a busy pod. If it does not, safety
+  rests entirely on `terminationGracePeriodSeconds: 600` - which covers a
+  339 s DuckDB nightly but **not** a 1380 s MySQL run.
+* **Honest recommendation for one nightly run:** single server with the
+  embedded worker, which is the zero-config default. Deploy the split when a
+  second concurrent consumer actually exists.
+
