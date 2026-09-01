@@ -337,3 +337,55 @@ The three run concurrently, so the nightly is bounded by the slowest -
 **Drools at ~674 s**, not the SQL engine. Worth knowing before optimising SQL
 any further: on the decided scope, the assertion engine is no longer the long
 pole.
+
+### Correction, 2026-09-01: the Drools cost, and why we are not getting the speedup
+
+I quoted 674 s earlier. Wrong configuration - that was the module-*filtered*
+run, which produces fewer findings (5,129), not a faster same-work run. Worse,
+I then treated 674 s as the nightly's cost without checking whether the
+artefact contains the work that made Drools fast.
+
+**Measured on the deployed artefact, this host, AU edition, DuckDB engine,
+Drools + SQL in one validation:**
+
+    RuleExecutor  : 722,404 of 722,404 concepts, rule execution 500 s
+    DroolsRF2Validator : Tests complete. Total run time 697 s
+    whole validation   : 780 s (13 minutes), 80 tests, 3 failures
+
+**And the recorded figure with the engine performance work applied is 54 s.**
+
+The gap is six PRs SI merged into `IHTSDO/snomed-drools` on 2026-08-28:
+
+| PR | change |
+|---|---|
+| #6 | keep workers supplied with concepts instead of every 10 |
+| #7 | scale validation workers to the host, callers can override |
+| #8 | skip the effective-component pre-pass for a single Snapshot |
+| #9 | read the RF2 files concurrently, repository made safe for it |
+| #10 | exact-term description lookups from a map, not a Lucene index |
+| #11 | compile the whitespace split pattern once |
+
+**None of them are in what we build against.** `snomed-parent-bom` 4.0.0
+resolves `snomed-drools-engine` to **6.0.0**, and 6.0.0 is **3 commits behind
+PR #6's merge commit** - verified against the GitHub compare API. SI has
+published no tag since. So every Drools run this project makes today, including
+the 697 s above, is on the pre-PR engine.
+
+**Consequence for the nightly, and it flips the answer:**
+
+    engine 6.0.0 (today)   Drools ~700 s  -> Drools IS the long pole
+    engine with #6-#11     Drools ~54 s   -> SQL is the long pole again
+
+So "is Drools too expensive for the nightly" has no fixed answer - it depends
+entirely on a dependency version we do not control.
+
+**What unblocks it:** SI cutting a release containing #6-#11, or us building
+the engine from their merged `develop` and pinning it. The second is a
+half-hour and removes the wait, at the cost of shipping a non-released
+dependency - which is a real decision, not an obvious one.
+
+**How to avoid repeating my mistake:** never quote a Drools number without the
+engine version alongside the rule set. The existing rule
+([[rvf-drools-heap-baseline]]) names rule-set, exclusions, module filter, patch
+state and contention - it needs "engine version" added, because that is the
+term that moved this by 12x.
