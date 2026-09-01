@@ -1,0 +1,132 @@
+# Ephemeral workers: one Kubernetes Job per queued validation.
+#
+# Overlay on k8s/rvf-aks.yaml. Apply that first for the namespace, the broker,
+# the API deployment and the two Azure Files claims, then apply this INSTEAD of
+# the rvf-worker Deployment + ScaledObject in that file. The two are mutually
+# exclusive: both consuming the same queue would race, and the ScaledJob would
+# create a job for a message a long-lived worker had already taken.
+#
+#   kubectl delete deploy/rvf-worker scaledobject/rvf-worker -n rvf
+#   kubectl apply -f k8s/rvf-scaledjob.yaml
+#
+# WHAT KEDA ACTUALLY DOES HERE
+#
+# keda-operator polls the ActiveMQ management endpoint every pollingInterval
+# seconds and reads the queue's size. For a ScaledJob it does not scale a
+# Deployment's replicas - it CREATES that many Jobs, each of which is an
+# independent pod that runs to completion and is then reaped. There is no idle
+# worker between runs and no scale-in decision to get wrong, which is the whole
+# reason to prefer this shape over the Deployment.
+#
+# The pod must therefore exit by itself, which is what rvf.execution.oneShot
+# provides. Without it the job runs the validation and then sits forever, never
+# reaching Completed, and KEDA keeps creating more.
+#
+# WHY THE MESSAGE IS SAFE
+#
+# The one-shot runner receives, runs and acknowledges inside one transacted JMS
+# session. A pod killed mid-run - preempted, OOM, node reclaimed - never
+# commits, so ActiveMQ redelivers and backoffLimit below gets a real retry.
+# Acknowledging on receipt would lose the run silently, and the retry would find
+# an empty queue and "succeed".
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledJob
+metadata:
+  name: rvf-worker
+  namespace: rvf
+spec:
+  # Poll fast: the decision itself is cheap, and the thing we are trying to
+  # avoid is a validation sitting in the queue waiting to be noticed.
+  pollingInterval: 10
+  # Keep a few terminal jobs so a failed run can be read with kubectl logs.
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 10
+  # One job per queued message. maxReplicaCount caps concurrency, and 6 is the
+  # number the AU sizing supports on an 8-core-per-worker node pool; raising it
+  # buys throughput only if there are nodes to put them on.
+  maxReplicaCount: 6
+  scalingStrategy:
+    # "accurate" subtracts the jobs already running from the queue depth, so a
+    # 4-minute validation does not cause KEDA to keep creating jobs for a
+    # message that has already been claimed. The default strategy counts only
+    # pending, which over-creates for long jobs - which ours are.
+    strategy: accurate
+  triggers:
+    - type: activemq
+      metadata:
+        managementEndpoint: "activemq.rvf.svc:8161"
+        destinationName: "rvf-validation-queue"
+        brokerName: "localhost"
+        targetQueueSize: "1"
+      authenticationRef: { name: activemq-auth }
+  jobTargetRef:
+    # No retries beyond the broker's own redelivery: a poisoned message would
+    # otherwise be retried by BOTH mechanisms, six times each.
+    backoffLimit: 0
+    parallelism: 1
+    completions: 1
+    # Ceiling on a single validation. The measured AU nightly is ~340 s and a
+    # MySQL-engine run of the same content is ~1380 s; 2 hours is deliberately
+    # far above both so this kills only a genuinely stuck run.
+    activeDeadlineSeconds: 7200
+    ttlSecondsAfterFinished: 3600
+    template:
+      metadata:
+        labels: { app: rvf-worker }
+      spec:
+        restartPolicy: Never
+        containers:
+          - name: rvf-worker
+            image: ontoserver.azurecr.io/aehrc/rvf-duck:latest
+            args:
+              - "--rvf.execution.oneShot=true"
+              # REQUIRED. isWorker defaults to true, which would start the
+              # JmsListener alongside the one-shot runner; the app refuses to
+              # start in that combination rather than half-work.
+              - "--rvf.execution.isWorker=false"
+              # No ingress, no controllers: this process serves nothing.
+              - "--spring.main.web-application-type=none"
+              # How long to wait for a message before exiting 0. Only reached
+              # when another job won the race for it, so it wants to be short.
+              - "--rvf.execution.oneShot.receiveTimeoutSeconds=30"
+            env:
+              - { name: RVF_EXECUTION_ENGINE, value: "duckdb" }
+              - { name: SPRING_ACTIVEMQ_BROKER_URL, value: "tcp://activemq:61616" }
+              - { name: RVF_ASSERTION_RESOURCE_LOCAL_PATH, value: "/app/snomed-release-validation-assertions" }
+              - { name: RVF_DROOLS_RULE_DIRECTORY, value: "/app/snomed-drools-rules" }
+              - { name: RVF_VALIDATION_JOB_STORAGE_LOCAL_PATH, value: "jobs/" }
+              - { name: RVF_RELEASE_STORAGE_LOCAL_PATH, value: "store/previous/" }
+              - { name: RVF_RELEASE_STORAGE_USECLOUD, value: "false" }
+              # Node-local, per-pod, and thrown away with the pod. Nothing here
+              # is worth sharing: it is materialisation scratch.
+              - { name: RVF_DUCK_WORK_DIRECTORY, value: "/work" }
+              # DuckDB sizes its thread pool from the MACHINE and cannot see
+              # this pod's CPU limit, so a 64-core node would give 64 threads
+              # inside a 8-core quota. Measured 2.6x slower from that alone.
+              # Keep this equal to limits.cpu.
+              - { name: RVF_DUCK_THREADS, value: "8" }
+              - { name: JAVA_TOOL_OPTIONS, value: "-Xmx8g" }
+              - { name: AWS_REGION, value: "us-east-1" }
+            resources:
+              # Peak RSS never exceeded 7.1 GB in any measured configuration,
+              # including on a 502 GB node, so memory is not a lever here.
+              requests: { memory: 8Gi, cpu: "8" }
+              limits: { memory: 10Gi, cpu: "8" }
+            volumeMounts:
+              # NB ResourceConfiguration.normalisePath strips a leading "/", so
+              # the storage paths above are relative to CWD (/app) - hence
+              # /app/jobs, not /jobs. Getting this wrong makes the API and the
+              # worker write to different places and the report never appears.
+              - { name: jobs, mountPath: /app/jobs }
+              - { name: releases, mountPath: /app/store/previous }
+              - { name: work, mountPath: /work }
+        volumes:
+          - { name: jobs, persistentVolumeClaim: { claimName: rvf-jobs } }
+          - { name: releases, persistentVolumeClaim: { claimName: rvf-releases } }
+          - name: work
+            emptyDir:
+              # Two materialised editions plus spill plus an unpacked release.
+              # Node ephemeral disk has to be able to back this per concurrent
+              # job, so maxReplicaCount x 40Gi is the real requirement.
+              sizeLimit: 40Gi

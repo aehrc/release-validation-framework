@@ -254,3 +254,53 @@ naive "58 failures versus 24" reading.
 It also means the 5.8x is not flattered by DuckDB skipping work: the 53 it
 declined are the ones MySQL executed against empty tables, which is the cheapest
 thing MySQL did all run.
+
+## One-shot mode, and how KEDA drives it (2026-09-01)
+
+The blocker named above is gone: `rvf.execution.oneShot=true` consumes exactly
+one queued validation, runs it, and exits. `k8s/rvf-scaledjob.yaml` is the
+overlay that uses it.
+
+**What KEDA is actually doing.** `keda-operator` polls the ActiveMQ management
+endpoint every `pollingInterval` seconds and reads the queue's size. For a
+`ScaledObject` it writes that into a Deployment's replica count. For a
+`ScaledJob` it does something different and better suited to batch work: it
+**creates that many Jobs**, each an independent pod that runs to completion and
+is then reaped. There is no idle worker between runs, and no scale-in decision
+that could retire a pod mid-validation - the two things wrong with the
+Deployment shape for a once-a-night job.
+
+**`scalingStrategy: accurate` is not optional for us.** The default strategy
+counts queued messages only, so during a 340 s validation it would keep seeing
+the in-flight message and keep creating jobs for work already claimed.
+`accurate` subtracts running jobs. Long jobs are exactly the case the default
+gets wrong.
+
+**Why the message survives a killed pod.** Receive, run and acknowledge happen
+in one transacted JMS session, committing only after a terminal state. A pod
+preempted mid-run never commits, so ActiveMQ redelivers. `backoffLimit: 0`
+because the broker's own redelivery is the retry - both mechanisms retrying
+would give six attempts each.
+
+Measured end to end on the AU edition, DuckDB engine, one process:
+
+    exit 0 after 116 s, state COMPLETE, 62 tests, 2 failures, parquet written
+
+and exit 0 *with* those 2 assertion failures, because findings are the product,
+not an error. `FAILED` is reserved for `failureMessages`, which holds
+infrastructure errors.
+
+### Which shape to run
+
+| | Deployment + ScaledObject | ScaledJob + one-shot |
+|---|---|---|
+| idle cost | `minReplicaCount: 1` = one worker always on | none |
+| JVM start | once per pod | ~9 s per run, 3% of a 340 s nightly |
+| scale-in risk | needs `terminationGracePeriodSeconds` > longest run | none: a job is never scaled in |
+| poisoned state | persists in a long-lived pod | impossible, pod is new |
+| retry | hand-rolled | Job + broker redelivery |
+
+For **one nightly run** the ScaledJob is now the better shape on every axis
+that matters, and the 9 s JVM start it costs is 3% of the run. The Deployment
+remains the right answer if runs ever become frequent enough that per-run JVM
+start is a real fraction of the work.
