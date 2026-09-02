@@ -16,6 +16,7 @@
     </parent>
 
     <properties>
+        <snomed.drools.version>6.1.0-aehrc-perf</snomed.drools.version>
         <packageName>rvf-api</packageName>
         <docker.registry>docker.io</docker.registry>
         <docker.allowInsecureRegistries>false</docker.allowInsecureRegistries>
@@ -113,10 +114,32 @@
         <dependency>
             <groupId>org.ihtsdo.drools</groupId>
             <artifactId>snomed-drools-engine</artifactId>
+            <!--
+              Pinned ahead of the BOM. snomed-parent-bom 4.0.2 resolves 6.0.0,
+              which predates the six performance PRs SI merged into
+              IHTSDO/snomed-drools `develop` on 2026-08-28: #6 keep workers
+              supplied with concepts instead of batches of ten, #7 scale workers
+              to the host, #8 skip the effective-component pre-pass for a single
+              snapshot, #9 read the RF2 files concurrently, #10 exact-term
+              lookups from a map rather than a Lucene index, #11 precompile the
+              whitespace split pattern. Tag 6.0.0 is three commits BEHIND #6, so
+              none of it reaches us via the BOM.
+
+              Measured on the AU edition, this host: Drools 697 s on 6.0.0. The
+              recorded figure with this work applied is 54 s.
+
+              The artefact is IHTSDO's own 84d511b - the merge commit of #11,
+              still on BOM 4.0.0 - built with only the version string changed.
+              Reproduce with duck/build-drools-engine.sh.
+
+              DROP THIS PIN as soon as SI publishes a release containing them.
+            -->
+            <version>${snomed.drools.version}</version>
         </dependency>
         <dependency>
             <groupId>org.ihtsdo.drools</groupId>
             <artifactId>snomed-drools-rf2-validator</artifactId>
+            <version>${snomed.drools.version}</version>
             <exclusions>
                 <exclusion>
                     <groupId>org.slf4j</groupId>
