@@ -1138,3 +1138,79 @@ Carried as `duck/snomed-query-service-docvalues.patch` with
 `duck/build-query-service.sh`, which reproduces from a clean IHTSDO 6.0.1 clone
 and gates on BOTH halves being present in the bytecode - a jar missing the
 writer would pass every functional test.
+
+### What is left in MRCM, with the numbers, 2026-09-02
+
+Two corrections to how I had been reading the phase.
+
+**My earlier percentages were shares of MRCM frames, not of the phase.** I had
+filtered the sampler to org.snomed / org.ihtsdo.otf.sqs / lucene, so "28.8%
+lucene.search" meant 28.8% of *those* frames. Re-sampled unfiltered, RUNNABLE
+only, 73,502 frames: lucene 42.4%, `java.util.concurrent` 9.5%, `sun.nio.ch`
+9.3%, `org.snomed.quality` 8.5%, `org.ihtsdo.otf` 7.5%, `org.ihtsdo.rvf` 2.1%.
+
+**The profiler perturbed the run it measured.** `jcmd Thread.print` every 2 s
+safepoints the JVM; that run took 697 s against 668 s clean, and its internal
+timings are inflated accordingly. Numbers below are from clean runs where it
+matters. Sample sparsely, or accept that you are timing the profiler.
+
+Also note every recent measurement used the **disk-backed** index worker
+(`mrcm.validator.index.directory` set), which is not the default - part of that
+9.3% `sun.nio.ch` is index I/O a RAM-index run would not do.
+
+#### Remaining levers, ranked by measured size
+
+**1. The index write loop is single-threaded, on 2 of 8 cores.**
+`ReleaseImportManager.writeToIndex`:
+
+```java
+for (Concept concept : conceptMap.values()) {
+    releaseWriter.addConcept(concept, loadingProfile.isStatedRelationships());
+}
+conceptMap.clear();
+System.gc();
+```
+
+722,404 concepts per index, two indexes on two threads, six cores idle.
+Measured per index: **53.3 s and 32.3 s**, overlapping to a ~54 s window (on the
+profiled run, so treat as an upper bound). `IndexWriter.addDocuments` is
+thread-safe, so this fans out - **but `ReleaseWriter` holds a
+`private final SimpleDateFormat`**, which is not, and under concurrency
+`SimpleDateFormat` returns wrong dates rather than throwing. Same trap as the
+Drools `AxiomDeserialiser`: fix with `DateTimeFormatter` (immutable) or a
+`ThreadLocal`, then fan out. Falsify first by timing one index build with the
+loop parallelised in isolation, against the corpus digest for identical output.
+
+**2. `id:*` is a 722,404-term wildcard.** ECL `*` converts to `id:*`, which
+enumerates the whole `id` term dictionary, where `type:concept` is a single
+term. The 148 `MINUS`-shape expressions - the whole range-check pass - measure:
+
+```
+148 expressions, 0 hits returned, 9.7 s single-threaded
+```
+
+**58% of the remaining 16.8 s corpus time, returning nothing.** One line in the
+converter, in a library already pinned. Verify with the order-sensitive digest
+over all 432 expressions.
+
+**3. Peak heap is the concept map, and it gates everything.** `All in memory.
+Using approx 9,456 MB` is logged immediately before the write loop, and
+`conceptMap.clear()` runs only after it, so the whole map is held for the
+duration - twice over, once per content form. This is why the phase peaks at
+11.3 GB of 12 GB, why a boxed scratch array was enough to OOM it, and why the
+disk-backed index bought only 312 MB: it never touched the map. Streaming
+concepts into the writer instead of materialising them first is the structural
+fix and the only one that creates headroom.
+
+**4. `executeAttributeDomainValidation` is still serial** (ValidationService:236
+and :567). Present in every profile, cost never isolated. Time it before
+touching it - if it is under ~40 s there is nothing worth the concurrency risk,
+and its sibling range pass has an order-dependent dedupe that must stay serial.
+
+#### Ruled out, with reasons
+
+- **Compiled-query cache**: wrong across content forms and OOM'd. See above.
+- **Replacing closure inlining with ANCESTOR**: already what the converter does.
+- **Batching `retrieveConcept`**: 685 calls in the whole phase.
+- **Merging the two index builds**: LoadingProfiles genuinely differ.
+- **Disk-backed index as a memory lever**: 312 MB for 41 s; the peak is the map.
