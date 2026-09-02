@@ -593,3 +593,47 @@ profile just never got narrowed to match.
 All three are upstream of RVF. Items 1 and 2 are in
 `snomed-drools-rf2-validator`, which we already build ourselves, so they are
 reachable on the same pin. Item 3 needs snomed-owl-toolkit forked too.
+
+### The three load optimisations, done and measured, 2026-09-02
+
+Same nightly request throughout: AU edition, previous release supplied, SQL +
+Drools + structural concurrent, 8 cores, DuckDB engine.
+
+| | wall | Drools total | axioms | rules |
+|---|---|---|---|---|
+| engine 6.0.0, structural serial | 780 s | 697 s | - | 500 s |
+| + engine pin, structural concurrent | 350 s | 221 s | 35 s | 60 s |
+| + parallel archive unpack | 292 s | 226 s | 35 s | 59 s |
+| **+ one read fewer, parallel axioms** | **224 s** | **154 s** | **17.5 s** | **47 s** |
+
+**Findings identical at every step** - 209 tests, 19 failures, 17 warnings, 2
+incomplete, 0 assertions differing in bucket or count. That is the acceptance
+criterion for all of this; none of it is worth a second if a finding moves.
+
+**Item 2 was withdrawn, not delivered.** I claimed the id-only pass loaded with
+`LoadingProfile.complete` and deserialised every axiom to populate four `Set`s
+of ids. Wrong on the second half: only one axiom sequence exists in a run, in
+the prospective's real load, and `PreviousReleaseComponentFactory` is an
+`ImpotentComponentFactory` that discards content as it reads. The profile is
+already narrowed with `withoutAllRefsets()` plus four explicit patterns, and
+all four of its id sets are consumed by `SnomedDroolsComponentFactory`. There
+was nothing to remove.
+
+**Where the 224 s now goes:**
+
+    acquisition (serial, before any phase)     42 s
+    SQL, incl. two materialisations           131 s  } concurrent
+    structural                                 31 s  } run costs the
+    Drools  (16 s unpack, 91 s load, 47 s rules) 154 s } slowest: Drools
+
+**Next levers, in order, all upstream:**
+
+1. **Acquisition, 42 s**, serial before every phase, mostly copying two 853 MB
+   zips into place. The only item on the critical path that no phase overlaps.
+2. **Drools loading, 91 s.** Two editions into the object graph. Axioms are
+   17.5 s of it now; the rest is graph construction, which is inherent to how
+   the rules query previous-versus-current state.
+3. Axiom parallelism is ~2x rather than 8x because OWLAPI parsing allocates
+   heavily and is partly GC-bound. A pooled or reused parser inside
+   `AxiomDeserialiser` might do better, but that is a snomed-owl-toolkit change
+   and worth ~10 s.
