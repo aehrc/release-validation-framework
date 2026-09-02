@@ -57,7 +57,9 @@ spec:
             # executed has to be readable here, or the API 404s for work its
             # own workers completed.
             - { name: RVF_VALIDATION_JOB_STORAGE_LOCAL_PATH, value: "jobs/" }   # NB ResourceConfiguration.normalisePath strips a leading "/" - this is relative to CWD (/app)
-            - { name: JAVA_TOOL_OPTIONS, value: "-Xmx1500m" }
+            # Heap follows limits.memory (-XX:MaxRAMPercentage=75 in the
+            # image). A -Xmx here would be ignored anyway: the image sets
+            # its flags on argv, which beats JAVA_TOOL_OPTIONS.
           volumeMounts:
             - { name: jobs, mountPath: /app/jobs }
           resources: { requests: { memory: 1Gi, cpu: 250m }, limits: { memory: 2Gi } }
@@ -99,7 +101,8 @@ spec:
             - { name: AWS_REGION, value: "us-east-1" }
             - { name: RVF_VALIDATION_JOB_STORAGE_LOCAL_PATH, value: "jobs/" }   # NB ResourceConfiguration.normalisePath strips a leading "/" - this is relative to CWD (/app)
             - { name: RVF_DUCK_WORK_DIRECTORY, value: "/work" }
-            - { name: JAVA_TOOL_OPTIONS, value: "-Xmx4g" }
+            # Heap follows limits.memory below. Note this proof runs
+            # Drools and MRCM OFF; with MRCM the limit must be 16Gi.
           volumeMounts:
             - { name: jobs, mountPath: /app/jobs }
             - { name: work, mountPath: /work }

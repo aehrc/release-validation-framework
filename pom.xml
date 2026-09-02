@@ -368,8 +368,26 @@
                         <jvmFlags>
                             <jvmFlag>-Djava.security.egd=file:/dev/./urandom</jvmFlag>
                             <jvmFlag>--add-opens=java.base/java.lang=ALL-UNNAMED</jvmFlag>
-                            <jvmFlag>-Xms512m</jvmFlag>
-                            <jvmFlag>-Xmx8g</jvmFlag>
+                            <!--
+                              Heap is sized from the CONTAINER LIMIT, not baked
+                              in. A fixed -Xmx here is applied on the argv,
+                              which BEATS JAVA_TOOL_OPTIONS - the JVM takes the
+                              last -Xmx on the command line and the launcher
+                              PREPENDS the environment's flags. Both k8s
+                              manifests set the heap through JAVA_TOOL_OPTIONS,
+                              so a baked -Xmx8g silently ignored them: an API
+                              pod limited to 2Gi ran a JVM believing it had 8GB
+                              and survived only because it never grew, and a
+                              worker cannot be given the ~12GB the MRCM phase
+                              peaks at no matter what the manifest says.
+
+                              With percentages the pod's memory limit is the
+                              single knob: 2Gi gives a 1.5GB heap, 16Gi gives
+                              12GB. Verified against -XX:MaxRAM, which is what
+                              the cgroup limit supplies in a container.
+                            -->
+                            <jvmFlag>-XX:InitialRAMPercentage=25</jvmFlag>
+                            <jvmFlag>-XX:MaxRAMPercentage=75</jvmFlag>
                         </jvmFlags>
                         <ports>
                             <port>8080</port>

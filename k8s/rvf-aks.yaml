@@ -115,7 +115,11 @@ spec:
             # Uploaded releases are deleted after this many days; reports are
             # kept. 0 disables. Only the API reaps - see the worker below.
             - { name: RVF_VALIDATION_JOB_RETENTION_DAYS, value: "7" }
-            - { name: JAVA_TOOL_OPTIONS, value: "-Xmx1500m" }
+            # Heap follows the container limit (-XX:MaxRAMPercentage=75 in the
+            # image), so `limits.memory` below is the only knob. Do NOT set -Xmx
+            # here: a fixed -Xmx on the image's argv BEATS JAVA_TOOL_OPTIONS,
+            # which is how this manifest previously ran an API JVM that believed
+            # it had 8GB inside a 2Gi limit.
           volumeMounts:
             - { name: jobs, mountPath: /app/jobs }
             - { name: releases, mountPath: /app/releases }
@@ -180,16 +184,27 @@ spec:
             # threads inside a 2-core quota: measured 674s, against 259s once
             # bounded.
             - { name: RVF_DUCK_THREADS, value: "8" }
-            - { name: JAVA_TOOL_OPTIONS, value: "-Xmx8g" }
+            # No -Xmx: the heap follows limits.memory below via
+            # -XX:MaxRAMPercentage=75 baked into the image.
           volumeMounts:
             - { name: jobs, mountPath: /app/jobs }
             - { name: releases, mountPath: /app/releases }
             - { name: work, mountPath: /work }
-          # 8 cores and 8GB: the measured sweet spot. Peak RSS never exceeded
-          # 4.8GB in any configuration, so the limit is headroom, not a target.
+          # 8 cores, and memory sized by the MRCM phase rather than by SQL.
+          #
+          # SQL-only runs peak under 4.8GB, which is what the original 10Gi
+          # limit was measured against. MRCM is a different shape: it holds the
+          # whole 722,404-concept map on the heap while building two Lucene
+          # indexes, and peaks at 11.3GB. It OOMs at a 12GB heap without the
+          # bounded read buffer, and completed at 12GB with it, so 12GB of heap
+          # is the floor for the scope decided in ROADMAP task 13.
+          #
+          # 16Gi limit x MaxRAMPercentage=75 = a 12GB heap, with the remainder
+          # for metaspace, thread stacks and the mmapped index. If MRCM is
+          # switched off, 10Gi is enough again.
           resources:
-            requests: { memory: 6Gi, cpu: 4 }
-            limits: { memory: 10Gi, cpu: 8 }
+            requests: { memory: 12Gi, cpu: 4 }
+            limits: { memory: 16Gi, cpu: 8 }
       volumes:
         - { name: jobs, persistentVolumeClaim: { claimName: rvf-jobs } }
         - { name: releases, persistentVolumeClaim: { claimName: rvf-releases } }
