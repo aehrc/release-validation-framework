@@ -91,5 +91,26 @@ if ! javap -p -c -cp "$JAR" org.ihtsdo.otf.sqs.service.ReleaseWriter 2>/dev/null
   exit 1
 fi
 
+# The wildcard rewrite and the parallel document build have the same property:
+# a jar missing them is correct and merely slow, so gate on the bytecode.
+# The constant is compile-time folded onto the inner listener, so it shows up
+# under -constants rather than in the disassembly.
+if ! javap -p -constants -cp "$JAR" \
+       'org.ihtsdo.otf.sqs.service.ExpressionConstraintToLuceneConverter$ExpressionConstraintListener' 2>/dev/null \
+     | grep -q 'type:concept'; then
+  echo "FATAL: $VERSION still emits the id wildcard for '*'" >&2
+  exit 1
+fi
+if ! javap -p -c -cp "$JAR" org.ihtsdo.otf.sqs.service.ReleaseImportManager 2>/dev/null \
+     | grep -q 'parallelStream'; then
+  echo "FATAL: $VERSION does not build index documents in parallel" >&2
+  exit 1
+fi
+if javap -p -cp "$JAR" org.ihtsdo.otf.sqs.service.ReleaseWriter 2>/dev/null \
+     | grep -q 'SimpleDateFormat'; then
+  echo "FATAL: $VERSION still holds a shared SimpleDateFormat - the parallel build would corrupt effective times" >&2
+  exit 1
+fi
+
 echo "==> installed $VERSION; bytecode confirms both halves"
 echo "==> pom pin: <snomed.query.service.version>$VERSION</snomed.query.service.version>"

@@ -1214,3 +1214,96 @@ and its sibling range pass has an order-dependent dedupe that must stay serial.
 - **Batching `retrieveConcept`**: 685 calls in the whole phase.
 - **Merging the two index builds**: LoadingProfiles genuinely differ.
 - **Disk-backed index as a memory lever**: 312 MB for 41 s; the peak is the map.
+
+### Two more MRCM optimisations, and the variance that limits what can be claimed
+
+**1. `*` no longer compiles to a wildcard over the id dictionary.** ECL `*`
+emitted `id:*`, which the classic parser expands by enumerating every term in
+the `id` field - 722,404 of them. `ReleaseWriter` creates exactly one kind of
+document, always carrying both `type:concept` and `id`, so the two select the
+same set. Now emits `type:concept`, one term.
+
+The 148 `MINUS`-shape expressions - the whole range-check pass - all begin with
+that wildcard and return nothing:
+
+```
+148 expressions, 0 hits, 9.7 s single-threaded
+```
+
+**2. Index documents are built across cores and written in order.** The write
+loop was serial over 722,404 concepts per index, two indexes on two threads,
+six cores idle. Two things had to change first:
+
+- `ReleaseWriter` held a `private final SimpleDateFormat`, used to parse each
+  effective time into a `Date`, compare, and format the winner back to the same
+  string. RF2 effective times are fixed-width `yyyyMMdd`, so the latest is the
+  lexicographic maximum - the parsing was never needed, and removing it removed
+  the shared mutable state. `SimpleDateFormat` under concurrency returns wrong
+  values rather than throwing, so that would have been silently wrong effective
+  times in the index.
+- Documents are built with `parallelStream` in batches of 4,096 and written
+  **serially, in the original iteration order**. Writing concurrently would keep
+  every result set identical and still reorder it, because Lucene returns
+  equal-scoring hits in docid order. Batched so pending documents stay bounded
+  while the whole concept map is still on the heap.
+
+Measured per index: **53.3 s -> 29.5 s** and 32.3 s -> 23.6 s.
+
+#### Cumulative, on the isolated corpus - same index, same machine
+
+| | wall (1 thread) | per hit |
+|---|---|---|
+| stock 6.0.1 | 90.3 s | 20.3 us |
+| + doc-values ids | 18.3 s | 4.7 us |
+| + `type:concept` | **10.9 s** | **2.8 us** |
+
+**8.3x**, with order-sensitive digests identical at every step across all 432
+expressions.
+
+#### What cannot be claimed: end-to-end wall time
+
+Completed runs of nominally identical configurations came in at **668, 684, 700,
+717, 748 and 765 s**. That is +-13%, so a single run cannot resolve a 10%
+effect, and the 748 s of the final combined run is not evidence that the change
+made anything slower. The isolated corpus numbers above are the reliable ones
+because they hold the index, the machine and the corpus fixed. Every completed
+run reported **1037 tests, 3 failures, 4 warnings, 2 incomplete**.
+
+To claim an end-to-end figure honestly, run each configuration three times and
+compare medians - about an hour per configuration, and not yet done.
+
+#### Found by accident: validation reports are not reproducible
+
+Comparing exported failure instances between runs, one assertion
+(`c779d282-3c4d-4c16-a8a6-8d1a621b247d`, 669 failures) names a **different
+sample of concepts each time**. It is not caused by any change here - two
+**stock** runs differ on exactly the same assertion:
+
+```
+stock vs stock                   1 assertion with a different exported instance list
+stock vs doc-values              1
+doc-values vs +parallel+wildcard 1
+```
+
+Failure counts and buckets are stable; only the exported examples move. So a
+report cannot be diffed instance-by-instance between runs today, which matters
+for anyone comparing a release against last month's. Worth chasing separately -
+the likely cause is set iteration order in `processValidationResults`.
+
+It also justifies the care taken above: the parallel build deliberately avoids
+*adding* to this, and the checks that mattered were the isolated digests, not
+the end-to-end instance lists.
+
+#### Two measurement traps hit while doing this
+
+- **Snapshotting an index mid-run gave a bogus comparison.** Taking `head -1` of
+  `/data/work/mrcm-index/` picked whichever content form appeared first, so one
+  comparison was inferred against stated and the other against inferred -
+  2,913,960 hits against 3,885,244. The 22.9 us/hit on that snapshot also showed
+  it had been copied before doc values were flushed, so the read silently fell
+  back. Discarded; the valid check was the report comparison above.
+- **The build script's first bytecode gate was wrong, not the build.** The
+  `type:concept` constant is compile-time folded onto the inner
+  `ExpressionConstraintListener` and appears under `javap -constants`, not in the
+  disassembly. Gate fixed rather than dropped; it now also fails if the parallel
+  build is missing, or if `SimpleDateFormat` comes back.

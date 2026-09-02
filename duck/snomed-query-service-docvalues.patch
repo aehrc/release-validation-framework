@@ -1,24 +1,281 @@
 diff --git a/src/main/java/org/ihtsdo/otf/sqs/domain/ConceptFieldNames.java b/src/main/java/org/ihtsdo/otf/sqs/domain/ConceptFieldNames.java
-index d4b7cbf..c6bc625 100644
+index d4b7cbf..0c499b2 100644
 --- a/src/main/java/org/ihtsdo/otf/sqs/domain/ConceptFieldNames.java
 +++ b/src/main/java/org/ihtsdo/otf/sqs/domain/ConceptFieldNames.java
-@@ -3,6 +3,9 @@ package org.ihtsdo.otf.sqs.domain;
+@@ -3,6 +3,15 @@ package org.ihtsdo.otf.sqs.domain;
  public interface ConceptFieldNames {
  
  	String ID = "id";
++
++	/** Discriminates document kinds. Only concept documents exist today. */
++	String TYPE = "type";
++
++	/** Value of {@link #TYPE} on a concept document. */
++	String TYPE_CONCEPT = "concept";
 +
 +	/** Numeric copy of {@link #ID}, so hits can be read without decompressing stored fields. */
 +	String ID_DOC_VALUES = "id-dv";
  	String EFFECTIVE_TIME = "effectiveTime";
  	String ACTIVE = "active";
  	String MODULE_ID = "moduleId";
+diff --git a/src/main/java/org/ihtsdo/otf/sqs/service/ExpressionConstraintToLuceneConverter.java b/src/main/java/org/ihtsdo/otf/sqs/service/ExpressionConstraintToLuceneConverter.java
+index 4955b4b..c24af5c 100644
+--- a/src/main/java/org/ihtsdo/otf/sqs/service/ExpressionConstraintToLuceneConverter.java
++++ b/src/main/java/org/ihtsdo/otf/sqs/service/ExpressionConstraintToLuceneConverter.java
+@@ -115,6 +115,10 @@ public class ExpressionConstraintToLuceneConverter {
+ 			isMemberOf = true;
+ 		}
+ 
++		/** Matches every concept document; see {@link #enterEclfocusconcept}. */
++		private static final String ANY_CONCEPT =
++				ConceptFieldNames.TYPE + ":" + ConceptFieldNames.TYPE_CONCEPT;
++
+ 		@Override
+ 		public void enterConstraintoperator(ECLParser.ConstraintoperatorContext ctx) {
+ 			constraintOperatorContext = ctx;
+@@ -124,7 +128,16 @@ public class ExpressionConstraintToLuceneConverter {
+ 		public void enterEclfocusconcept(ECLParser.EclfocusconceptContext ctx) {
+ 			if (ctx.wildcard() != null) {
+ 				if (!inAttribute) {
+-					luceneQuery += ConceptFieldNames.ID + ":*";
++					// "any concept" as a single term rather than "id:*", which is
++					// a wildcard the classic parser expands by enumerating the
++					// whole id term dictionary - 722,404 terms on an AU edition.
++					// Every document this index holds is a concept document
++					// carrying both "type" and "id" (ReleaseWriter writes only
++					// one kind), so the two select the same set.
++					// Measured: the 148 range-check expressions of the MRCM
++					// corpus, which all begin with this wildcard, returned 0
++					// hits for 9.7 s - 58% of the corpus time, for nothing.
++					luceneQuery += ANY_CONCEPT;
+ 				} else {
+ 					luceneQuery += "*";
+ 				}
+diff --git a/src/main/java/org/ihtsdo/otf/sqs/service/ReleaseImportManager.java b/src/main/java/org/ihtsdo/otf/sqs/service/ReleaseImportManager.java
+index 44a14ba..3fd582a 100644
+--- a/src/main/java/org/ihtsdo/otf/sqs/service/ReleaseImportManager.java
++++ b/src/main/java/org/ihtsdo/otf/sqs/service/ReleaseImportManager.java
+@@ -4,6 +4,9 @@ import java.io.File;
+ import java.io.IOException;
+ import java.text.NumberFormat;
+ import java.text.ParseException;
++import java.util.ArrayList;
++import java.util.List;
++import org.apache.lucene.document.Document;
+ import java.util.Map;
+ 
+ import org.ihtsdo.otf.snomedboot.ReleaseImportException;
+@@ -59,27 +62,42 @@ public class ReleaseImportManager {
+ 		return new DiskReleaseStore(indexDirectory).isIndexExisting();
+ 	}
+ 
++	/** Concepts built per parallel batch; bounds the pending documents. */
++	private static final int BUILD_BATCH_SIZE = 4096;
++
+ 	protected ReleaseStore writeToIndex(Map<Long, ? extends Concept> conceptMap, ReleaseStore releaseStore, LoadingProfile loadingProfile) throws IOException, ReleaseImportException {
+ 		logger.info("All in memory. Using approx {} MB of memory.", formatAsMB(Runtime.getRuntime().totalMemory()));
+ 		logger.info("Writing to index...");
+ 
+ 		try (final ReleaseWriter releaseWriter = new ReleaseWriter(releaseStore)) {
++			// Documents are BUILT across cores and WRITTEN in the original
++			// iteration order. Construction is the expensive half - cardinality
++			// grouping per relationship, 722,404 concepts per index - while the
++			// write order fixes the docids, and Lucene returns equal-scoring
++			// hits in docid order. Writing concurrently would keep every result
++			// set identical and still reorder it, so a validation report would
++			// name a different sample of failing concepts run to run.
++			//
++			// Chunked so the pending documents are bounded: this runs while the
++			// whole concept map is still on the heap, which is where the phase
++			// already peaks.
++			final List<Concept> batch = new ArrayList<>(BUILD_BATCH_SIZE);
+ 			long conceptsAdded = 0;
+ 			for (Concept concept : conceptMap.values()) {
+-				if (concept.isActive() || loadingProfile.isInactiveConcepts()) {
+-					releaseWriter.addConcept(concept, loadingProfile.isStatedRelationships());
+-					conceptsAdded++;
+-					if (conceptsAdded % 100000 == 0) {
+-						logger.info("{} concepts added to index...", conceptsAdded);
+-					}
++				if (!concept.isActive() && !loadingProfile.isInactiveConcepts()) {
++					continue;
++				}
++				batch.add(concept);
++				if (batch.size() == BUILD_BATCH_SIZE) {
++					conceptsAdded = writeBatch(releaseWriter, batch, loadingProfile, conceptsAdded);
++					batch.clear();
+ 				}
+ 			}
++			conceptsAdded = writeBatch(releaseWriter, batch, loadingProfile, conceptsAdded);
++
+ 			logger.info("{} concepts added to index in total.", conceptsAdded);
+ 			logger.info("Closing index writer.");
+-		} catch (ParseException e) {
+-			throw new ReleaseImportException("Failed to parse date.", e);
+ 		}
+-
+ 		conceptMap.clear();
+ 		System.gc();
+ 		logger.info("Finished creating index. Using approx {} MB of memory.", formatAsMB(Runtime.getRuntime().totalMemory()));
+@@ -87,6 +105,50 @@ public class ReleaseImportManager {
+ 		return releaseStore;
+ 	}
+ 
++	/**
++	 * Builds a batch's documents across all cores, then writes them in the
++	 * order the concepts were given.
++	 */
++	private long writeBatch(ReleaseWriter releaseWriter, List<Concept> batch,
++			LoadingProfile loadingProfile, long conceptsAdded) throws IOException, ReleaseImportException {
++		if (batch.isEmpty()) {
++			return conceptsAdded;
++		}
++		final boolean stated = loadingProfile.isStatedRelationships();
++		final List<Document> documents;
++		try {
++			documents = batch.parallelStream()
++					.map(concept -> {
++						try {
++							return releaseWriter.buildDocument(concept, stated);
++						} catch (ParseException e) {
++							throw new WriteFailure(e);
++						}
++					})
++					.toList();
++		} catch (WriteFailure e) {
++			throw new ReleaseImportException("Failed to parse date.", e.getCause());
++		}
++
++		long added = conceptsAdded;
++		for (Document document : documents) {
++			releaseWriter.addDocument(document);
++			added++;
++			if (added % 100000 == 0) {
++				logger.info("{} concepts added to index...", added);
++			}
++		}
++		return added;
++	}
++
++
++	/** Carries a checked failure out of the parallel forEach. */
++	private static final class WriteFailure extends RuntimeException {
++		private WriteFailure(Throwable cause) {
++			super(cause);
++		}
++	}
++
+ 	private String formatAsMB(long bytes) {
+ 		return NumberFormat.getInstance().format((bytes / 1024) / 1024);
+ 	}
 diff --git a/src/main/java/org/ihtsdo/otf/sqs/service/ReleaseWriter.java b/src/main/java/org/ihtsdo/otf/sqs/service/ReleaseWriter.java
-index 7043029..95956d8 100644
+index 7043029..183e843 100644
 --- a/src/main/java/org/ihtsdo/otf/sqs/service/ReleaseWriter.java
 +++ b/src/main/java/org/ihtsdo/otf/sqs/service/ReleaseWriter.java
-@@ -101,6 +101,11 @@ public class ReleaseWriter implements AutoCloseable {
+@@ -20,7 +20,6 @@ import java.util.*;
+ public class ReleaseWriter implements AutoCloseable {
+ 
+ 	private final IndexWriter iwriter;
+-	private final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyyMMdd");
+ 
+ 	public ReleaseWriter(ReleaseStore releaseStore) throws IOException {
+ 		IndexWriterConfig config = new IndexWriterConfig(releaseStore.createAnalyzer());
+@@ -28,14 +27,47 @@ public class ReleaseWriter implements AutoCloseable {
+ 	}
+ 
+ 	public void addConcept(Concept concept, boolean isStatedRelationship) throws IOException, ParseException {
+-		List<Document> documents = new ArrayList<>();
+-		documents.add(getConceptDocument(concept, isStatedRelationship));
+-		iwriter.addDocuments(documents);
++		addDocument(buildDocument(concept, isStatedRelationship));
+ 	}
+ 
++	/**
++	 * Builds a concept's document without writing it.
++	 *
++	 * <p>Separated from {@link #addDocument(Document)} so callers can build
++	 * across cores and still write in a fixed order. Document construction is
++	 * the expensive half - cardinality grouping per relationship - while the
++	 * order documents are written in decides their docids, and equal-scoring
++	 * hits come back in docid order. Writing concurrently would leave result
++	 * sets identical but reorder them, so a validation report would name a
++	 * different sample of failing concepts from one run to the next.
++	 */
++	public Document buildDocument(Concept concept, boolean isStatedRelationship) throws ParseException {
++		return getConceptDocument(concept, isStatedRelationship);
++	}
++
++	/** Writes one prepared document. Call in a deterministic order. */
++	public void addDocument(Document document) throws IOException {
++		iwriter.addDocuments(List.of(document));
++	}
++
++	/**
++	 * Records the latest effective time across a concept and its relationships.
++	 *
++	 * <p>RF2 effective times are fixed-width {@code yyyyMMdd}, so the latest one
++	 * is the lexicographic maximum and no date parsing is needed. This used to
++	 * parse each value into a {@link Date} through a {@code SimpleDateFormat}
++	 * held on this writer, and then format the winner back to the same string -
++	 * per concept and per relationship, 722,404 concepts per index.
++	 *
++	 * <p>That formatter was shared mutable state, which is what stopped the
++	 * write loop being parallelised: {@code SimpleDateFormat} under concurrency
++	 * returns wrong dates rather than throwing, so the failure would have been
++	 * silently wrong effective times in the index. Comparing strings removes the
++	 * hazard and the parsing at once.
++	 */
+ 	private void addCardinalityToDocument(Concept concept, Document doc, boolean isStatedRelationship) throws ParseException {
+ 		final MultiValueMap<String, String> attributeGroups = new LinkedMultiValueMap<>();
+-		Date maxDate = dateFormat.parse(concept.getEffectiveTime());
++		String maxEffectiveTime = concept.getEffectiveTime();
+ 		for (Relationship relationship : concept.getRelationships()) {
+ 			if (relationship != null) {
+ 				if (isStatedRelationship && "900000000000011006".equals(relationship.getCharacteristicTypeId())) {
+@@ -43,26 +75,28 @@ public class ReleaseWriter implements AutoCloseable {
+ 				} else if (!isStatedRelationship && "900000000000010007".equals(relationship.getCharacteristicTypeId())) {
+ 					continue;
+ 				}
+-				if (relationship.getEffectiveTime() != null && !relationship.getEffectiveTime().isEmpty() && 
+-						dateFormat.parse(relationship.getEffectiveTime()).after(maxDate)) {
+-					maxDate = dateFormat.parse(relationship.getEffectiveTime());
+-				}
++				maxEffectiveTime = later(maxEffectiveTime, relationship.getEffectiveTime());
+ 				attributeGroups.add(relationship.getTypeId(), relationship.getRelationshipGroup());
+ 			}
+ 		}
+ 		if (concept.getConcreteRelationships() != null && !isStatedRelationship) {
+ 			for (ConcreteRelationship concreteRelationship : concept.getConcreteRelationships()) {
+-				if (concreteRelationship.getEffectiveTime() != null && !concreteRelationship.getEffectiveTime().isEmpty() &&
+-						dateFormat.parse(concreteRelationship.getEffectiveTime()).after(maxDate)) {
+-					maxDate = dateFormat.parse(concreteRelationship.getEffectiveTime());
+-				}
++				maxEffectiveTime = later(maxEffectiveTime, concreteRelationship.getEffectiveTime());
+ 				attributeGroups.add(concreteRelationship.getTypeId(), concreteRelationship.getRelationshipGroup());
+ 			}
+ 		}
+-		doc.add(new StringField(ConceptFieldNames.EFFECTIVE_TIME, dateFormat.format(maxDate), Field.Store.YES));
++		doc.add(new StringField(ConceptFieldNames.EFFECTIVE_TIME, maxEffectiveTime, Field.Store.YES));
+ 		addAttributeCardinalityDocument(doc, attributeGroups);
+ 	}
+ 
++	/** The later of two {@code yyyyMMdd} effective times, ignoring blanks. */
++	private static String later(String current, String candidate) {
++		if (candidate == null || candidate.isEmpty()) {
++			return current;
++		}
++		return candidate.compareTo(current) > 0 ? candidate : current;
++	}
++
+ 	private void addAttributeCardinalityDocument(Document doc, final MultiValueMap<String, String> attributeGroups) {
+ 		for (String key : attributeGroups.keySet()) {
+ 			int totalCount = 0;
+@@ -99,8 +133,13 @@ public class ReleaseWriter implements AutoCloseable {
+ 
+ 	private Document getConceptDocument(Concept concept, boolean isStatedRelationship) throws ParseException {
  		Document conceptDoc = new Document();
- 		conceptDoc.add(new StringField("type", "concept", Field.Store.YES));
+-		conceptDoc.add(new StringField("type", "concept", Field.Store.YES));
++		conceptDoc.add(new StringField(ConceptFieldNames.TYPE, ConceptFieldNames.TYPE_CONCEPT, Field.Store.YES));
  		conceptDoc.add(new StringField(ConceptFieldNames.ID, concept.getId().toString(), Field.Store.YES));
 +		// Numeric copy of the id. Queries return hundreds of thousands of hits
 +		// and only ever want the identifier back; reading it from doc values
@@ -280,3 +537,75 @@ index 0000000..1022bce
 +		}
 +	}
 +}
+diff --git a/src/test/java/org/ihtsdo/otf/sqs/service/ExamplesExpressionConstraintToLuceneConverterTest.java b/src/test/java/org/ihtsdo/otf/sqs/service/ExamplesExpressionConstraintToLuceneConverterTest.java
+index 00e5644..484ab20 100644
+--- a/src/test/java/org/ihtsdo/otf/sqs/service/ExamplesExpressionConstraintToLuceneConverterTest.java
++++ b/src/test/java/org/ihtsdo/otf/sqs/service/ExamplesExpressionConstraintToLuceneConverterTest.java
+@@ -77,7 +77,7 @@ public class ExamplesExpressionConstraintToLuceneConverterTest {
+ 		assertConversion(
+ 				"*",
+ 
+-				"id:*"
++				"type:concept"
+ 		);
+ 	}
+ 
+@@ -121,7 +121,7 @@ public class ExamplesExpressionConstraintToLuceneConverterTest {
+ 		assertConversion(
+ 				"* : 246075003 |causative agent| = 387517004 |paracetamol|",
+ 
+-				"id:* " +
++				"type:concept " +
+ 						"AND 246075003:387517004"
+ 		);
+ 	}
+diff --git a/src/test/java/org/ihtsdo/otf/sqs/service/ExpressionConstraintToLuceneConverterTest.java b/src/test/java/org/ihtsdo/otf/sqs/service/ExpressionConstraintToLuceneConverterTest.java
+index 0af04d9..5908c61 100644
+--- a/src/test/java/org/ihtsdo/otf/sqs/service/ExpressionConstraintToLuceneConverterTest.java
++++ b/src/test/java/org/ihtsdo/otf/sqs/service/ExpressionConstraintToLuceneConverterTest.java
+@@ -43,7 +43,7 @@ public class ExpressionConstraintToLuceneConverterTest {
+ 
+ 	@Test
+ 	public void test_simpleExpressionConstraint_wildcard() {
+-		assertConversion("*", "id:*");
++		assertConversion("*", "type:concept");
+ 	}
+ 
+ 	@Test
+@@ -63,17 +63,17 @@ public class ExpressionConstraintToLuceneConverterTest {
+ 
+ 	@Test
+ 	public void test_refinedExpressionConstraint_wildcardConcept_attributeNameAndConceptValue() {
+-		assertConversion("*:363699004=34164001", "id:* AND 363699004:34164001");
++		assertConversion("*:363699004=34164001", "type:concept AND 363699004:34164001");
+ 	}
+ 
+ 	@Test
+ 	public void test_refinedExpressionConstraint_wildcardConcept_attributeValueDescendantOf() {
+-		assertConversion("*:260686004=<129264002", "id:* AND 260686004:ATTRIBUTE_DESCENDANT_OF(129264002)");
++		assertConversion("*:260686004=<129264002", "type:concept AND 260686004:ATTRIBUTE_DESCENDANT_OF(129264002)");
+ 	}
+ 
+ 	@Test
+ 	public void test_refinedExpressionConstraint_wildcardConcept_attributeValueDescendantOrSelf() {
+-		assertConversion("*:260686004=<<129264002", "id:* AND 260686004:ATTRIBUTE_DESCENDANT_OR_SELF_OF(129264002)");
++		assertConversion("*:260686004=<<129264002", "type:concept AND 260686004:ATTRIBUTE_DESCENDANT_OR_SELF_OF(129264002)");
+ 	}
+ 
+ 	@Test(expected = UnsupportedOperationException.class)
+@@ -84,13 +84,13 @@ public class ExpressionConstraintToLuceneConverterTest {
+ 	@Test
+ 	public void test_refinedEclWithMultipleDomainsExclusion() {
+ 		assertConversion("(*:272741003=*) MINUS (<<91723000 OR <<723264001)",
+-				"(id:* AND 272741003:*) NOT ((id:91723000 OR ancestor:91723000) OR (id:723264001 OR ancestor:723264001))");
++				"(type:concept AND 272741003:*) NOT ((id:91723000 OR ancestor:91723000) OR (id:723264001 OR ancestor:723264001))");
+ 	}
+ 	
+ 	@Test
+ 	public void test_refinedEclWithOneDomainExclusion() {
+ 		assertConversion("(*:272741003=*) MINUS <<91723000",
+-				"(id:* AND 272741003:*) NOT (id:91723000 OR ancestor:91723000)");
++				"(type:concept AND 272741003:*) NOT (id:91723000 OR ancestor:91723000)");
+ 
+ 	}
+ 
