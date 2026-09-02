@@ -901,3 +901,74 @@ against guessing at an ECL evaluator none of us wrote.
 | unlogged tail | 166 s | three delegated services, unprofiled |
 | `executeAttributeDomainValidation` | inside the 466 s | still serial, different shape |
 | heap peak | 11.3 GB | the pre-index concept map, not the index |
+
+### Where the 466 s of query loops actually goes, 2026-09-02
+
+Profiled properly this time - 45,155 stack frames sampled every 2 s across a
+full MRCM run, filtered to the validator, query service and Lucene. Caveat: this
+is the **disk-index** variant (776 s), so the store/codec share is inflated
+against the 735 s RAM default.
+
+| share | package | what it is |
+|---|---|---|
+| 28.8% | `org.apache.lucene.search` | executing the queries - irreducible without changing them |
+| 17.5% | `org.snomed.quality.validator` | `runAttributeRangeCheck`, the parallel range work |
+| **12.9%** | **`org.apache.lucene.queryparser`** | **parsing the query STRING** |
+| 15.9% | `codecs` + `store` + `index` | I/O and decode, part of it the disk index |
+| 11.6% | `org.ihtsdo.otf.sqs` | ECL -> Lucene string conversion |
+
+**The finding: 12.9% of the phase is spent parsing query text, not searching.**
+`SnomedQueryService.eclQueryReturnConceptIdentifiers` converts ECL to a Lucene
+query *string* and hands it to the classic `QueryParser` on every call - the hot
+frames are `QueryParser.Query`, `TopLevelQuery`, `Clause`, `Term` and
+`CustomizedQueryParser.getRangeQuery`.
+
+**Half of that parsing is provably redundant.** Counting the queries the run
+actually issued:
+
+```
+total queries logged      859
+distinct query strings    432
+redundant re-parses       427  (49.7%)
+```
+
+Every distinct query is issued exactly **twice** - once against the INFERRED
+index and once against STATED. The two *searches* are both needed, because the
+indexes hold different content. The two *parses* are not: a Lucene `Query` is
+immutable and reusable across searchers, so the second parse of an identical
+string is pure waste.
+
+**Sizing the lever, on the 735 s phase:**
+
+- a parsed-query cache keyed on the string removes the 49.7% -> **~48 s**
+- building `Query` objects directly instead of the string round-trip removes all
+  12.9% -> **~95 s**, but that is a rewrite of
+  `ExpressionConstraintToLuceneConverter`, not a cache
+
+The cache is the cheap half and it is contained. It lives in
+`snomed-query-service` (`org.ihtsdo.otf.sqs`) - a **fourth** library to fork,
+patch, build and pin, after snomed-drools and mrcm-validator.
+
+**Not compressible:** the 28.8% of real search execution, and the 2x query
+issue itself - both content forms must be validated.
+
+### Getting the measurement was four failed submissions
+
+Recorded because the failures were all mine and all silent:
+
+- `groups=mrcm` -> **412**. MRCM is not an assertion group; it is
+  `enableMRCMValidation=true` alongside a real group.
+- `releaseFileS3Path=amtv4.zip` -> **400**, empty body. The path is resolved
+  under the job store root, so it must be `au/amtv4.zip`. `saveUploadedFiles`
+  writes `State.FAILED` and returns the reason in a response map the controller
+  discards - a 400 with no body and nothing logged.
+- `enableMrcmValidation=true` -> accepted, ran in **94 s**, MRCM **disabled**.
+  The parameter is `enableMRCMValidation`, capital MRCM, and a misspelling binds
+  silently to the `false` default. A green report that skipped the phase.
+- First profile attempt sampled at 45 s from submission and caught the
+  structural phase, then parked threads after completion. Sample the window, not
+  the wall clock.
+
+Also found: the long-lived API node was serving a jar I had rebuilt underneath
+it, and threw `NoClassDefFoundError: ModelAndViewDefiningException` on lazily
+loaded Spring classes. Restart the API after any `mvn install`.
