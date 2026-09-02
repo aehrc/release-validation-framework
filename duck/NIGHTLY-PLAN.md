@@ -1047,3 +1047,94 @@ inlining costs in allocation.
 **Standing lesson, third time today:** measure retention, not just time. Time
 said 12.9% was available; a heap histogram or a `GC.heap_info` before and after
 would have said the artefacts are multi-GB, and I would not have pinned it.
+
+### Reanalysis: the cost was reading the hits, not building the queries, 2026-09-02
+
+Re-ran the analysis with a stronger model and then checked every load-bearing
+claim against the code. Two premises turned out to be wrong - one mine, which
+the model inherited.
+
+**My wrong premise.** I recorded that `processInternalFunction` inlines closure
+ids as literal text, so `<< 404684003` becomes tens of thousands of
+BooleanQuery clauses. Asking the converter directly:
+
+```
+ECL    : << 404684003 |Clinical finding (finding)|
+lucene : (id:404684003 OR ancestor:404684003)     <- 36 chars, no inlining
+ECL    : (*:246112005=*) MINUS << 404684003 |...|
+lucene : (id:* AND 246112005:*) NOT (id:404684003 OR ancestor:404684003)
+```
+
+Inlining happens only for `>>X` (`ANCESTOR_OR_SELF_OF`, resolved from one
+document's ANCESTOR values - small) and for attribute *value* ranges
+(`ATTRIBUTE_DESCENDANT_OR_SELF_OF`). The domain closures that dominate the
+corpus were never inlined. The model's top recommendation - "stop inlining, use
+the ANCESTOR field" - was therefore already done, and it ranked it first because
+I fed it a bad fact.
+
+**Measured before believing it.** Hand-built `(id:X OR ancestor:X)` against the
+shipped path on a real index, five domains, 429,130 hits: identical sets, and
+**10,220ms vs 10,059ms - 1.6%**. Then splitting that cost in half:
+
+| | |
+|---|---|
+| executing all five closures | **15 ms** |
+| turning the hits into ids | **7,319 ms** |
+| | extraction is **99.8%** |
+
+**The real defect.** `getConceptId(ScoreDoc)` was
+`indexSearcher.doc(scoreDoc.doc, CONCEPT_FIELD_SET).getValues(ID)[0]` - a
+stored-field fetch per hit, decompressing a stored-fields block to recover a
+number. `ID` was written `Store.YES` with no doc values, while `FSN_LENGTH`
+already used `SortedNumericDocValuesField`, so the pattern was there unused.
+
+Measured over the real corpus - the 432 distinct expressions the AU run issues,
+against a real 722,404-concept index:
+
+| | hits | wall (1 thread) | per hit |
+|---|---|---|---|
+| stored fields | 3,885,244 | 90.3 s | 20.3 us |
+| doc values, chunked | 3,885,244 | **16.8 s** | **4.3 us** | 
+
+**5.4x, and identical output.** Order-sensitive digests over all 432
+expressions match exactly - same ids, same order - which matters because
+`failureExportMax` truncates and reports name specific instances.
+
+End to end on the nightly at the same 12 GB heap, post-index validation window:
+**632 s -> 520 s, -112 s (17.7%)**, findings 1037/3/4/2 unchanged. Far less than
+5.4x, because spread over eight threads the loop's own cost is a modest share of
+a phase that also spends 128 s building two indexes.
+
+**A regression I caused and caught.** The first version sorted the whole hit
+array through a boxed `Integer[]`. All 125 library tests passed and it **OOM'd
+the 12 GB heap** on the real edition - 125,000 hits x 8 threads inside a phase
+already peaking near the ceiling. Rewritten to sort a bounded `long[8192]` with
+the docid packed in the high half and the output slot in the low half: fits
+12 GB, and is *faster* than the unbounded version (520 s vs 565 s) because it
+stops thrashing GC. Third time this session that bounding a buffer was the fix.
+
+**The silent-fallback trap, made to fail loudly.** The read falls back to the
+stored field for indexes predating the field, so a broken writer leaves every
+query correct and merely slow. Deleting the writer line fails exactly one test -
+`ConceptIdDocValuesTest.everyConceptDocumentCarriesTheNumericId` - and leaves
+the other 124 passing. That asymmetry is the point of the test.
+
+**Where the corpus numbers disagreed with me.** The model spotted that
+432 x 2 = 864 against 859 issued: five expressions are issued once, not twice.
+Worth knowing before assuming per-form symmetry.
+
+**The next lever, revealed by fixing this one.** With extraction cheap, the most
+expensive single expression is now:
+
+```
+365.9 ms      0 hits   (*:1003703000=*) MINUS << 363787002 |Observable entity|
+```
+
+365 ms to return nothing. `*` converts to `id:*`, a wildcard enumerating all
+722,404 terms in the `id` dictionary, where `type:concept` is one term. That is
+a one-line change in the converter and it is now the top of the profile.
+
+Carried as `duck/snomed-query-service-docvalues.patch` with
+`duck/build-query-service.sh`, which reproduces from a clean IHTSDO 6.0.1 clone
+and gates on BOTH halves being present in the bytecode - a jar missing the
+writer would pass every functional test.

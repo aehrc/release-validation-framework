@@ -17,6 +17,7 @@
 
     <properties>
         <mrcm.validator.version>4.0.4-aehrc-perf</mrcm.validator.version>
+        <snomed.query.service.version>6.0.1-aehrc-perf</snomed.query.service.version>
         <snomed.drools.version>6.1.3-aehrc-perf</snomed.drools.version>
         <packageName>rvf-api</packageName>
         <docker.registry>docker.io</docker.registry>
@@ -207,6 +208,22 @@
                     <artifactId>slf4j-reload4j</artifactId>
                 </exclusion>
             </exclusions>
+        </dependency>
+        <dependency>
+            <!--
+              Pinned ahead of mrcm-validator, which brings SnomedQueryService in
+              transitively. Concept ids are read from doc values instead of a
+              stored field per hit: the MRCM corpus of an 853MB AU edition
+              returns 3,885,244 hits across 432 expressions, and decompressing a
+              stored-fields block for each cost a flat 24.7us - the single
+              largest cost in the phase. Hit order is preserved, so reports name
+              the same instances. Reproduce with duck/build-query-service.sh.
+
+              DROP THIS PIN if SI takes the change upstream.
+            -->
+            <groupId>org.ihtsdo.otf</groupId>
+            <artifactId>snomed-query-service</artifactId>
+            <version>${snomed.query.service.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
