@@ -23,6 +23,7 @@ import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.FileInputStream;
 import java.io.InputStream;
 import java.util.*;
@@ -50,9 +51,20 @@ public class MRCMValidationService {
 	@Value("${rvf.empty-release-file}")
 	private String emptyRf2Filename;
 
+	/**
+	 * Extracts one release type across all cores, into {@code java.io.tmpdir}
+	 * where snomedboot's own unzip used to put it, so the run's cleanup still
+	 * finds it.
+	 */
+	private String unpack(File zip, String releaseType) throws IOException {
+		return RF2ReleaseTypeUnpacker
+				.unpack(zip, java.nio.file.Path.of(System.getProperty("java.io.tmpdir")), releaseType)
+				.toAbsolutePath().toString();
+	}
+
 	public ValidationStatusReport runMRCMAssertionTests(final ValidationStatusReport statusReport, ValidationRunConfig validationConfig) {
 		Set<String> extractedRF2FilesDirectory = new HashSet<>();
-		try (InputStream testedReleaseFileStream = new FileInputStream(validationConfig.getLocalProspectiveFile())) {
+		try {
 			boolean fullSnapshotRelease = !validationConfig.isRf2DeltaOnly() && CollectionUtils.isEmpty(validationConfig.getExtensionDependencies());
 			int maxFailureExports = validationConfig.getFailureExportMax() != null ? validationConfig.getFailureExportMax() : 100;
 			String effectiveDate = StringUtils.hasLength(validationConfig.getEffectiveTime()) ? validationConfig.getEffectiveTime().replace("-", "") : "";
@@ -60,8 +72,11 @@ public class MRCMValidationService {
 			ValidationReport report = statusReport.getResultReport();
 			ValidationService validationService = new ValidationService();
 
-			Set<InputStream> snapshotsInputStream = new HashSet<>();
-			InputStream deltaInputStream = null;
+			// Files rather than InputStreams: RF2ReleaseTypeUnpacker reads the
+			// archive's central directory so it can extract entries across all
+			// cores, which a single stream cannot support.
+			Set<File> snapshotFiles = new HashSet<>();
+			File deltaFile = null;
 			//If the validation is Delta validation, previous snapshot file must be loaded to snapshot files list.
 			if (validationConfig.isRf2DeltaOnly()) {
 				if (StringUtils.hasLength(validationConfig.getPreviousRelease())) {
@@ -72,14 +87,13 @@ public class MRCMValidationService {
 						if (localFile == null) {
 							throw new RVFExecutionException(String.format("The previous release file %s was not found from local store", validationConfig.getPreviousRelease()));
 						}
-						InputStream previousStream = new FileInputStream(localFile);
-						snapshotsInputStream.add(previousStream);
+						snapshotFiles.add(localFile);
 					}
 				}
-				deltaInputStream = testedReleaseFileStream;
+				deltaFile = validationConfig.getLocalProspectiveFile();
 			} else {
 				//If the validation is Snapshot validation, current file must be loaded to snapshot files list
-				snapshotsInputStream.add(testedReleaseFileStream);
+				snapshotFiles.add(validationConfig.getLocalProspectiveFile());
 			}
 
 			//Load the dependency package from S3 to snapshot files list before validating if the package is an MS extension and not an edition release
@@ -93,8 +107,7 @@ public class MRCMValidationService {
 					if (localFile == null) {
 						throw new RVFExecutionException(String.format("The dependency release file %s was not found from local store", dependencyFilename));
 					}
-					InputStream dependencyStream = new FileInputStream(localFile);
-					snapshotsInputStream.add(dependencyStream);
+					snapshotFiles.add(localFile);
 				}
 			}
 
@@ -105,14 +118,18 @@ public class MRCMValidationService {
 				moduleIds = Sets.newHashSet(moduleIdStr.split(","));
 			}
 
-			//Unzip the release files
-			for (InputStream inputStream : snapshotsInputStream) {
-				File snapshotDirectory = new ReleaseImporter().unzipRelease(inputStream, ReleaseImporter.ImportType.SNAPSHOT);
-				extractedRF2FilesDirectory.add(snapshotDirectory.getPath());
+			// Unzip the release files.
+			//
+			// RF2ReleaseTypeUnpacker rather than snomedboot's unzipRelease, which
+			// is single-threaded: on an 853 MB edition that was ~40 s per archive
+			// of pure decompression on one core. Same output - one flat directory
+			// of that release type's .txt files - because the loader selects out
+			// of it by filename.
+			for (File localFile : snapshotFiles) {
+				extractedRF2FilesDirectory.add(unpack(localFile, "Snapshot"));
 			}
-			if (deltaInputStream != null) {
-				File deltaDirectory = new ReleaseImporter().unzipRelease(deltaInputStream, ReleaseImporter.ImportType.DELTA);
-				extractedRF2FilesDirectory.add(deltaDirectory.getPath());
+			if (deltaFile != null) {
+				extractedRF2FilesDirectory.add(unpack(deltaFile, "Delta"));
 			}
 
 			ValidationRun validationRunner = new ValidationRun(null, null, false);

@@ -1,0 +1,401 @@
+diff --git a/src/main/java/org/snomed/quality/validator/mrcm/ValidationRun.java b/src/main/java/org/snomed/quality/validator/mrcm/ValidationRun.java
+index e56bc95..b7c3ee5 100644
+--- a/src/main/java/org/snomed/quality/validator/mrcm/ValidationRun.java
++++ b/src/main/java/org/snomed/quality/validator/mrcm/ValidationRun.java
+@@ -27,10 +27,14 @@ public final class ValidationRun {
+ 	private boolean fullSnapshotRelease;
+ 
+ 	public ValidationRun(final String releaseDate, final ContentType contentType, final boolean reportSkippedAssertions) {
+-		assertionsCompleted = new ArrayList<>();
+-		assertionsIncomplete = new ArrayList<>();
++		// Synchronized because the domain/attribute validations that append to
++		// these run concurrently. A plain ArrayList loses entries under
++		// concurrent add, and a lost entry here is a lost assertion - the
++		// validation would report fewer results rather than fail.
++		assertionsCompleted = Collections.synchronizedList(new ArrayList<>());
++		assertionsIncomplete = Collections.synchronizedList(new ArrayList<>());
+ 		validationTypes = Arrays.asList(ValidationType.values());
+-		assertionSkipped = new ArrayList<>();
++		assertionSkipped = Collections.synchronizedList(new ArrayList<>());
+ 		this.releaseDate = releaseDate;
+ 		this.contentType = contentType;
+ 		ungroupedAttributes = new HashSet<>();
+diff --git a/src/main/java/org/snomed/quality/validator/mrcm/ValidationService.java b/src/main/java/org/snomed/quality/validator/mrcm/ValidationService.java
+index 4125cd2..5be4aae 100644
+--- a/src/main/java/org/snomed/quality/validator/mrcm/ValidationService.java
++++ b/src/main/java/org/snomed/quality/validator/mrcm/ValidationService.java
+@@ -40,6 +40,11 @@ import org.springframework.util.CollectionUtils;
+ import java.io.File;
+ import java.io.IOException;
+ import java.util.*;
++import java.util.concurrent.Future;
++import java.util.concurrent.Executors;
++import java.util.concurrent.ExecutorService;
++import java.util.concurrent.ExecutionException;
++import java.util.concurrent.Callable;
+ import java.util.concurrent.atomic.AtomicInteger;
+ import java.util.regex.Matcher;
+ import java.util.regex.Pattern;
+@@ -197,41 +202,38 @@ public class ValidationService {
+ 	}
+ 
+ 	private void executeAttributeGroupCardinalityValidation(ValidationRun run, SnomedQueryService queryService, List<Long> precoordinatedTypes) throws ServiceException {
+-		for (Domain domain : run.getMRCMDomains().values()) {
+-			for (Attribute attribute : domain.getAttributes()) {
+-				if (!precoordinatedTypes.contains(Long.parseLong(attribute.getContentTypeId()))) {
+-					//skip
+-					run.addSkippedAssertion(constructAssertion(queryService, attribute, ValidationType.ATTRIBUTE_IN_GROUP_CARDINALITY, CONTENT_TYPE_IS_OUT_OF_SCOPE + attribute.getContentTypeId()));
+-					continue;
++		forEachDomainAttribute(run, (domain, attribute) -> {
++			if (!precoordinatedTypes.contains(Long.parseLong(attribute.getContentTypeId()))) {
++				//skip
++				run.addSkippedAssertion(constructAssertion(queryService, attribute, ValidationType.ATTRIBUTE_IN_GROUP_CARDINALITY, CONTENT_TYPE_IS_OUT_OF_SCOPE + attribute.getContentTypeId()));
++				return;
++			}
++			String domainPartEcl = "<<" + domain.getDomainId() + ":";
++			String attributePartEcl = attribute.getAttributeId() + "=*";
++			if (attribute.isGrouped() && !NO_CARDINALITY_CONSTRAINT.equals(attribute.getAttributeInGroupCardinality())) {
++				String eclWithoutCardinality = domainPartEcl + "[0..*]" + " { [0..*] " + attributePartEcl + " }";
++				//run ECL query to retrieve failures
++				LOGGER.info("Selecting content within domain '{}' with attribute '{}' without group cardinality ECL:'{}'", domain.getDomainId(), attribute.getAttributeId(), eclWithoutCardinality);
++				List<Long> conceptIdsWithoutCardinality = queryService.eclQueryReturnConceptIdentifiers(eclWithoutCardinality, 0, -1).conceptIds();
++				String eclWithCardinality = domainPartEcl + "[" + attribute.getAttributeCardinality() + "]" + "{ [" + attribute.getAttributeInGroupCardinality() + "] " + attributePartEcl + "}";
++				LOGGER.info("Selecting content within domain '{}' with attribute '{}' with cardinality ECL:'{}'", domain.getDomainId(), attribute.getAttributeId(), eclWithCardinality);
++				List<Long> conceptIdsWithCardinality = queryService.eclQueryReturnConceptIdentifiers(eclWithCardinality, 0, -1).conceptIds();
++				List<Long> invalidIds = new ArrayList<>();
++				if (conceptIdsWithoutCardinality.size() != conceptIdsWithCardinality.size()) {
++					invalidIds = conceptIdsWithoutCardinality;
++					invalidIds.removeAll(conceptIdsWithCardinality);
+ 				}
+-				String domainPartEcl = "<<" + domain.getDomainId() + ":"; 
+-				String attributePartEcl = attribute.getAttributeId() + "=*";
+-				if (attribute.isGrouped() && !NO_CARDINALITY_CONSTRAINT.equals(attribute.getAttributeInGroupCardinality())) {
+-					String eclWithoutCardinality = domainPartEcl + "[0..*]" + " { [0..*] " + attributePartEcl + " }";
+-					//run ECL query to retrieve failures
+-					LOGGER.info("Selecting content within domain '{}' with attribute '{}' without group cardinality ECL:'{}'", domain.getDomainId(), attribute.getAttributeId(), eclWithoutCardinality);
+-					List<Long> conceptIdsWithoutCardinality = queryService.eclQueryReturnConceptIdentifiers(eclWithoutCardinality, 0, -1).conceptIds();
+-					String eclWithCardinality = domainPartEcl + "[" + attribute.getAttributeCardinality() + "]" + "{ [" + attribute.getAttributeInGroupCardinality() + "] " + attributePartEcl + "}";
+-					LOGGER.info("Selecting content within domain '{}' with attribute '{}' with cardinality ECL:'{}'", domain.getDomainId(), attribute.getAttributeId(), eclWithCardinality);
+-					List<Long> conceptIdsWithCardinality = queryService.eclQueryReturnConceptIdentifiers(eclWithCardinality, 0, -1).conceptIds();
+-					List<Long> invalidIds = new ArrayList<>();
+-					if (conceptIdsWithoutCardinality.size() != conceptIdsWithCardinality.size()) {
+-						invalidIds = conceptIdsWithoutCardinality;
+-						invalidIds.removeAll(conceptIdsWithCardinality);
+-					}
+-					processValidationResults(run, queryService, attribute, invalidIds, ValidationType.ATTRIBUTE_IN_GROUP_CARDINALITY, null);
+-				} else {
+-					String skipMsg = "ValidationType:" + ValidationType.ATTRIBUTE_IN_GROUP_CARDINALITY.getName() + " Skipped reason: ";
+-					if (NO_CARDINALITY_CONSTRAINT.equals(attribute.getAttributeInGroupCardinality())) {
+-						skipMsg += " Attribute group cardinality constraint is " + attribute.getAttributeInGroupCardinality();
+-					} else if (!attribute.isGrouped()) {
+-						skipMsg += " Attribute constraint is not grouped.";
+-					}
+-					run.addSkippedAssertion(constructAssertion(queryService, attribute,ValidationType.ATTRIBUTE_IN_GROUP_CARDINALITY, skipMsg));
++				processValidationResults(run, queryService, attribute, invalidIds, ValidationType.ATTRIBUTE_IN_GROUP_CARDINALITY, null);
++			} else {
++				String skipMsg = "ValidationType:" + ValidationType.ATTRIBUTE_IN_GROUP_CARDINALITY.getName() + " Skipped reason: ";
++				if (NO_CARDINALITY_CONSTRAINT.equals(attribute.getAttributeInGroupCardinality())) {
++					skipMsg += " Attribute group cardinality constraint is " + attribute.getAttributeInGroupCardinality();
++				} else if (!attribute.isGrouped()) {
++					skipMsg += " Attribute constraint is not grouped.";
+ 				}
++				run.addSkippedAssertion(constructAssertion(queryService, attribute,ValidationType.ATTRIBUTE_IN_GROUP_CARDINALITY, skipMsg));
+ 			}
+-		}
+-
++		});
+ 	}
+ 
+ 	private void processValidationResults(ValidationRun run, SnomedQueryService queryService, Attribute attribute,
+@@ -278,35 +280,111 @@ public class ValidationService {
+ 	}
+ 
+ 	private void executeAttributeCardinalityValidation(ValidationRun run, SnomedQueryService queryService, List<Long> precoordinatedTypes) throws ServiceException {
++		forEachDomainAttribute(run, (domain, attribute) -> {
++			if (!precoordinatedTypes.contains(Long.parseLong(attribute.getContentTypeId()))) {
++				//skip
++				run.addSkippedAssertion(constructAssertion(queryService, attribute, ValidationType.ATTRIBUTE_CARDINALITY, CONTENT_TYPE_IS_OUT_OF_SCOPE + attribute.getContentTypeId()));
++				return;
++			}
++			if (NO_CARDINALITY_CONSTRAINT.equals(attribute.getAttributeCardinality())) {
++				run.addSkippedAssertion(constructAssertion(queryService,attribute, ValidationType.ATTRIBUTE_CARDINALITY,
++						"Attribute cardinality constraint is " + attribute.getAttributeCardinality()));
++			} else {
++				String domainConstraint = domain.getDomainConstraint() + " : ";
++				String attributeWithoutRange = attribute.getAttributeId() + " =* ";
++				String eclWithoutCardinality = domainConstraint +  attributeWithoutRange;
++				//run ECL query to retrieve failures
++				LOGGER.info("Selecting content within domain '{}' with attribute '{}' without cardinality ECL:'{}'", domain.getDomainId(), attribute.getAttributeId(), eclWithoutCardinality);
++				List<Long> conceptIdsWithoutCardinality = queryService.eclQueryReturnConceptIdentifiers(eclWithoutCardinality, 0, -1).conceptIds();
++				String eclWithCardinality = domainConstraint + " [" + attribute.getAttributeCardinality() + "] " + attributeWithoutRange;
++				LOGGER.info("Selecting content within domain '{}' with attribute '{}' with cardinality ECL:'{}'", domain.getDomainId(), attribute.getAttributeId(), eclWithCardinality);
++				List<Long> conceptIdsWithCardinality = queryService.eclQueryReturnConceptIdentifiers(eclWithCardinality, 0, -1).conceptIds();
++				List<Long> invalidIds = new ArrayList<>();
++				if (conceptIdsWithoutCardinality.size() != conceptIdsWithCardinality.size()) {
++					invalidIds = conceptIdsWithoutCardinality;
++					invalidIds.removeAll(conceptIdsWithCardinality);
++				}
++				processValidationResults(run, queryService, attribute, invalidIds, ValidationType.ATTRIBUTE_CARDINALITY, null);
++			}
++		});
++	}
++
++	/**
++	 * What a domain/attribute validation does for one pair.
++	 */
++	@FunctionalInterface
++	private interface DomainAttributeCheck {
++		void run(Domain domain, Attribute attribute) throws ServiceException;
++	}
++
++	/**
++	 * Runs {@code check} for every domain/attribute pair, across all cores.
++	 *
++	 * <p>Each pair is one or two ECL queries against the Lucene index followed by
++	 * a concept lookup per failure, and the pairs are independent - one
++	 * {@link Assertion} each. Run serially that is the bulk of an MRCM
++	 * validation: on an AU edition the query phase took <b>1,122 s of a 1,292 s
++	 * run, 87%</b>, all of it on one thread.
++	 *
++	 * <p>Safe to fan out because {@code SnomedQueryService} is read-only per
++	 * query and thread-safe by construction - a Lucene {@code IndexSearcher} and
++	 * {@code Analyzer}, a stateless ECL-to-Lucene converter, and a
++	 * {@code ConcurrentHashMap} for its refset cache - and because
++	 * {@code ValidationRun}'s assertion lists are synchronized.
++	 *
++	 * <p>Pairs are flattened rather than nested so that a domain with many
++	 * attributes cannot leave the other threads idle.
++	 */
++	private void forEachDomainAttribute(ValidationRun run, DomainAttributeCheck check) throws ServiceException {
++		List<Callable<Void>> tasks = new ArrayList<>();
+ 		for (Domain domain : run.getMRCMDomains().values()) {
+ 			for (Attribute attribute : domain.getAttributes()) {
+-				if (!precoordinatedTypes.contains(Long.parseLong(attribute.getContentTypeId()))) {
+-					//skip
+-					run.addSkippedAssertion(constructAssertion(queryService, attribute, ValidationType.ATTRIBUTE_CARDINALITY, CONTENT_TYPE_IS_OUT_OF_SCOPE + attribute.getContentTypeId()));
+-					continue;
++				tasks.add(() -> {
++					check.run(domain, attribute);
++					return null;
++				});
++			}
++		}
++		runInParallel(tasks);
++	}
++
++	/**
++	 * Runs independent validation tasks across all cores.
++	 *
++	 * <p>One task failing fails the whole validation. Reporting a partial result
++	 * as though it were complete would be worse than not running at all.
++	 */
++	private void runInParallel(List<Callable<Void>> tasks) throws ServiceException {
++		if (tasks.size() <= 1) {
++			for (Callable<Void> task : tasks) {
++				try {
++					task.call();
++				} catch (Exception e) {
++					throw asServiceException(e);
++				}
++			}
++			return;
++		}
++		try (ExecutorService pool = Executors.newFixedThreadPool(
++				Math.min(tasks.size(), Runtime.getRuntime().availableProcessors()))) {
++			for (Future<Void> future : pool.invokeAll(tasks)) {
++				try {
++					future.get();
++				} catch (ExecutionException e) {
++					throw asServiceException(e.getCause());
+ 				}
+-				if (NO_CARDINALITY_CONSTRAINT.equals(attribute.getAttributeCardinality())) {
+-					run.addSkippedAssertion(constructAssertion(queryService,attribute, ValidationType.ATTRIBUTE_CARDINALITY,
+-							"Attribute cardinality constraint is " + attribute.getAttributeCardinality()));
+-				} else {
+-					String domainConstraint = domain.getDomainConstraint() + " : ";
+-					String attributeWithoutRange = attribute.getAttributeId() + " =* ";
+-					String eclWithoutCardinality = domainConstraint +  attributeWithoutRange;
+-					//run ECL query to retrieve failures
+-					LOGGER.info("Selecting content within domain '{}' with attribute '{}' without cardinality ECL:'{}'", domain.getDomainId(), attribute.getAttributeId(), eclWithoutCardinality);
+-					List<Long> conceptIdsWithoutCardinality = queryService.eclQueryReturnConceptIdentifiers(eclWithoutCardinality, 0, -1).conceptIds();
+-					String eclWithCardinality = domainConstraint + " [" + attribute.getAttributeCardinality() + "] " + attributeWithoutRange;
+-					LOGGER.info("Selecting content within domain '{}' with attribute '{}' with cardinality ECL:'{}'", domain.getDomainId(), attribute.getAttributeId(), eclWithCardinality);
+-					List<Long> conceptIdsWithCardinality = queryService.eclQueryReturnConceptIdentifiers(eclWithCardinality, 0, -1).conceptIds();
+-					List<Long> invalidIds = new ArrayList<>();
+-					if (conceptIdsWithoutCardinality.size() != conceptIdsWithCardinality.size()) {
+-						invalidIds = conceptIdsWithoutCardinality;
+-						invalidIds.removeAll(conceptIdsWithCardinality);
+-					}
+-					processValidationResults(run, queryService, attribute, invalidIds, ValidationType.ATTRIBUTE_CARDINALITY, null);
+-				} 
+ 			}
++		} catch (InterruptedException e) {
++			Thread.currentThread().interrupt();
++			throw new ServiceException("Interrupted while running validations", e);
++		}
++	}
++
++	private ServiceException asServiceException(Throwable cause) {
++		if (cause instanceof ServiceException serviceException) {
++			return serviceException;
+ 		}
++		return new ServiceException("Domain attribute validation failed", cause);
+ 	}
+ 
+ 	private Assertion constructAssertion(SnomedQueryService queryService, Attribute attribute, ValidationType attributeCardinality, String skipMsg) {
+@@ -326,12 +404,98 @@ public class ValidationService {
+ 		}
+ 		return new Assertion(attribute, validationType, msg, failureType, currentInvalidConcepts, previousInvalidConcepts, domainConstraint);
+ 	}
++	/**
++	 * Plans serially, then runs the plan across all cores.
++	 *
++	 * <p>The planning half cannot be parallelised even though it looks like it
++	 * could. {@code rangeKey} does not include the domain, so an attribute range
++	 * shared by two domains is validated once - and {@code domainConstraint}
++	 * feeds the out-of-range ECL, so <em>which</em> domain wins changes the query
++	 * and therefore the findings. Walking the domains in order keeps that choice
++	 * exactly as it was; only the queries, which are what cost, are fanned out.
++	 */
+ 	private void executeAttributeRangeValidation(ValidationRun run, SnomedQueryService queryService, Map<Long, List<DescriptionImpl>> descriptions,
+ 			List<Long> precoordinatedTypes) throws ServiceException {
+ 
+ 		Set<String> validationCompleted = new HashSet<>();
++		List<RangeCheck> plan = new ArrayList<>();
+ 		for (Domain domain : run.getMRCMDomains().values()) {
+-			runAttributeRangeValidation(run, queryService, descriptions, domain, precoordinatedTypes, validationCompleted);
++			planAttributeRangeValidation(domain, validationCompleted, plan);
++		}
++
++		List<Callable<Void>> tasks = new ArrayList<>();
++		for (RangeCheck check : plan) {
++			tasks.add(() -> {
++				runAttributeRangeCheck(run, queryService, descriptions, precoordinatedTypes, check);
++				return null;
++			});
++		}
++		runInParallel(tasks);
++	}
++
++	/** One attribute range to validate, against the domain that claimed it. */
++	private record RangeCheck(String domainConstraint, String domainId, Attribute attributeRange) {
++	}
++
++	/**
++	 * Selects the attribute ranges to validate for one domain, skipping any
++	 * already claimed by an earlier domain. No queries here - planning only.
++	 */
++	private void planAttributeRangeValidation(Domain domain, Set<String> validationProcessed, List<RangeCheck> plan) {
++		for (Attribute attribute : domain.getAttributes()) {
++			if (domain.getAttributeRanges(attribute.getAttributeId()).isEmpty()) {
++				LOGGER.error("No range constraint found with attribute id {} for domain {}.", attribute.getAttributeId(), domain.getDomainId());
++				continue;
++			}
++			for (Attribute attributeRange : domain.getAttributeRanges(attribute.getAttributeId())) {
++				String rangeKey = attributeRange.getAttributeId() + "_" + attributeRange.getRangeConstraint()
++						+ "_" + attributeRange.getContentTypeId();
++				if (!validationProcessed.add(rangeKey)) {
++					LOGGER.info("Attribute range is done already:{}", attributeRange);
++					continue;
++				}
++				if (Strings.isNullOrEmpty(attributeRange.getRangeConstraint()) || Strings.isNullOrEmpty(attributeRange.getRangeRule())) {
++					throw new IllegalStateException("No attribute range constraint or rule is defined in attribute range " +  attributeRange);
++				}
++				plan.add(new RangeCheck(domain.getDomainConstraint(), domain.getDomainId(), attributeRange));
++			}
++		}
++	}
++
++	/**
++	 * The queries for one planned attribute range - the body that used to sit
++	 * inside the domain/attribute/range loops, unchanged.
++	 */
++	private void runAttributeRangeCheck(ValidationRun run, SnomedQueryService queryService, Map<Long, List<DescriptionImpl>> descriptions,
++			List<Long> preCoordinatedTypes, RangeCheck check) throws ServiceException {
++		Attribute attributeRange = check.attributeRange();
++		String domainConstraint = check.domainConstraint();
++		String attributeId = attributeRange.getAttributeId();
++		String rangeConstraint = attributeRange.getRangeConstraint();
++
++		validateConceptsInRange(run, descriptions, queryService, attributeRange, "range constraint", attributeRange.getRangeConstraint());
++		validateConceptsInRange(run, descriptions, queryService, attributeRange, "range rule", attributeRange.getRangeRule());
++
++		if (preCoordinatedTypes.contains(Long.parseLong(attributeRange.getContentTypeId()))) {
++			String outOfRangeRule;
++			// check concrete attribute range constraint
++			if (isConcreteRangeConstraint(rangeConstraint)) {
++				String matchRangeRule = removeCardinality(attributeRange.getRangeRule());
++				outOfRangeRule = constructOutOfRangeRule(matchRangeRule);
++			} else {
++				String baseEcl = domainConstraint;
++				baseEcl += baseEcl.contains(":") ? ", " : ": ";
++				baseEcl += attributeId;
++				outOfRangeRule = baseEcl + " != ";
++				outOfRangeRule = containsMultipleConceptIds(rangeConstraint)
++						? outOfRangeRule + "(" + rangeConstraint + ")"
++						: outOfRangeRule + rangeConstraint;
++			}
++			LOGGER.info("Selecting content out of range for attribute '{}' with out range constraint expression '{}'", attributeId, outOfRangeRule);
++			List<Long> conceptIdsWithInvalidAttributeValue = queryService.eclQueryReturnConceptIdentifiers(outOfRangeRule, 0, -1).conceptIds();
++			processValidationResults(run, queryService, attributeRange, conceptIdsWithInvalidAttributeValue, ValidationType.ATTRIBUTE_RANGE, null);
++		} else {
++			run.addSkippedAssertion(constructAssertion(queryService, attributeRange, ValidationType.ATTRIBUTE_RANGE, "content type:" + attributeRange.getContentTypeId() + " is out of scope."));
+ 		}
+ 	}
+ 
+@@ -464,55 +628,6 @@ public class ValidationService {
+ 		}
+ 	}
+ 
+-	private void runAttributeRangeValidation(ValidationRun run, SnomedQueryService queryService, Map<Long, List<DescriptionImpl>> descriptions, Domain domain,
+-										 List<Long> preCoordinatedTypes, Set<String> validationProcessed) throws ServiceException {
+-
+-		for (Attribute attribute : domain.getAttributes()) {
+-			if (domain.getAttributeRanges(attribute.getAttributeId()).isEmpty()) {
+-				LOGGER.error("No range constraint found with attribute id {} for domain {}.", attribute.getAttributeId(), domain.getDomainId());
+-				continue;
+-			}
+-			for (Attribute attributeRange : domain.getAttributeRanges(attribute.getAttributeId())) {
+-				String domainConstraint = domain.getDomainConstraint();
+-				String attributeId = attributeRange.getAttributeId();
+-				String rangeConstraint = attributeRange.getRangeConstraint();
+-				String rangeKey = attributeId + "_" + rangeConstraint+ "_" + attributeRange.getContentTypeId();
+-				if (validationProcessed.contains(rangeKey)) {
+-					LOGGER.info("Attribute range is done already:{}", attributeRange);
+-					continue;
+-				}
+-				validationProcessed.add(rangeKey);
+-				if (Strings.isNullOrEmpty(rangeConstraint) || Strings.isNullOrEmpty(attributeRange.getRangeRule())) {
+-					throw new IllegalStateException("No attribute range constraint or rule is defined in attribute range " +  attributeRange);
+-				}
+-
+-				validateConceptsInRange(run, descriptions, queryService, attributeRange, "range constraint", attributeRange.getRangeConstraint());
+-				validateConceptsInRange(run, descriptions, queryService, attributeRange, "range rule", attributeRange.getRangeRule());
+-
+-				if (preCoordinatedTypes.contains(Long.parseLong(attributeRange.getContentTypeId()))) {
+-					String outOfRangeRule = null;
+-					// check concrete attribute range constraint
+-					if (isConcreteRangeConstraint(rangeConstraint)) {
+-						String matchRangeRule = removeCardinality(attributeRange.getRangeRule());
+-						outOfRangeRule = constructOutOfRangeRule(matchRangeRule);
+-					} else {
+-						String baseEcl = domainConstraint;
+-						baseEcl += baseEcl.contains(":") ? ", " : ": ";
+-						baseEcl += attributeId;
+-						outOfRangeRule = baseEcl + " != ";
+-						outOfRangeRule = containsMultipleConceptIds(rangeConstraint)
+-								? outOfRangeRule + "(" + rangeConstraint + ")"
+-								: outOfRangeRule + rangeConstraint;
+-					}
+-					LOGGER.info("Selecting content out of range for attribute '{}' with out range constraint expression '{}'", attributeId, outOfRangeRule);
+-					List<Long> conceptIdsWithInvalidAttributeValue = queryService.eclQueryReturnConceptIdentifiers(outOfRangeRule, 0, -1).conceptIds();
+-					processValidationResults(run, queryService, attributeRange, conceptIdsWithInvalidAttributeValue, ValidationType.ATTRIBUTE_RANGE, null);
+-				} else {
+-					run.addSkippedAssertion(constructAssertion(queryService, attributeRange, ValidationType.ATTRIBUTE_RANGE, "content type:" + attributeRange.getContentTypeId() + " is out of scope."));
+-				}
+-			}
+-		}
+-	}
+ 
+ 	private void validateConceptsInRange(ValidationRun run, Map<Long, List<DescriptionImpl>> descriptions, SnomedQueryService queryService, Attribute attribute,
+ 			String column, String range) throws ServiceException {
