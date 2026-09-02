@@ -37,7 +37,12 @@
 
 set -euo pipefail
 
-VERSION="${1:-6.1.0-aehrc-perf}"
+# Resolved BEFORE any cd: the script changes directory into the clone, so a
+# path relative to $0 would not survive. Silently building without the patch is
+# the failure this avoids - it produced an artefact that looked right.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+VERSION="${1:-6.1.1-aehrc-perf}"
 COMMIT="84d511b"
 WORKDIR="${DROOLS_BUILD_DIR:-/data/work/snomed-drools-build}"
 REPO="${MAVEN_REPO_LOCAL:-/data/m2}"
@@ -79,6 +84,33 @@ for module in ("snomed-drools-engine", "snomed-drools-rf2-validator"):
     p.write_text(s.replace(parent, fixed, 1))
 print(f"    version set to {new} in root and both modules")
 PY
+
+# Two load-path optimisations on top of the six merged PRs. Both are ours, both
+# are measured, and both keep findings identical - see duck/NIGHTLY-PLAN.md.
+#
+#   1. loadComponentsFromRF2 called loadEffectiveSnapshotReleaseFiles
+#      unconditionally, running the effective-component pre-pass - a second full
+#      read of the release - even for a single snapshot. SI's PR #8 added the
+#      loadSnapshotReleaseFiles helper that makes this choice correctly but
+#      applied it to only one of the two call sites. ~55 s.
+#   2. OWL axiom parsing happened inline on whichever thread read the OWL refset
+#      file, so it was serial regardless of core count. Now buffered and parsed
+#      in parallel in loadingComponentsCompleted(), with the results applied to
+#      the repository serially in file order - because ontologyAxioms and
+#      componentLoadingErrors are a plain HashSet and ArrayList and concurrent
+#      writes there would corrupt them silently. 35 s -> 17.5 s.
+#
+# Raise these with SI as a seventh and eighth PR; drop the patch when merged.
+PATCH="${PATCH_FILE:-$SCRIPT_DIR/snomed-drools-load-optimisations.patch}"
+if [ -f "$PATCH" ]; then
+    git apply --check "$PATCH" || { echo "FATAL: $PATCH does not apply to $COMMIT" >&2; exit 1; }
+    git apply "$PATCH"
+    echo "    applied $(basename "$PATCH")"
+else
+    echo "FATAL: $PATCH not found. Building without it yields an artefact that" >&2
+    echo "       is 68 s slower per run and carries the same version string." >&2
+    exit 1
+fi
 
 # maven-install-plugin 2.4 needs two plexus artifacts and their parent poms that
 # a Spring-Boot-era local repo will not have. Offline resolution of them goes to

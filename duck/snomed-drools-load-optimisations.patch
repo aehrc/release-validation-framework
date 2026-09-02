@@ -1,0 +1,229 @@
+diff --git a/snomed-drools-rf2-validator/src/main/java/org/ihtsdo/drools/validator/rf2/DroolsRF2Validator.java b/snomed-drools-rf2-validator/src/main/java/org/ihtsdo/drools/validator/rf2/DroolsRF2Validator.java
+index 33822f0..8818d71 100644
+--- a/snomed-drools-rf2-validator/src/main/java/org/ihtsdo/drools/validator/rf2/DroolsRF2Validator.java
++++ b/snomed-drools-rf2-validator/src/main/java/org/ihtsdo/drools/validator/rf2/DroolsRF2Validator.java
+@@ -311,7 +311,18 @@ public class DroolsRF2Validator {
+ 		if (loadDelta) {
+ 			releaseImporter.loadEffectiveSnapshotAndDeltaReleaseFiles(extractedRF2FilesDirectories, LOADING_PROFILE, componentFactory, multiThreaded);
+ 		} else {
+-			releaseImporter.loadEffectiveSnapshotReleaseFiles(extractedRF2FilesDirectories, LOADING_PROFILE, componentFactory, multiThreaded);
++			// Was loadEffectiveSnapshotReleaseFiles unconditionally, which runs
++			// the effective-component pre-pass: a second full read of the
++			// release. singleSnapshotRelease was already computed above but only
++			// consulted for loadDelta, so the pre-pass ran even when there is
++			// exactly one row per component and the filter cannot change
++			// anything. On an 853 MB edition that is ~55 s of the load.
++			//
++			// loadSnapshotReleaseFiles already makes this choice correctly and
++			// is what loadPreviousReleaseComponentIds calls; this is the other
++			// call site.
++			loadSnapshotReleaseFiles(releaseImporter, extractedRF2FilesDirectories,
++					componentFactory, multiThreaded, singleSnapshotRelease);
+ 		}
+ 
+ 		final Map<Long, ? extends Concept> conceptMap = componentFactory.getComponentStore().getConcepts();
+diff --git a/snomed-drools-rf2-validator/src/main/java/org/ihtsdo/drools/validator/rf2/SnomedDroolsComponentFactory.java b/snomed-drools-rf2-validator/src/main/java/org/ihtsdo/drools/validator/rf2/SnomedDroolsComponentFactory.java
+index 7ae08a4..9557ce8 100644
+--- a/snomed-drools-rf2-validator/src/main/java/org/ihtsdo/drools/validator/rf2/SnomedDroolsComponentFactory.java
++++ b/snomed-drools-rf2-validator/src/main/java/org/ihtsdo/drools/validator/rf2/SnomedDroolsComponentFactory.java
+@@ -26,7 +26,6 @@ public class SnomedDroolsComponentFactory extends ComponentStoreComponentFactory
+ 	private final SnomedDroolsComponentRepository repository;
+ 	private final String authoringEffectiveTime;
+ 	private final PreviousReleaseComponentFactory previousReleaseComponentIds;
+-	private final AxiomRelationshipConversionService axiomConverter;
+ 	private final ComponentStore componentStore;
+ 	private final Logger logger = LoggerFactory.getLogger(getClass());
+ 
+@@ -36,7 +35,6 @@ public class SnomedDroolsComponentFactory extends ComponentStoreComponentFactory
+         this.repository = repository;
+ 		this.authoringEffectiveTime = authoringEffectiveTime;
+ 		this.previousReleaseComponentIds = previousReleaseComponentIds;
+-		axiomConverter = new AxiomRelationshipConversionService(Collections.emptySet());// The set of ungrouped attributes are not needed to convert axioms to relationships.
+ 	}
+ 
+ 	public ComponentStore getComponentStore() {
+@@ -67,39 +65,26 @@ public class SnomedDroolsComponentFactory extends ComponentStoreComponentFactory
+ 		boolean activeBool = isActive(active);
+ 
+ 		if (activeBool && refsetId.equals(OWL_AXIOM_REFSET)) {
+-			// OWL OntologyAxiom reference set
+-
+-			// Fields: id	effectiveTime	active	moduleId	refsetId	referencedComponentId	owlExpression
+-			String owlExpression = otherValues[0];
+-			try {
+-				AxiomRepresentation axiom = axiomConverter.convertAxiomToRelationships(owlExpression);
+-				final boolean published = isThisStatePublished(effectiveTime);
+-				final boolean released = isThisRefsetMemberReleased(id, effectiveTime);
+-				if (axiom != null) {
+-					boolean axiomGCI = false;
+-					if (axiom.getLeftHandSideNamedConcept() != null && axiom.getRightHandSideRelationships() != null) {
+-						// Regular axiom
+-						addRelationships(id, effectiveTime, false, axiom.getLeftHandSideNamedConcept(), axiom.getRightHandSideRelationships(), moduleId, published, released);
+-						// compare referencedComponentID and named concept in OWL expression
+-						validateComponentIdAndNamedConcept(id, effectiveTime, activeBool, moduleId, parseLong(referencedComponentId), axiom.getLeftHandSideNamedConcept());
+-					} else if (axiom.getRightHandSideNamedConcept() != null && axiom.getLeftHandSideRelationships() != null) {
+-						// GCI OntologyAxiom
+-						axiomGCI = true;
+-						addRelationships(id, effectiveTime, true, axiom.getRightHandSideNamedConcept(), axiom.getLeftHandSideRelationships(), moduleId, published, released);
+-						// compare referencedComponentID and named concept in OWL expression
+-						validateComponentIdAndNamedConcept(id, effectiveTime, activeBool, moduleId, parseLong(referencedComponentId), axiom.getRightHandSideNamedConcept());
+-					}
+-					repository.addOntologyAxiom(new DroolsOntologyAxiom(id, effectiveTime, activeBool, moduleId, referencedComponentId, owlExpression, null, published, released, axiom.isPrimitive(), axiomGCI));
+-				} else {
+-					// Can't be converted to relationships
+-					Set<String> namedConceptIds = axiomConverter.getIdsOfConceptsNamedInAxiom(owlExpression).stream().map(Object::toString).collect(Collectors.toSet());
+-					repository.addOntologyAxiom(new DroolsOntologyAxiom(id, effectiveTime, activeBool, moduleId, referencedComponentId, owlExpression, namedConceptIds, published, released, true, false));
+-				}
+-			} catch (ConversionException | OWLParserException e) {
+-				logger.warn("OntologyAxiom conversion failed for refset member " + id, e);
+-				repository.addComponentLoadingError(parseLong(referencedComponentId), new DroolsComponent(id, effectiveTime, activeBool, moduleId, false, false),
+-						"Error parsing Axiom owlExpression for Axiom " + id);
+-			}
++			// OWL OntologyAxiom reference set.
++			//
++			// Deferred rather than converted here. Parsing the OWL functional
++			// syntax is the most expensive single thing in the load - 598,891
++			// members at ~16,300/s is 35 s on an AU edition - and it runs on
++			// whichever thread reads this one file, so it is serial however many
++			// cores the loader was given.
++			//
++			// It cannot be parallelised in place: the repository's
++			// ontologyAxioms and componentLoadingErrors are a plain HashSet and
++			// ArrayList, and addRelationships also writes stated parent/child
++			// links into the component store. Concurrent writes there would
++			// corrupt those collections silently, and on a validator that means
++			// wrong findings rather than a crash.
++			//
++			// So the expensive half - parsing - happens in parallel in
++			// loadingComponentsCompleted(), and the results are applied to the
++			// repository serially in file order, exactly as below.
++			// Fields: id effectiveTime active moduleId refsetId referencedComponentId owlExpression
++			deferredAxioms.add(new DeferredAxiom(id, effectiveTime, moduleId, referencedComponentId, otherValues[0]));
+ 
+ 		} else if (activeBool && fieldNames.length == 7 && fieldNames[6].equals("acceptabilityId")) {
+ 			// Language reference set
+@@ -116,6 +101,124 @@ public class SnomedDroolsComponentFactory extends ComponentStoreComponentFactory
+ 		}
+ 	}
+ 
++	/**
++	 * One OWL axiom refset row, held until every file has been read.
++	 */
++	private record DeferredAxiom(String id, String effectiveTime, String moduleId,
++			String referencedComponentId, String owlExpression) {
++	}
++
++	/**
++	 * Parsed form of a {@link DeferredAxiom}, or the failure that parsing it
++	 * produced. Carries the outcome rather than applying it, so that the
++	 * expensive parse can happen off the loader's thread while every write to
++	 * the repository still happens on one.
++	 */
++	private record ConvertedAxiom(DeferredAxiom source, AxiomRepresentation axiom,
++			Set<String> namedConceptIds, Exception failure) {
++	}
++
++	/**
++	 * Appended from the thread reading the OWL refset file. A synchronized list
++	 * because snomedboot may read several files at once and nothing guarantees
++	 * that only one of them contains axioms.
++	 */
++	private final List<DeferredAxiom> deferredAxioms = Collections.synchronizedList(new ArrayList<>());
++
++	/**
++	 * One converter per thread. {@code AxiomRelationshipConversionService} owns a
++	 * {@code SnomedTaxonomyLoader}, which owns an {@code AxiomDeserialiser} whose
++	 * {@code deserialiseAxiom} is {@code synchronized (this)} around a shared
++	 * {@code OWLOntology} and a shared axiom list - so sharing one converter
++	 * between threads would serialise them again, and sharing the deserialiser
++	 * without the lock would corrupt it. A converter each avoids both.
++	 */
++	private final ThreadLocal<AxiomRelationshipConversionService> threadConverter =
++			ThreadLocal.withInitial(() -> new AxiomRelationshipConversionService(Collections.emptySet()));
++
++	/**
++	 * Parses every deferred axiom across all cores, then applies the results in
++	 * file order on this thread.
++	 *
++	 * <p>Order is preserved deliberately. The findings are a set, but
++	 * {@code addStatedConceptParent} and the composite identifiers built in
++	 * {@link #addRelationships} make the repository's contents order-sensitive
++	 * in principle, and a reordering that changed one finding would be very hard
++	 * to attribute later. Parsing is what costs; applying is cheap.
++	 */
++	@Override
++	public void loadingComponentsCompleted() throws org.ihtsdo.otf.snomedboot.ReleaseImportException {
++		super.loadingComponentsCompleted();
++		if (deferredAxioms.isEmpty()) {
++			return;
++		}
++		long start = System.currentTimeMillis();
++		List<DeferredAxiom> rows = new ArrayList<>(deferredAxioms);
++		deferredAxioms.clear();
++
++		List<ConvertedAxiom> converted = rows.parallelStream().map(row -> {
++			AxiomRelationshipConversionService converter = threadConverter.get();
++			try {
++				AxiomRepresentation axiom = converter.convertAxiomToRelationships(row.owlExpression());
++				Set<String> namedConceptIds = axiom != null ? null
++						: converter.getIdsOfConceptsNamedInAxiom(row.owlExpression()).stream()
++								.map(Object::toString).collect(Collectors.toSet());
++				return new ConvertedAxiom(row, axiom, namedConceptIds, null);
++			} catch (ConversionException | OWLParserException e) {
++				return new ConvertedAxiom(row, null, null, e);
++			}
++		}).toList();
++
++		for (ConvertedAxiom result : converted) {
++			applyAxiom(result);
++		}
++		logger.info("Converted {} OWL axioms in {} ms", rows.size(), System.currentTimeMillis() - start);
++	}
++
++	/**
++	 * The body of what {@code newReferenceSetMemberState} used to do inline for
++	 * an OWL row, unchanged apart from taking its parsed axiom as an argument.
++	 */
++	private void applyAxiom(ConvertedAxiom result) {
++		DeferredAxiom row = result.source();
++		String id = row.id();
++		String effectiveTime = row.effectiveTime();
++		String moduleId = row.moduleId();
++		String referencedComponentId = row.referencedComponentId();
++		String owlExpression = row.owlExpression();
++
++		if (result.failure() != null) {
++			logger.warn("OntologyAxiom conversion failed for refset member " + id, result.failure());
++			repository.addComponentLoadingError(parseLong(referencedComponentId),
++					new DroolsComponent(id, effectiveTime, true, moduleId, false, false),
++					"Error parsing Axiom owlExpression for Axiom " + id);
++			return;
++		}
++
++		AxiomRepresentation axiom = result.axiom();
++		final boolean published = isThisStatePublished(effectiveTime);
++		final boolean released = isThisRefsetMemberReleased(id, effectiveTime);
++		if (axiom != null) {
++			boolean axiomGCI = false;
++			if (axiom.getLeftHandSideNamedConcept() != null && axiom.getRightHandSideRelationships() != null) {
++				// Regular axiom
++				addRelationships(id, effectiveTime, false, axiom.getLeftHandSideNamedConcept(), axiom.getRightHandSideRelationships(), moduleId, published, released);
++				// compare referencedComponentID and named concept in OWL expression
++				validateComponentIdAndNamedConcept(id, effectiveTime, true, moduleId, parseLong(referencedComponentId), axiom.getLeftHandSideNamedConcept());
++			} else if (axiom.getRightHandSideNamedConcept() != null && axiom.getLeftHandSideRelationships() != null) {
++				// GCI OntologyAxiom
++				axiomGCI = true;
++				addRelationships(id, effectiveTime, true, axiom.getRightHandSideNamedConcept(), axiom.getLeftHandSideRelationships(), moduleId, published, released);
++				// compare referencedComponentID and named concept in OWL expression
++				validateComponentIdAndNamedConcept(id, effectiveTime, true, moduleId, parseLong(referencedComponentId), axiom.getRightHandSideNamedConcept());
++			}
++			repository.addOntologyAxiom(new DroolsOntologyAxiom(id, effectiveTime, true, moduleId, referencedComponentId, owlExpression, null, published, released, axiom.isPrimitive(), axiomGCI));
++		} else {
++			// Can't be converted to relationships
++			repository.addOntologyAxiom(new DroolsOntologyAxiom(id, effectiveTime, true, moduleId, referencedComponentId, owlExpression, result.namedConceptIds(), published, released, true, false));
++		}
++	}
++
+ 	private void addRelationships(String axiomId, String effectiveTime, boolean isGCI, Long namedConcept, Map<Integer, List<Relationship>> groups, String moduleId, boolean published, boolean released) {
+ 		groups.forEach((group, relationships) -> relationships.forEach(relationship -> {
+ 

@@ -16,7 +16,7 @@
     </parent>
 
     <properties>
-        <snomed.drools.version>6.1.0-aehrc-perf</snomed.drools.version>
+        <snomed.drools.version>6.1.1-aehrc-perf</snomed.drools.version>
         <packageName>rvf-api</packageName>
         <docker.registry>docker.io</docker.registry>
         <docker.allowInsecureRegistries>false</docker.allowInsecureRegistries>
