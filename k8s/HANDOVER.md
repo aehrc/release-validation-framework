@@ -66,6 +66,55 @@ provisioning afterwards — on the first run the log says
 
 ---
 
+## 2a. Building it on a different machine first
+
+**A fresh checkout cannot build.** The pom pins three libraries to
+`-aehrc-perf` versions that exist in **no remote repository** - they are built
+from IHTSDO sources plus the patches in `duck/` and installed into the local
+Maven repo. `mvn package` on a clean laptop fails to resolve them.
+
+One command fixes that, from the repo root:
+
+    ./duck/build-pinned-forks.sh
+
+It reads the three versions out of the pom, clones each upstream at a pinned
+commit, applies the patch, installs, and then gates on the artefacts actually
+resolving. Verified from clean clones: about 30 seconds with a warm Maven repo.
+
+It exists because the individual scripts each carry their own default version
+and those had drifted behind the pom - 6.1.1 against 6.1.3, 4.0.3 against 4.0.4
+- so running them with no argument installs artefacts the pom does not want and
+the build still fails, one version number away from working. The wrapper takes
+the pom as the single source of truth.
+
+Needs JDK 25, maven, git, and network to github.com and Maven Central. Honours
+`MAVEN_REPO_LOCAL` and `FORKS_BUILD_DIR`; defaults to `~/.m2/repository` and a
+temporary directory.
+
+**The corpus and rules are fetched, not committed.** `snomed-drools-rules/` and
+`snomed-release-validation-assertions/` are gitignored and cloned by
+`checkout-resources.sh`, which the pom runs during the build. That script is
+**pinned to explicit commits**, deliberately: upstream's version clones a branch
+with no ref, and on 2026-08-07 the first rebuild in two years picked up two
+years of drift and RVF failed to start - IHTSDO had removed the `_EDITION` SQL
+variants while the manifest still referenced four of them, and the k8s job was
+killed after 12 minutes having produced no report. Because it is pinned, a
+laptop build gets the same corpus this repo's baked assertion store was compiled
+against, and the image's startup check
+(`verified against 360 corpus files`) passes.
+
+So the whole sequence on a laptop is:
+
+    git clone -b catchup-upgraded <this repo> && cd release-validation-framework
+    ./duck/build-pinned-forks.sh
+    TOKEN=$(az acr login --name ontoserver --expose-token --output tsv --query accessToken)
+    mvn -B -ntp package -DskipTests jib:build \
+        -Djib.from.platforms=linux/amd64 \
+        -Djib.to.image=ontoserver.azurecr.io/aehrc-rvf/rvf-duck:9.0.1 \
+        -Djib.to.tags=latest \
+        -Djib.to.auth.username=00000000-0000-0000-0000-000000000000 \
+        -Djib.to.auth.password="$TOKEN"
+
 ## 3. What `rvf-aks.yaml` is, object by object
 
     Namespace rvf
