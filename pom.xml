@@ -16,7 +16,7 @@
     </parent>
 
     <properties>
-        <mrcm.validator.version>4.0.3-aehrc-perf</mrcm.validator.version>
+        <mrcm.validator.version>4.0.4-aehrc-perf</mrcm.validator.version>
         <snomed.drools.version>6.1.3-aehrc-perf</snomed.drools.version>
         <packageName>rvf-api</packageName>
         <docker.registry>docker.io</docker.registry>

@@ -21,10 +21,18 @@ index e56bc95..b7c3ee5 100644
  		this.contentType = contentType;
  		ungroupedAttributes = new HashSet<>();
 diff --git a/src/main/java/org/snomed/quality/validator/mrcm/ValidationService.java b/src/main/java/org/snomed/quality/validator/mrcm/ValidationService.java
-index 4125cd2..5be4aae 100644
+index 4125cd2..a1d454b 100644
 --- a/src/main/java/org/snomed/quality/validator/mrcm/ValidationService.java
 +++ b/src/main/java/org/snomed/quality/validator/mrcm/ValidationService.java
-@@ -40,6 +40,11 @@ import org.springframework.util.CollectionUtils;
+@@ -20,6 +20,7 @@ import org.ihtsdo.otf.sqs.service.ReleaseImportManager;
+ import org.ihtsdo.otf.sqs.service.SnomedQueryService;
+ import org.ihtsdo.otf.sqs.service.dto.ConceptResult;
+ import org.ihtsdo.otf.sqs.service.exception.ServiceException;
++import org.ihtsdo.otf.sqs.service.store.DiskReleaseStore;
+ import org.ihtsdo.otf.sqs.service.store.RamReleaseStore;
+ import org.ihtsdo.otf.sqs.service.store.ReleaseStore;
+ import org.semanticweb.owlapi.io.OWLParserException;
+@@ -40,6 +41,11 @@ import org.springframework.util.CollectionUtils;
  import java.io.File;
  import java.io.IOException;
  import java.util.*;
@@ -36,7 +44,129 @@ index 4125cd2..5be4aae 100644
  import java.util.concurrent.atomic.AtomicInteger;
  import java.util.regex.Matcher;
  import java.util.regex.Pattern;
-@@ -197,41 +202,38 @@ public class ValidationService {
+@@ -50,6 +56,12 @@ import static org.snomed.quality.validator.mrcm.Constants.*;
+ 
+ public class ValidationService {
+ 
++	/**
++	 * Directory to build the Lucene index under. Unset means the heap, which is
++	 * the historical behaviour.
++	 */
++	public static final String INDEX_DIRECTORY_PROPERTY = "mrcm.validator.index.directory";
++
+ 	private static final Logger LOGGER = LoggerFactory.getLogger(ValidationService.class);
+ 
+ 	private static final Pattern CONCEPT_TERM_PATTERN = Pattern.compile("\\d+\\s\\|(.*?)\\|");
+@@ -100,41 +112,68 @@ public class ValidationService {
+ 	private void executeValidation(Set<String> extractedRF2FilesDirectories, ValidationRun run) throws ReleaseImportException, IOException, ServiceException {
+ 		OWLExpressionAndDescriptionFactory owlExpressionAndDescriptionFactory = new OWLExpressionAndDescriptionFactory(new ComponentStore(), run.getUngroupedAttributes(),
+ 				run.getConceptsUsedInMRCMTemplates());
+-		SnomedQueryService queryService = getSnomedQueryService(extractedRF2FilesDirectories, run.getContentType(), owlExpressionAndDescriptionFactory, run.isFullSnapshotRelease());
+-
+-		final Map<Long, List<DescriptionImpl>> descriptions = owlExpressionAndDescriptionFactory.getDescriptions();
+-		LOGGER.info("Total in-use concepts in attribute range {}", descriptions.keySet().size());
+-
+-		//checking data is loaded properly
+-		LOGGER.info("Total concepts loaded {}", queryService.getConceptCount());
+-		List<Long> preCoordinatedTypes = queryService.eclQueryReturnConceptIdentifiers("<<" + ALL_NEW_PRE_COORDINATED_CONTENT_CONCEPT, 0, 100).conceptIds();
+-		Assert.notEmpty(preCoordinatedTypes, "Concept " + ALL_NEW_PRE_COORDINATED_CONTENT_CONCEPT + " and descendants must be accessible.");
+-		for (ValidationType type : run.getValidationTypes()) {
+-            switch (type) {
+-                case ATTRIBUTE_DOMAIN -> executeAttributeDomainValidation(run, queryService, preCoordinatedTypes);
+-                case ATTRIBUTE_RANGE ->
+-                        executeAttributeRangeValidation(run, queryService, descriptions, preCoordinatedTypes);
+-                case ATTRIBUTE_CARDINALITY ->
+-                        executeAttributeCardinalityValidation(run, queryService, preCoordinatedTypes);
+-                case ATTRIBUTE_IN_GROUP_CARDINALITY ->
+-                        executeAttributeGroupCardinalityValidation(run, queryService, preCoordinatedTypes);
+-                case CONCRETE_ATTRIBUTE_DATA_TYPE ->
+-                        executeConcreteDataTypeValidation(extractedRF2FilesDirectories, run, queryService);
+-                case LATERALIZABLE_BODY_STRUCTURE_REFSET_TYPE -> {
+-                    if (ContentType.INFERRED.equals(run.getContentType()) && CollectionUtils.isEmpty(run.getModuleIds())) {
+-                        executeLateralizableRefsetValidation(run, queryService);
+-                    }
+-                }
+-				case SEP_REFSET_TYPE -> {
+-					if (ContentType.INFERRED.equals(run.getContentType()) && CollectionUtils.isEmpty(run.getModuleIds())) {
+-						executeSEPRefsetValidation(run, queryService);
++		ReleaseStore releaseStore = null;
++		try {
++			SnomedQueryService queryService = getSnomedQueryService(extractedRF2FilesDirectories, run.getContentType(), owlExpressionAndDescriptionFactory, run.isFullSnapshotRelease());
++			releaseStore = lastReleaseStore.get();
++
++			final Map<Long, List<DescriptionImpl>> descriptions = owlExpressionAndDescriptionFactory.getDescriptions();
++			LOGGER.info("Total in-use concepts in attribute range {}", descriptions.keySet().size());
++
++			//checking data is loaded properly
++			LOGGER.info("Total concepts loaded {}", queryService.getConceptCount());
++			List<Long> preCoordinatedTypes = queryService.eclQueryReturnConceptIdentifiers("<<" + ALL_NEW_PRE_COORDINATED_CONTENT_CONCEPT, 0, 100).conceptIds();
++			Assert.notEmpty(preCoordinatedTypes, "Concept " + ALL_NEW_PRE_COORDINATED_CONTENT_CONCEPT + " and descendants must be accessible.");
++			for (ValidationType type : run.getValidationTypes()) {
++				switch (type) {
++					case ATTRIBUTE_DOMAIN -> executeAttributeDomainValidation(run, queryService, preCoordinatedTypes);
++					case ATTRIBUTE_RANGE ->
++							executeAttributeRangeValidation(run, queryService, descriptions, preCoordinatedTypes);
++					case ATTRIBUTE_CARDINALITY ->
++							executeAttributeCardinalityValidation(run, queryService, preCoordinatedTypes);
++					case ATTRIBUTE_IN_GROUP_CARDINALITY ->
++							executeAttributeGroupCardinalityValidation(run, queryService, preCoordinatedTypes);
++					case CONCRETE_ATTRIBUTE_DATA_TYPE ->
++							executeConcreteDataTypeValidation(extractedRF2FilesDirectories, run, queryService);
++					case LATERALIZABLE_BODY_STRUCTURE_REFSET_TYPE -> {
++						if (ContentType.INFERRED.equals(run.getContentType()) && CollectionUtils.isEmpty(run.getModuleIds())) {
++							executeLateralizableRefsetValidation(run, queryService);
++						}
+ 					}
++					case SEP_REFSET_TYPE -> {
++						if (ContentType.INFERRED.equals(run.getContentType()) && CollectionUtils.isEmpty(run.getModuleIds())) {
++							executeSEPRefsetValidation(run, queryService);
++						}
++					}
++					default -> LOGGER.error("Validation Type: '{}' is not implemented yet!", type);
+ 				}
+-                default -> LOGGER.error("Validation Type: '{}' is not implemented yet!", type);
+-            }
++			}
++		} finally {
++			lastReleaseStore.remove();
++			// Mandatory for a disk-backed index: nothing else deletes it, and an
++			// index per content form per run is gigabytes. A RAM store's destroy
++			// is a no-op, so this is safe either way.
++			if (releaseStore != null) {
++				try {
++					releaseStore.destroy();
++				} catch (IOException e) {
++					LOGGER.warn("Could not release the MRCM index", e);
++				}
++			}
+ 		}
+ 	}
+ 
++	/**
++	 * Carries the store {@link #getSnomedQueryService} just built back to
++	 * {@link #executeValidation}, which owns its lifetime.
++	 *
++	 * <p>A thread local rather than a return value because
++	 * {@code getSnomedQueryService} is {@code protected} and overridden in
++	 * tests; changing its signature would break those. The two content forms
++	 * validate on separate threads, so a plain field would race.
++	 */
++	private final ThreadLocal<ReleaseStore> lastReleaseStore = new ThreadLocal<>();
++
+ 	protected SnomedQueryService getSnomedQueryService(Set<String> extractedRF2FilesDirectories, ContentType contentType, OWLExpressionAndDescriptionFactory owlExpressionAndDescriptionFactory, boolean fullSnapshotRelease) throws ReleaseImportException, IOException {
+ 		LoadingProfile profile = contentType == ContentType.STATED ?
+ 				LoadingProfile.light
+@@ -147,7 +186,8 @@ public class ValidationService {
+ 						.withoutIdentifiers()
+ 				: LoadingProfile.light.withRefsets(LATERALIZABLE_BODY_STRUCTURE_REFSET).withoutStatedAttributeMapOnConcept().withInactiveConcepts().withoutIdentifiers();
+ 
+-		ReleaseStore releaseStore = new MRCMValidatorReleaseImportManager().loadReleaseFilesToMemoryBasedIndex(extractedRF2FilesDirectories, profile, owlExpressionAndDescriptionFactory, fullSnapshotRelease);
++		ReleaseStore releaseStore = new MRCMValidatorReleaseImportManager().loadReleaseFilesToIndex(extractedRF2FilesDirectories, profile, owlExpressionAndDescriptionFactory, fullSnapshotRelease);
++		lastReleaseStore.set(releaseStore);
+ 		return new SnomedQueryService(releaseStore);
+ 	}
+ 
+@@ -197,41 +237,38 @@ public class ValidationService {
  	}
  
  	private void executeAttributeGroupCardinalityValidation(ValidationRun run, SnomedQueryService queryService, List<Long> precoordinatedTypes) throws ServiceException {
@@ -107,7 +237,7 @@ index 4125cd2..5be4aae 100644
  	}
  
  	private void processValidationResults(ValidationRun run, SnomedQueryService queryService, Attribute attribute,
-@@ -278,35 +280,111 @@ public class ValidationService {
+@@ -278,37 +315,113 @@ public class ValidationService {
  	}
  
  	private void executeAttributeCardinalityValidation(ValidationRun run, SnomedQueryService queryService, List<Long> precoordinatedTypes) throws ServiceException {
@@ -232,18 +362,20 @@ index 4125cd2..5be4aae 100644
 +		} catch (InterruptedException e) {
 +			Thread.currentThread().interrupt();
 +			throw new ServiceException("Interrupted while running validations", e);
-+		}
-+	}
-+
+ 		}
+ 	}
+ 
 +	private ServiceException asServiceException(Throwable cause) {
 +		if (cause instanceof ServiceException serviceException) {
 +			return serviceException;
- 		}
++		}
 +		return new ServiceException("Domain attribute validation failed", cause);
- 	}
- 
++	}
++
  	private Assertion constructAssertion(SnomedQueryService queryService, Attribute attribute, ValidationType attributeCardinality, String skipMsg) {
-@@ -326,12 +404,98 @@ public class ValidationService {
+ 		return constructAssertion(queryService, attribute, attributeCardinality, skipMsg, null,null,null);
+ 	}
+@@ -326,12 +439,98 @@ public class ValidationService {
  		}
  		return new Assertion(attribute, validationType, msg, failureType, currentInvalidConcepts, previousInvalidConcepts, domainConstraint);
  	}
@@ -343,7 +475,7 @@ index 4125cd2..5be4aae 100644
  		}
  	}
  
-@@ -464,55 +628,6 @@ public class ValidationService {
+@@ -464,55 +663,6 @@ public class ValidationService {
  		}
  	}
  
@@ -399,3 +531,37 @@ index 4125cd2..5be4aae 100644
  
  	private void validateConceptsInRange(ValidationRun run, Map<Long, List<DescriptionImpl>> descriptions, SnomedQueryService queryService, Attribute attribute,
  			String column, String range) throws ServiceException {
+@@ -951,6 +1101,33 @@ public class ValidationService {
+ 			releaseImporter = new ReleaseImporter();
+ 		}
+ 
++		/**
++		 * Builds the index on disk when {@value #INDEX_DIRECTORY_PROPERTY} names
++		 * a directory, and on the heap otherwise.
++		 *
++		 * <p>The heap is the default, unchanged. On disk the index lives in the
++		 * page cache instead of the heap and a flush actually releases memory,
++		 * which matters because the build peaks near 7.8 GB on an 853 MB edition
++		 * and two content forms are indexed at once. The caller must destroy the
++		 * store - see {@code executeValidation} - because nothing else deletes
++		 * the directory.
++		 */
++		public ReleaseStore loadReleaseFilesToIndex(Set<String> extractedRF2FilesDirectories, LoadingProfile loadingProfile, OWLExpressionAndDescriptionFactory componentFactory, boolean fullSnapshotRelease) throws ReleaseImportException, IOException {
++			return loadReleaseFiledToStore(extractedRF2FilesDirectories, loadingProfile, newReleaseStore(), componentFactory, fullSnapshotRelease);
++		}
++
++		private ReleaseStore newReleaseStore() throws IOException {
++			String root = System.getProperty(INDEX_DIRECTORY_PROPERTY, "");
++			if (root.isBlank()) {
++				return new RamReleaseStore();
++			}
++			java.nio.file.Path directory = java.nio.file.Files.createTempDirectory(
++					java.nio.file.Path.of(root), "mrcm-index-");
++			LOGGER.info("MRCM index on disk at {}", directory);
++			return new DiskReleaseStore(directory.toFile());
++		}
++
++		/** Retained for callers outside this project. */
+ 		public ReleaseStore loadReleaseFilesToMemoryBasedIndex(Set<String> extractedRF2FilesDirectories, LoadingProfile loadingProfile, OWLExpressionAndDescriptionFactory componentFactory, boolean fullSnapshotRelease) throws ReleaseImportException, IOException {
+ 			return loadReleaseFiledToStore(extractedRF2FilesDirectories, loadingProfile, new RamReleaseStore(), componentFactory, fullSnapshotRelease);
+ 		}
