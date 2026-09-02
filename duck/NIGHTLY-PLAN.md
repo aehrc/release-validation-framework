@@ -851,3 +851,53 @@ taken by a *second* worker still listening on the same queue without the
 property set. It showed as an empty index directory and a 0.11 GB peak.
 Competing consumers make a per-worker configuration change unmeasurable, and
 nothing in the report says which worker ran it.
+
+### Can the 466 s of query loops be compressed further? Two levers ruled out, one open
+
+**Ruled out: batching `retrieveConcept`.** `processValidationResults` retrieves
+one concept per invalid id, which looked like thousands of point lookups. It is
+not: the AU run produced **685 failures across 5 assertions**, so that loop runs
+~685 times in the whole phase. At even 1 ms each it is under a second. A batch
+API in `snomed-query-service` would buy nothing.
+
+**Ruled out: sharing the two indexes.** The `LoadingProfile` genuinely differs
+per content form - STATED uses `withStatedRelationships`,
+`withStatedAttributeMapOnConcept`, `withoutRelationships`; INFERRED does not -
+so the two indexes hold different content and cannot be one. Settled by reading
+the profiles, no measurement needed.
+
+**Already in place: Lucene's query cache.** `SnomedQueryService` constructs its
+`IndexSearcher` without calling `setQueryCache`, so it keeps Lucene's default
+`LRUQueryCache`. Repeated sub-expressions - the same `<<domain` across a
+domain's twenty-odd attributes - are cached where the default policy allows.
+Nothing to enable.
+
+**Still open, and it is the whole 466 s:** roughly 2,000 ECL queries at about
+**1.9 core-seconds each** (466 s wall x 8 cores / ~2,000). That is slow for
+Lucene over 722,404 documents, so something in the evaluation is expensive -
+the domain expansion, the attribute join, or the cardinality arithmetic. Which
+one, I do not know.
+
+**I tried to find out by sampling stacks and mistimed it.** Samples at 45 s
+intervals from submission caught the structural phase first
+(`ColumnPatternTester.validateBatch`) and then parked threads after the run
+finished. Inconclusive, and recorded as inconclusive rather than dressed up.
+Two samples showed `Throwable.fillInStackTrace`, which would suggest exceptions
+on a hot path, but two samples is not evidence.
+
+**What would answer it:** a profile timed to the query window specifically -
+start sampling once `Total concepts loaded` appears and stop at the last
+`Selecting content` line - or per-query timing added to the two cardinality
+methods and the range check. Roughly 20 minutes of work for a real answer,
+against guessing at an ECL evaluator none of us wrote.
+
+### The remaining MRCM ledger
+
+| | cost | status |
+|---|---|---|
+| acquisition + unpack | 36 s | parallel, done |
+| two index builds | 108 s | cannot be shared; each is a serial map build then index write |
+| ECL query loops | 466 s | parallel; per-query cost not yet attributed |
+| unlogged tail | 166 s | three delegated services, unprofiled |
+| `executeAttributeDomainValidation` | inside the 466 s | still serial, different shape |
+| heap peak | 11.3 GB | the pre-index concept map, not the index |
