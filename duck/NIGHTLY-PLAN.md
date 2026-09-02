@@ -534,3 +534,62 @@ always running concurrently with Drools inside the old 780 s.
 2. **Acquisition, 47 s**, which is serial before every phase and is mostly
    copying two 853 MB zips into place.
 3. Not SQL, and not rules.
+
+### Inside the Drools 167 s load, 2026-09-02
+
+You asked for the axiom deserialisation to be multi-threaded. It can be, but it
+is not where the time is, and the measurement says so.
+
+**Axiom deserialisation: 35 s of the 167 s load.** Single thread throughout
+(`pool-13-thread-4`), 13:50:12 -> 13:50:46, 598,891 OWL members at ~16,300
+axioms/s. Perfect 8-way parallelism would take it to ~5 s: **a 30 s saving,
+10% of the run.**
+
+**The release is loaded THREE times, and that is 150 s.** Thread names give it
+away:
+
+| pass | threads | window | cost |
+|---|---|---|---|
+| 1 | `pool-12-thread-*` concurrent | 13:48:15 - 13:48:51 | 36 s |
+| 2 | **`pool-6-thread-3`, single thread** | 13:48:51 - 13:49:46 | **55 s** |
+| 3 | `pool-13-thread-*` concurrent, holds the axiom work | 13:49:46 - 13:50:46 | 60 s |
+
+`DroolsRF2Validator` has **three** `loadSnapshotReleaseFiles` calls and three
+`loadComponentsFromRF2` calls. Pass 2 runs on the calling thread - SI's PR #9
+made reads concurrent but did not reach this path.
+
+**And one of those passes is almost pure waste.**
+`loadPreviousReleaseComponentIds` loads with **`LoadingProfile.complete`**,
+while its factory:
+
+    class PreviousReleaseComponentFactory extends ImpotentComponentFactory {
+        Set<Long>   releasedConceptIds;
+        Set<Long>   releasedDescriptionIds;
+        Set<Long>   releasedRelationshipIds;
+        Set<String> releasedRefsetMemberIds;
+    }
+
+Four sets of identifiers. Nothing else. So the previous release has 2,246,130
+descriptions and 6,138,313 language refset members parsed in full, and every
+OWL axiom deserialised, so that four `Set`s of ids can be populated. An
+`ImpotentComponentFactory` is *designed* to discard what it does not need - the
+profile just never got narrowed to match.
+
+**Priority, by size:**
+
+1. **Stop loading the same prospective release twice** - two of the three
+   passes read it. Worth up to ~60 s.
+2. **Narrow the profile on the ID-only pass.** It cannot drop descriptions or
+   refset members (their ids are wanted) but it has no use for axioms at all,
+   which is where the 35 s goes for that edition.
+3. **Then** parallelise `AxiomDeserialiser`. Worth ~30 s, and the most work of
+   the three: the class is single-threaded *by construction* - one shared
+   `OWLOntology`, one `OWLFunctionalSyntaxOWLParser`, one `owlAxiomsLoaded`
+   list mutated per call, a non-atomic counter. Parallelising means one
+   deserialiser per thread, each with its own `OWLOntologyManager`, which is a
+   patch to **snomed-owl-toolkit** - a third library to fork after
+   snomed-drools.
+
+All three are upstream of RVF. Items 1 and 2 are in
+`snomed-drools-rf2-validator`, which we already build ourselves, so they are
+reachable on the same pin. Item 3 needs snomed-owl-toolkit forked too.
