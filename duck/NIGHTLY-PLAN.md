@@ -455,3 +455,24 @@ duplicated acquisition and materialisation per worker (~105 s unpack, ~25 s
 materialise) and a fan-out/join RVF does not have - so it is a design change,
 not configuration. The numbers now favour it; before the engine pin they did
 not.
+
+### What the structural concurrency is worth
+
+Measured inside the same run rather than by a second run, because the phase's
+own duration is exactly the saving once it is no longer serial:
+
+    structure testing starts   11:30:28
+    column pass done           11:30:53   26 s  (75 files, 45,311,214 lines)
+    structure report written   11:31:03   35 s total
+    Drools, the critical path             196 s
+    whole run                             263 s
+
+**35 s comes off the critical path - 13% of the run.** It was previously 100%
+additive, because the phase ran to completion before anything else started.
+
+It is entirely hidden now: 35 s against a 196 s critical path, so the saving is
+the full phase duration and will remain so until Drools loading drops below it.
+
+Note this is with PR #27 in, so the 26 s column pass is already the
+split-across-cores version. The largest single file no longer sets the floor
+for that pass.
