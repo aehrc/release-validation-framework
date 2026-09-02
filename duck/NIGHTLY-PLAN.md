@@ -389,3 +389,69 @@ engine version alongside the rule set. The existing rule
 ([[rvf-drools-heap-baseline]]) names rule-set, exclusions, module filter, patch
 state and contention - it needs "engine version" added, because that is the
 term that moved this by 12x.
+
+### Measured with everything applied, 2026-09-02
+
+AU edition (`amtv4-15912.zip`, 722,404 concepts, 45,298,828 rows), DuckDB
+engine, `snomed-drools-engine 6.1.0-aehrc-perf`, all phases concurrent,
+8 cores, 12 GB heap, DuckDB capped at 3GB. SQL groups: file-centric,
+component-centric, release-type. Drools: common-authoring + au-authoring with
+our 5 rule patches applied. MRCM excluded - see the sizing note below.
+
+    11:30:06  submitted
+    11:30:28  structure testing starts        (22 s of acquisition first)
+    11:31:08  DuckDB materialised             66 tables, 45,298,828 rows
+    11:31:49  SQL failure detail -> parquet   SQL phase done, 103 s in
+    11:34:27  Drools rule execution took 70 s
+    11:34:28  Drools total run time 196 s
+    11:34:29  COMPLETE                        263 s wall
+
+209 tests, 59 failures, 18 warnings, 54 incomplete, no failure messages.
+
+**Against the same request before this work:**
+
+| | engine 6.0.0, structural serial | 6.1.0-aehrc-perf, all concurrent |
+|---|---|---|
+| whole run | 780 s | **263 s** |
+| Drools total | 697 s | **196 s** |
+| Drools rule execution | 500 s | **70 s** |
+| SQL phase | inside the 780 | done at 103 s |
+
+**Rule execution is 7.1x faster and the whole run 3.0x.** Same edition, same
+groups, same host.
+
+**The long pole moved.** It is still Drools, but no longer rule execution: of
+the 196 s, 70 s is rules and ~126 s is loading - reading the RF2 and
+deserialising axioms into the object graph. PR #9 already made those reads
+concurrent, so the remaining cost is the graph construction itself. Any further
+work on Drools should target loading, not rules.
+
+**SQL is no longer the headline cost either** - 103 s including a 40 s
+materialisation of 45.3M rows.
+
+### Why MRCM is not in this run, and what it needs
+
+From the run that included it:
+
+    MRCMValidatorReleaseImportManager : Finished creating index. Using approx 11,952 MB
+    MRCMValidatorReleaseImportManager : Finished creating index. Using approx  1,896 MB
+
+**MRCM's index wants ~12 GB on its own**, and it builds two. Drools holds a
+separate full object graph, DuckDB its own off-heap arena, and none of the three
+share a model. A single worker sized for the decided scope therefore needs
+roughly
+
+    MRCM 14 GB + Drools 8 GB + DuckDB 4 GB ~= 26 GB
+
+against 14 GB for the largest single phase. Two runs died proving it: 8 GB was
+hopeless, and a 16 GB attempt was killed by the **kernel** OOM killer (no heap
+dump, no JVM error - SIGKILL leaves neither) because MySQL held 5.8 GB on the
+same 22 GB host.
+
+**This is the argument for phases on separate workers, and it is a memory
+argument rather than the CPU one.** Pods sized per phase cost far less than one
+pod sized for the sum, and cannot take each other down. The price is a
+duplicated acquisition and materialisation per worker (~105 s unpack, ~25 s
+materialise) and a fan-out/join RVF does not have - so it is a design change,
+not configuration. The numbers now favour it; before the engine pin they did
+not.
