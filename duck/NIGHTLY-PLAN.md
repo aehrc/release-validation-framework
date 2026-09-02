@@ -972,3 +972,78 @@ Recorded because the failures were all mine and all silent:
 Also found: the long-lived API node was serving a jar I had rebuilt underneath
 it, and threw `NoClassDefFoundError: ModelAndViewDefiningException` on lazily
 loaded Spring classes. Restart the API after any `mvn install`.
+
+### The compiled-ECL cache is wrong on two counts, 2026-09-02
+
+I built it, measured it, and it failed. Recording it because the reasoning that
+led there was wrong in a way worth not repeating.
+
+**The idea:** 12.9% of the MRCM phase is Lucene query parsing, and 427 of 859
+expressions are exact duplicates - each distinct expression issued once per
+content form. A `Query` is immutable and Lucene reuses it across searchers, so
+memoise the compile in a cache shared across `SnomedQueryService` instances.
+Sized at roughly 90 s of the 735 s phase, once the ECL-to-string conversion is
+counted with the parse.
+
+Implemented in a fork of `snomed-query-service` 6.0.1 (the version RVF actually
+resolves), pinned as `6.0.1-aehrc-perf`. **All 125 library tests passed**,
+including the 39 integration tests over the ECL path, and a deliberately broken
+cache key failed 39 of them - so the suite discriminates.
+
+**Then the real edition OOM'd.** `OutOfMemoryError: Java heap space` after 25
+minutes, MRCM contributing **0 assertions** instead of 1,037:
+
+```
+ERROR o.i.r.c.service.MRCMValidationService : MRCM validation has stopped
+Caused by: ServiceException: Domain attribute validation failed
+Caused by: java.lang.OutOfMemoryError: Java heap space
+```
+
+**Why, and it is the same shape as the axiom-batching regression earlier today:**
+compiling an ECL expression does not produce a small object.
+`processInternalFunction` resolves each `<<domain` closure by searching the index
+for its `ANCESTOR` term and **inlining every matching concept id literally into
+the Lucene query string**, which then parses into a `BooleanQuery` carrying that
+many clauses. On a 722,404-concept edition a single `<< 404684003 |Clinical
+finding|` expansion is tens of thousands of clauses. Retaining 432 of those
+alongside an 11.3 GB peak is gigabytes. Parsing is 12.9% of the phase *because*
+the strings are enormous - which is exactly why caching the result is expensive.
+
+**And it is also incorrect, which matters more.** The closure resolution reads
+the index:
+
+```java
+final TopDocs topDocs = indexSearcher.search(
+        new TermQuery(new Term(ConceptFieldNames.ANCESTOR, conceptId)), Integer.MAX_VALUE);
+```
+
+So the compiled query **depends on index contents**, and the inferred and stated
+forms hold different content. The 427 "duplicate" expressions do not compile to
+the same query at all. A shared cache would have served the inferred form's
+expansion to a stated search - wrong findings, silently. The two services must
+compile independently, and the duplication I measured is not duplication.
+
+**Why the tests did not catch it:** every test instance builds the same tiny
+taxonomy, so the expansions genuinely did match. The property that fails only
+fails when two indexes differ, which no unit test here sets up. A test asserting
+"sharing is safe" was asserting my own wrong premise.
+
+**Reverted:** pin removed, patch discarded, the bad artefact deleted from the
+local repo. Verified back on stock 6.0.1 - **1,037 tests, 3 failures, 4
+warnings, 2 incomplete, 0 assertions differing in bucket or failure count**
+against the pre-change run. The 684 s vs 765 s gap between those two runs is
+run-to-run variance on a warm page cache, not an improvement; the jars are
+behaviourally identical.
+
+**What this leaves for the parse cost.** The 12.9% is real, and the only way to
+take it is to stop building a giant string: have the ECL converter emit Lucene
+`Query` objects directly, so a closure becomes a `TermQuery` on `ANCESTOR`
+rather than tens of thousands of inlined ids. That removes the parse *and* the
+string, spends no retained memory, and stays per-index and therefore correct.
+It is a rewrite of `ExpressionConstraintToLuceneConverter`, not a cache, and it
+is the honest next lever - worth about 95 s of the phase plus whatever the
+inlining costs in allocation.
+
+**Standing lesson, third time today:** measure retention, not just time. Time
+said 12.9% was available; a heap histogram or a `GC.heap_info` before and after
+would have said the artefacts are multi-GB, and I would not have pinned it.
