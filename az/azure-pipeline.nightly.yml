@@ -1,0 +1,434 @@
+# Nightly AMT validation on the deployed DuckDB RVF, published as test results.
+#
+# This is the pipeline that runs ALONGSIDE def 42 `daily-rvf` and is meant to
+# replace it. It does not build or run RVF itself: it hands a release to the
+# deployed API and reports what comes back, so the thing under test is the
+# deployment, not an agent-local jar. That is the whole difference from
+# `azure-pipeline.engine-ab.yml`, which is a PR gate that runs both engines on
+# the agent.
+#
+# TRIGGER: on the STAGE, not on the build.
+#
+# `trigger: true` on a pipeline resource fires only when the triggering run
+# succeeds OVERALL. On 2026-08-07 build 15816 ran RvfStage to success and
+# published a good report, then failed on `FileTests` - an unrelated
+# release-content assertion - so a build-level trigger never fired. Triggering on
+# the RvfStage stage decouples us from assertions that have nothing to do with
+# whether a release exists to validate.
+#
+# TOLERATING A PARTIAL daily-rvf.
+#
+# Only a fully SUCCEEDED daily-rvf publishes `rf2-bundle` and `rvf-report`; a
+# partiallySucceeded run publishes just `build-tempo`. Two of the eight nights to
+# 2026-08-06 were partial, including two consecutively. So a missing bundle is a
+# NORMAL outcome and must not read as a broken nightly: the run completes as
+# SucceededWithIssues with a warning naming the triggering build, and every
+# validation step is skipped.
+#
+# NOT YET VERIFIED. Nothing in this file has run, because it needs a deployed
+# API and a job store share that do not exist yet. The unknowns are explicit
+# parameters rather than guesses - see `Preconditions` below. Everything that
+# CAN be checked without a cluster has been: the YAML parses, and the JUnit
+# conversion is exercised against real RVF reports by ci/rvf_junit_selftest.py.
+#
+# Preconditions, all of which are deployment decisions in duck/ROADMAP.md:
+#
+#   1. `rvfBaseUrl` reachable from the agent pool, serving the deployed API.
+#   2. A job store share the API and its workers both mount, whose coordinates
+#      are `jobStoreAccount` / `jobStoreShare`. The AKS manifest currently uses a
+#      DYNAMIC azurefile PVC, whose share name is generated - so either bind a
+#      static share or read the generated name once and set it here. This is the
+#      one precondition that cannot be inferred from the repo.
+#   3. `X-AUTH-*` headers accepted. RVF validates none of them, so the API must
+#      sit behind a gateway that injects them and strips client-supplied ones.
+
+name: 'nightly-rvf-duck-$(Date:yyyyMMdd)$(Rev:.r)'
+
+trigger: none
+pr: none
+
+resources:
+  pipelines:
+    - pipeline: dailyRvf
+      # `source` is the pipeline NAME, not its id.
+      source: daily-rvf
+      trigger:
+        stages:
+          - RvfStage
+
+parameters:
+  - name: rvfBaseUrl
+    displayName: 'Base URL of the deployed RVF API'
+    type: string
+    default: 'http://rvf-api.rvf.svc.cluster.local:8080'
+  - name: jobStoreAccount
+    displayName: 'Storage account holding the job store share'
+    type: string
+    default: 'ontoserverdevelop'
+  - name: jobStoreShare
+    displayName: 'File share mounted by the API and workers as the job store'
+    type: string
+    default: 'rvf-jobs'
+  - name: jobStorePrefix
+    displayName: 'Directory within the share to stage releases into'
+    type: string
+    default: 'nightly'
+  - name: groups
+    displayName: 'Assertion groups (comma separated)'
+    type: string
+    default: 'file-centric-validation,component-centric-validation,release-type-validation,resource'
+  - name: enableDrools
+    displayName: 'Run the Drools rules'
+    type: boolean
+    default: true
+  - name: enableMRCM
+    displayName: 'Run the MRCM validation'
+    type: boolean
+    default: true
+  - name: previousRelease
+    displayName: 'Previous release blob name, or empty for a first-time release'
+    type: string
+    default: ''
+  - name: waitMinutes
+    displayName: 'Minutes to wait for the validation to finish'
+    type: number
+    default: 60
+  - name: minAssertions
+    displayName: 'Fail if fewer than this many assertions ran (guards a silently skipped phase)'
+    type: number
+    default: 900
+
+variables:
+  - group: ncts-release
+  - name: storageAccount
+    value: '${{ parameters.jobStoreAccount }}'
+  - name: storageKey
+    value: '$(azure.accountKey.ontodevelop)'
+  - name: workdir
+    value: '$(Agent.TempDirectory)/nightly-rvf'
+  # Scope is a decided question now, not an open one: the full run with Drools
+  # and MRCM measures about 780 s end to end. See duck/ROADMAP.md task 13.
+  - name: runId
+    value: ''
+
+stages:
+  - stage: Nightly
+    displayName: 'Validate the nightly release on the deployed RVF'
+    jobs:
+      - job: Validate
+        pool:
+          name: ncts-k8s-dedicated-pool
+        # The validation itself is minutes, but this job also waits on it, so the
+        # timeout has to cover waitMinutes plus transfer.
+        timeoutInMinutes: 120
+        steps:
+          - checkout: self
+            fetchDepth: 1
+
+          - task: Bash@3
+            displayName: 'Show what triggered this'
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                echo "triggering pipeline : $(resources.pipeline.dailyRvf.pipelineName)"
+                echo "triggering build    : $(resources.pipeline.dailyRvf.runName)"
+                echo "triggering result   : $(resources.pipeline.dailyRvf.result)"
+                echo "rvf base url        : ${{ parameters.rvfBaseUrl }}"
+                echo "groups              : ${{ parameters.groups }}"
+                echo "drools / mrcm       : ${{ parameters.enableDrools }} / ${{ parameters.enableMRCM }}"
+                mkdir -p '$(workdir)'
+
+          # A partial daily-rvf publishes no rf2-bundle. Detect it here and let
+          # every later step skip, rather than failing on a download.
+          - task: Bash@3
+            name: bundle
+            displayName: 'Check the triggering run published a release'
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                RESULT='$(resources.pipeline.dailyRvf.result)'
+                if [ "$RESULT" = "Succeeded" ]; then
+                  echo "##vso[task.setvariable variable=haveBundle;isOutput=true]true"
+                  echo "triggering run succeeded - expecting rf2-bundle"
+                else
+                  echo "##vso[task.setvariable variable=haveBundle;isOutput=true]false"
+                  echo "triggering run result is '$RESULT' - no rf2-bundle is published for that"
+                fi
+
+          - task: DownloadPipelineArtifact@2
+            displayName: 'Download the prospective release'
+            condition: eq(variables['bundle.haveBundle'], 'true')
+            inputs:
+              buildType: 'specific'
+              project: '$(System.TeamProject)'
+              definition: '$(resources.pipeline.dailyRvf.pipelineID)'
+              buildVersionToDownload: 'specific'
+              pipelineId: '$(resources.pipeline.dailyRvf.runID)'
+              artifactName: 'rf2-bundle'
+              targetPath: '$(workdir)/bundle'
+
+          - task: Bash@3
+            displayName: 'Stage the release into the job store share'
+            condition: eq(variables['bundle.haveBundle'], 'true')
+            env:
+              STORAGE_KEY: $(storageKey)
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                cd '$(workdir)'
+
+                RELEASE="$(find bundle -name '*.zip' -type f | head -1)"
+                if [ -z "$RELEASE" ]; then
+                  echo "##vso[task.logissue type=error]rf2-bundle contained no zip"
+                  find bundle -type f | head -20
+                  exit 1
+                fi
+                NAME="$(basename "$RELEASE")"
+                echo "release: $NAME ($(du -h "$RELEASE" | cut -f1))"
+
+                # The API resolves the prospective file under the job store root,
+                # so the path we POST must be relative to the share, and the file
+                # must be visible to whichever WORKER claims the message - which
+                # is the entire reason this is a shared share and not agent disk.
+                az storage directory create \
+                  --account-name '$(storageAccount)' --account-key "$STORAGE_KEY" \
+                  --share-name '${{ parameters.jobStoreShare }}' \
+                  --name '${{ parameters.jobStorePrefix }}' --only-show-errors >/dev/null || true
+
+                az storage file upload \
+                  --account-name '$(storageAccount)' --account-key "$STORAGE_KEY" \
+                  --share-name '${{ parameters.jobStoreShare }}' \
+                  --path '${{ parameters.jobStorePrefix }}/'"$NAME" \
+                  --source "$RELEASE" --only-show-errors
+
+                echo "##vso[task.setvariable variable=releasePath]${{ parameters.jobStorePrefix }}/$NAME"
+                echo "staged at ${{ parameters.jobStorePrefix }}/$NAME"
+
+          - task: Bash@3
+            displayName: 'Submit the validation'
+            condition: eq(variables['bundle.haveBundle'], 'true')
+            env:
+              RVF_TOKEN: $(rvf.auth.token)
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                cd '$(workdir)'
+
+                RUN_ID="$(date +%s%N | cut -c1-13)"
+                STORAGE_LOCATION="nightly-$(Build.BuildId)"
+
+                # An optional form field cannot be spliced in with a template
+                # expression - it would land mid-continuation and break the
+                # command - so it goes in a bash array.
+                ARGS=(
+                  -X POST '${{ parameters.rvfBaseUrl }}/run-post-via-s3'
+                  -H "X-AUTH-username: $(Build.RequestedForEmail)"
+                  -H 'X-AUTH-roles: ROLE_ihtsdo-ops-admin'
+                  -H "X-AUTH-token: $RVF_TOKEN"
+                  -F "runId=$RUN_ID"
+                  -F "storageLocation=$STORAGE_LOCATION"
+                  -F "releaseFileS3Path=$(releasePath)"
+                  -F 'groups=${{ parameters.groups }}'
+                  -F 'enableDrools=${{ parameters.enableDrools }}'
+                  # NOTE the spelling: enableMRCMValidation, capital MRCM. A
+                  # misspelling binds silently to the false default and produces
+                  # a green report that skipped the entire phase.
+                  -F 'enableMRCMValidation=${{ parameters.enableMRCM }}'
+                  -F 'releaseAsAnEdition=true'
+                  -F 'failureExportMax=100'
+                )
+                PREV='${{ parameters.previousRelease }}'
+                if [ -n "$PREV" ]; then
+                  ARGS+=( -F "previousRelease=$PREV" )
+                  echo "previous release supplied: $PREV"
+                else
+                  # Without one, every release-type assertion needing <PREVIOUS>
+                  # is dropped as not-executed: 49 of 87 on the AU edition.
+                  echo "no previous release - release-type assertions will not execute"
+                fi
+
+                HTTP="$(curl -sS -m 300 -o submit.json -w '%{http_code}' "${ARGS[@]}")"
+
+                echo "submit -> HTTP $HTTP"
+                cat submit.json 2>/dev/null || true
+                echo
+
+                # 412 means an assertion group name does not exist; 400 with an
+                # empty body means the prospective file was not found under the
+                # job store root - both are configuration, not flakiness.
+                if [ "$HTTP" != "201" ]; then
+                  echo "##vso[task.logissue type=error]submit returned HTTP $HTTP - 412 is an unknown assertion group, 400 an unresolvable release path"
+                  exit 1
+                fi
+
+                echo "##vso[task.setvariable variable=runId]$RUN_ID"
+                echo "##vso[task.setvariable variable=storageLocation]$STORAGE_LOCATION"
+
+          - task: Bash@3
+            displayName: 'Wait for the validation to finish'
+            condition: eq(variables['bundle.haveBundle'], 'true')
+            env:
+              RVF_TOKEN: $(rvf.auth.token)
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                cd '$(workdir)'
+
+                DEADLINE=$(( $(date +%s) + ${{ parameters.waitMinutes }} * 60 ))
+                STARTED=$(date +%s)
+                URL='${{ parameters.rvfBaseUrl }}/result/$(runId)?storageLocation=$(storageLocation)'
+
+                # The HTTP shape is {status, rvfValidationResult:{TestResult,...}},
+                # NOT the on-disk results.json shape which has TestResult at the
+                # top level; checking the wrong one polls forever against a
+                # finished run.
+                #
+                # Observed statuses: QUEUED/RUNNING carry only a Message, a
+                # COMPLETE run reports status NULL, and a FAILED run reports
+                # status FAILED *with* a TestResult and an endTime. So presence
+                # of a TestResult is NOT completion - a failed MRCM phase yields
+                # a perfectly well-formed report holding 62 tests instead of
+                # 1037, which would publish as a smaller green nightly. Status is
+                # checked FIRST for exactly that reason.
+                #
+                # Exit codes: 0 ready, 2 failed, 1 still running. One line each -
+                # an indented -c body is an IndentationError.
+                CHECK="import json,sys; r=json.load(open('report.json')); d=r.get('rvfValidationResult') or {}; sys.exit(2 if r.get('status')=='FAILED' else (0 if d.get('TestResult') and d.get('endTime') else 1))"
+                MSGS="import json; d=json.load(open('report.json')).get('rvfValidationResult') or {}; print('; '.join(str(m) for m in (d.get('failureMessages') or []))[:800] or 'no failureMessages')"
+
+                while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+                  HTTP="$(curl -sS -m 120 -o report.json -w '%{http_code}' \
+                    -H "X-AUTH-username: $(Build.RequestedForEmail)" \
+                    -H 'X-AUTH-roles: ROLE_ihtsdo-ops-admin' \
+                    -H "X-AUTH-token: $RVF_TOKEN" "$URL" || true)"
+
+                  if [ "$HTTP" = "200" ]; then
+                    set +e
+                    python3 -c "$CHECK" 2>/dev/null
+                    STATE=$?
+                    set -e
+                    case "$STATE" in
+                      0)
+                        echo "report complete after $(( $(date +%s) - STARTED ))s"
+                        exit 0
+                        ;;
+                      2)
+                        echo "##vso[task.logissue type=error]RVF reported the run FAILED: $(python3 -c "$MSGS")"
+                        exit 1
+                        ;;
+                    esac
+                  fi
+                  echo "  waiting, last HTTP $HTTP, $(( DEADLINE - $(date +%s) ))s left"
+                  sleep 20
+                done
+
+                echo "##vso[task.logissue type=error]no report after ${{ parameters.waitMinutes }} minutes"
+                exit 1
+
+          - task: Bash@3
+            displayName: 'Assert the requested scope actually ran'
+            condition: eq(variables['bundle.haveBundle'], 'true')
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                cd '$(workdir)'
+
+                # A phase that silently does not run is the failure mode this
+                # nightly is least able to notice: on 2026-09-02 a misspelled
+                # `enableMrcmValidation` bound to the false default and produced
+                # a COMPLETE report in 94 s with 62 tests instead of 1037 - green,
+                # fast, and validating almost nothing. reportSummary names each
+                # phase as executed or disabled, so assert against what we asked
+                # for rather than trusting the exit status.
+                python3 - <<'PY'
+                import json, os, sys
+
+                report = json.load(open('report.json')).get('rvfValidationResult') or {}
+                summary = report.get('reportSummary') or {}
+                wanted = {
+                    'DROOL_RULES': os.environ['WANT_DROOLS'] == 'True',
+                    'MRCM': os.environ['WANT_MRCM'] == 'True',
+                }
+
+                problems = []
+                for phase, requested in wanted.items():
+                    line = str(summary.get(phase, 'absent'))
+                    ran = 'executed' in line.lower()
+                    print(f'  {phase:12s} requested={requested!s:5s} -> {line}')
+                    if requested and not ran:
+                        problems.append(f'{phase} was requested but the report says "{line}"')
+
+                tests = (report.get('TestResult') or {}).get('totalTestsRun') or 0
+                print(f'  totalTestsRun {tests}')
+                if tests < int(os.environ['MIN_TESTS']):
+                    problems.append(f'only {tests} assertions ran, below the floor of {os.environ["MIN_TESTS"]}')
+
+                for p in problems:
+                    print(f'##vso[task.logissue type=error]{p}')
+                sys.exit(1 if problems else 0)
+                PY
+            env:
+              WANT_DROOLS: '${{ parameters.enableDrools }}'
+              WANT_MRCM: '${{ parameters.enableMRCM }}'
+              # A floor, not an exact count: the corpus grows. Set below the
+              # smallest legitimate full run and above any partial one.
+              MIN_TESTS: '${{ parameters.minAssertions }}'
+
+          - task: Bash@3
+            displayName: 'Convert the report to JUnit'
+            condition: eq(variables['bundle.haveBundle'], 'true')
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                cd '$(workdir)'
+
+                # failureCount == -1 is RVF's sentinel for "never ran", so it
+                # becomes <skipped> rather than a red build. Warnings likewise -
+                # a nightly that goes red on a warning gets ignored within a week.
+                python3 '$(Build.SourcesDirectory)/ci/rvf_junit.py' report.json \
+                  --out rvf-junit.xml \
+                  --summary rvf-summary.md \
+                  --report-url '${{ parameters.rvfBaseUrl }}/result/$(runId)?storageLocation=$(storageLocation)' \
+                  --instance-limit 10
+
+                # Azure DevOps renders an uploaded markdown file as a build
+                # summary tab; GITHUB_STEP_SUMMARY does not exist here.
+                echo "##vso[task.uploadsummary]$(workdir)/rvf-summary.md"
+                cat rvf-summary.md
+
+          - task: PublishTestResults@2
+            displayName: 'Publish the validation as test results'
+            condition: eq(variables['bundle.haveBundle'], 'true')
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: '$(workdir)/rvf-junit.xml'
+              testRunTitle: 'RVF nightly $(Build.BuildNumber)'
+              # The report is the record even when assertions fail; a failed
+              # publish step would hide it.
+              failTaskOnFailedTests: false
+
+          - task: PublishPipelineArtifact@1
+            displayName: 'Publish the report and the summary'
+            condition: eq(variables['bundle.haveBundle'], 'true')
+            inputs:
+              targetPath: '$(workdir)'
+              artifact: 'rvf-nightly-$(Build.BuildId)'
+
+          # A partial daily-rvf is not our failure, but it must be visible -
+          # otherwise a week of skipped nightlies reads as a week of green ones.
+          - task: Bash@3
+            displayName: 'Flag a skipped night'
+            condition: ne(variables['bundle.haveBundle'], 'true')
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                echo "##vso[task.logissue type=warning]No release to validate: daily-rvf run $(resources.pipeline.dailyRvf.runName) finished as '$(resources.pipeline.dailyRvf.result)', which publishes no rf2-bundle."
+                echo "##vso[task.complete result=SucceededWithIssues;]"

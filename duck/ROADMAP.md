@@ -85,20 +85,33 @@ Everything below in Phase 3 and 4 depends on someone with cluster access.
 
 ## Phase 3 - wire the nightly.
 
-11. **Nightly pipeline.** Reuse what already works: `daily-rvf` publishes the
+11. **Nightly pipeline.** **WRITTEN 2026-09-03** as
+    `az/azure-pipeline.nightly.yml`, unrun - it needs the deployed API. Reuse what already works: `daily-rvf` publishes the
     prospective release as an `rf2-bundle` pointer and the existing duckdb-rvf
     pipeline triggers on its `RvfStage` and azcopys the blob. So: trigger the
     same way, land the release on the Azure Files job store, `POST
     /run-post-via-s3` naming the path, poll `/result/{runId}`.
     No Snowstorm export step to build.
-12. **Publish results.** `ci/rvf_junit.py` for the test tab -
+12. **Publish results.** **WIRED 2026-09-03** into the pipeline above and
+    exercised against real reports. `ci/rvf_junit.py` for the test tab -
     `failureCount == -1` becomes `<skipped>` rather than a red build - plus
     `failures.parquet` and a link to the report.
-13. **Decide the nightly's scope.** SQL only is 160s. Drools adds a separate
-    pass (measured 5,129 findings in 674s module-scoped, 10,949 in 636s on the
-    heap path) and MRCM another. A nightly that skips them is cheap and
-    incomplete; one that runs them is the real thing. Measure both before
-    choosing.
+13. ~~**Decide the nightly's scope.**~~ **ANSWERED 2026-09-03** - measured, so
+    it is no longer a trade-off between cheap-and-incomplete and unmeasured.
+    The full decided scope on the AU edition, all phases concurrent, 8 cores:
+
+    | phase | cost | notes |
+    |---|---|---|
+    | acquisition | 42 s | serial, before anything else |
+    | SQL assertions | 131 s | incl. materialising 45.3 M rows |
+    | structural | 31 s | concurrent, off the critical path |
+    | Drools | 154 s | from 697 s, after three load optimisations |
+    | MRCM | 735 s | from 1,292 s; still the long pole |
+
+    **Run everything.** MRCM is ~4.8x the next phase but the whole run is still
+    under a quarter hour against `daily-rvf`'s 181 minutes, so skipping phases
+    buys minutes off something already 15x faster while giving up coverage.
+    See `duck/NIGHTLY-PLAN.md` for the full derivation and what is left in MRCM.
 14. **First autonomous green nightly**, then leave it alone for a week and count
     how often it needed a human.
 
@@ -236,3 +249,80 @@ deliberately-kept AU previous releases remain. Pre-fix it would have sat there
 until the next run started, which for a nightly is a day, and forever if the
 pod is replaced.
 
+
+## Update, 2026-09-03 - the nightly pipeline exists, and what it cannot prove
+
+`az/azure-pipeline.nightly.yml` is written. It is the pipeline that runs
+**alongside** def 42 `daily-rvf` and is meant to replace it: it hands a release
+to the **deployed** API and reports what comes back, so the thing under test is
+the deployment rather than an agent-local jar. That is the difference from
+`azure-pipeline.engine-ab.yml`, which is a PR gate running both engines on the
+agent.
+
+**It has never run**, because it needs an API that is not deployed. Everything
+that could be checked without a cluster was:
+
+| checked | how |
+|---|---|
+| YAML parses, 12 steps, params resolve | `yaml.safe_load` |
+| all 7 inline scripts are valid bash | extracted, ADO macros neutralised, `bash -n` |
+| JUnit conversion works on a real report | 1037 tests -> 3 suites, 2 failures, 5 skipped |
+| completion detection | three-way against three REAL reports |
+| scope guard | passes a genuine full run, fails a reconstructed skipped-phase run |
+
+### Three defects found by testing it rather than reading it
+
+1. **The completion predicate was wrong.** `GET /result/{runId}` returns
+   `{status, rvfValidationResult:{TestResult,...}}`; the on-disk `results.json`
+   has `TestResult` at the top level. Checking the on-disk shape polls forever
+   against a finished run.
+2. **A FAILED run looks complete.** `status: FAILED` arrives **with** a
+   well-formed `TestResult` and `endTime`, so presence of a report is not
+   completion. The OOM'd run from 2026-09-02 returns 62 assertions instead of
+   1037 - a *smaller green nightly*. Status is now checked first, and
+   `failureMessages` is surfaced in the build error.
+3. **An indented `python3 -c` body is an `IndentationError`.** It would have
+   made the poll loop never detect a finished run and always time out.
+
+Also fixed before they could run: an ADO template expression spliced into the
+middle of a `curl` line-continuation, and `GITHUB_STEP_SUMMARY` - a GitHub
+Actions variable - used to publish the summary.
+
+### The guard that exists because of today
+
+A phase that silently does not run is the failure this nightly is least able to
+notice. On 2026-09-02 a misspelled `enableMrcmValidation` (the parameter is
+`enableMRCMValidation`, capital MRCM) bound to the `false` default and produced
+a COMPLETE report in **94 s with 62 tests instead of 1037** - green, fast, and
+validating almost nothing. So the pipeline asserts `reportSummary` shows each
+requested phase as executed, and that the assertion count clears a floor
+(`minAssertions`, default 900). Verified to fail on exactly that shape.
+
+### What is still blocked, and on what
+
+Nothing below is work I can do from here - no `az`, `kubectl`, `helm` or
+`docker` on this host, and no registry or cluster credentials.
+
+| # | step | blocked on |
+|---|---|---|
+| 6 | push the image to ACR | credentials for `ontoserver.azurecr.io` |
+| 8 | apply `k8s/rvf-aks.yaml`, prove a worker's report is served by an API replica that never ran it | AKS access |
+| 9 | settle auth and put an ingress in front | a decision, then config |
+| 10 | seed the release store with the last published AMT release | storage access |
+| - | set `jobStoreShare` in the nightly | the AKS PVC is DYNAMIC, so its share name is generated - bind a static share or read the generated name once |
+
+The share name is the one precondition that cannot be inferred from this repo,
+and it is why that parameter has a placeholder default rather than a real value.
+
+### Then, and only then, the parallel run
+
+Both pipelines against the same nightly release for a week: `daily-rvf` at ~181
+minutes and this one at ~13. Compare assertion-by-assertion with
+`ci/compare_reports.py --gate` against `ci/known-engine-divergences.json`, count
+how often a human had to intervene, and retire def 42 when that count is zero.
+
+One caveat on comparing reports night to night, found 2026-09-02: **RVF's
+exported failure instances are not reproducible.** One assertion names a
+different sample of failing concepts on every run, including between two stock
+runs. Failure counts and buckets are stable, so a count-level comparison is
+sound; an instance-level diff is not, until that is fixed.
