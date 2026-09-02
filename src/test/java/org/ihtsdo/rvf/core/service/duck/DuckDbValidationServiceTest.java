@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -301,6 +302,13 @@ class DuckDbValidationServiceTest {
 				corpus.toString(), work.toString(), "qa_result", 0, "", false, "", 0);
 	}
 
+	private DuckDbValidationService service(String memoryLimit) {
+		return new DuckDbValidationService(reportService, whitelistService,
+				new ReleaseAcquisitionService(),
+				new DuckStoreLocator(storeFile.toString(), corpus.toString()),
+				corpus.toString(), work.toString(), "qa_result", 0, memoryLimit, false, "", 0);
+	}
+
 	private static MysqlExecutionConfig executionConfig(long runId) {
 		MysqlExecutionConfig config = new MysqlExecutionConfig(runId);
 		config.setGroupNames(List.of("component-centric-validation"));
@@ -330,5 +338,33 @@ class DuckDbValidationServiceTest {
 		Path file = releaseDir.resolve(relative);
 		Files.createDirectories(file.getParent());
 		Files.writeString(file, content);
+	}
+
+	/**
+	 * A bare number is accepted by Spring and then rejected by DuckDB when the
+	 * connection opens - after acquisition and materialisation, so on a real
+	 * edition the operator waits twenty-five minutes to learn the flag was wrong,
+	 * and the SQL phase is lost while the other phases carry on and report
+	 * partial results.
+	 */
+	@Test
+	void aMemoryLimitWithoutAUnitIsRejectedAtStartup() {
+		IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+				() -> service("4"));
+		assertTrue(e.getMessage().contains("must carry a unit"), e.getMessage());
+		assertTrue(e.getMessage().contains("4GB"), "the message has to show the fix");
+	}
+
+	@Test
+	void unitsDuckDbAcceptsArePassedThrough() {
+		for (String ok : new String[] {"4GB", "4GiB", "512MB", "1TB", "2.5GB", " 8GB "}) {
+			assertNotNull(service(ok), "should accept " + ok);
+		}
+	}
+
+	@Test
+	void anAbsentMemoryLimitKeepsDuckDbsOwnHeuristic() {
+		assertNotNull(service(""));
+		assertNotNull(service(null));
 	}
 }

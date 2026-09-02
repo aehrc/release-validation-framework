@@ -182,7 +182,7 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 		this.workDirectory = workDirectory;
 		this.qaResultTable = QA_RESULT_SCHEMA + "." + qaResultTableName;
 		this.duckThreads = duckThreads;
-		this.duckMemoryLimit = duckMemoryLimit;
+		this.duckMemoryLimit = requireUnit(duckMemoryLimit);
 		this.archiveFailures = archiveFailures;
 		// Default off. A cache that appeared without being asked for would change
 		// the disk footprint of an existing deployment by gigabytes.
@@ -192,6 +192,36 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 		if (this.releaseCache.isEnabled()) {
 			LOGGER.info("Release cache enabled: {} with a {} GB budget", cacheDir, cacheMaxGb);
 		}
+	}
+
+	/**
+	 * A memory limit without a unit fails the run, not the startup, so reject it
+	 * here.
+	 *
+	 * <p>{@code rvf.duck.memory.limit} is passed to DuckDB verbatim as
+	 * {@code SET memory_limit}, and DuckDB requires a unit. Given {@code 4} it
+	 * raises "Unknown unit for memory" - but only when the connection is opened,
+	 * which is after acquisition and materialisation. On a real edition that is
+	 * twenty-five minutes before the operator learns the flag was wrong, and the
+	 * whole SQL phase is lost while Drools and MRCM carry on, so the run reports
+	 * partial results rather than a configuration error.
+	 *
+	 * <p>Cost me exactly that. Failing at startup is worth five lines.
+	 */
+	private static String requireUnit(String memoryLimit) {
+		if (memoryLimit == null || memoryLimit.isBlank()) {
+			return memoryLimit;
+		}
+		String trimmed = memoryLimit.trim();
+		if (!trimmed.matches("(?i)\\d+(\\.\\d+)?\\s*(k|m|g|t)(i?b)?")) {
+			throw new IllegalArgumentException(
+					"rvf.duck.memory.limit must carry a unit, e.g. 4GB or 4GiB - got '"
+					+ memoryLimit + "'. DuckDB accepts KB/MB/GB/TB (1000^i) and "
+					+ "KiB/MiB/GiB/TiB (1024^i), and rejects a bare number only "
+					+ "once the connection is opened, long after the release has "
+					+ "been materialised.");
+		}
+		return trimmed;
 	}
 
 	/**
