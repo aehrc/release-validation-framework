@@ -476,3 +476,61 @@ the full phase duration and will remain so until Drools loading drops below it.
 Note this is with PR #27 in, so the 26 s column pass is already the
 split-across-cores version. The largest single file no longer sets the floor
 for that pass.
+
+### The real nightly shape, with a previous release, 2026-09-02
+
+The 263 s above was optimistic: no `previousRelease`, so 49 of 87 release-type
+assertions never ran and only one edition was materialised. A monthly product
+compares against last month's release, so this is the honest number.
+
+Same everything, plus `previousRelease=SnomedCT_AU_20260630.zip`:
+
+    12:00:39  submitted
+    12:01:26  structure testing starts        47 s of acquisition (two releases)
+    12:01:57  column pass done                31 s, 75 files, 45,311,214 lines
+    12:02:17  prospective materialised        66 tables, 45,298,828 rows
+    12:02:43  previous materialised           +26 s for the second edition
+    12:03:37  SQL failure detail -> parquet   1,045 KB; SQL done ~131 s in
+    12:06:28  Drools rule execution 60 s
+    12:06:29  Drools total 221 s, COMPLETE    350 s wall
+
+209 tests, 19 failures, 17 warnings, **2 incomplete** (was 54).
+
+| | 6.0.0, structural serial | perf engine, concurrent | + previous release |
+|---|---|---|---|
+| wall | 780 s | 263 s | **350 s** |
+| Drools total | 697 s | 196 s | 221 s |
+| Drools rule execution | 500 s | 70 s | 60 s |
+| assertions not executed | - | 54 | **2** |
+| failure detail | - | 76 KB | 1,045 KB |
+
+**Supplying the previous release costs 87 s and is not optional** - it takes
+release-type coverage from 38 of 87 to 86 of 87, and the failure detail from
+76 KB to 1 MB. A nightly without it is measuring almost nothing on the
+half of the corpus that exists to compare releases.
+
+**Do not compare failure counts across the two.** The same edition reports 59
+failures without a previous release and 19 with one. Forty of those 59 were
+artefacts of the absent comparison, not content.
+
+### Where the 350 s actually goes
+
+    acquisition (serial, before any phase)    47 s
+    SQL phase, incl. 52 s of materialisation  131 s   } concurrent
+    structural                                 31 s   } so the run costs
+    Drools                                    221 s   } the slowest: Drools
+
+**SQL is no longer the constraint and has not been for some time.** The MySQL
+engine took 8,760 s over ~200 assertions; the SQL phase here is 131 s over 189
+executed, including materialising 90.6M rows across two editions. Every second
+of the 780 -> 350 improvement came from the Drools engine pin and from taking
+structure testing off the critical path - the SQL work was already done and was
+always running concurrently with Drools inside the old 780 s.
+
+**What to attack next, in order:**
+
+1. **Drools loading, 161 s of its 221 s.** Rule execution is 60 s. The loading
+   is snomedboot reading the RF2 and deserialising axioms into the object graph.
+2. **Acquisition, 47 s**, which is serial before every phase and is mostly
+   copying two 853 MB zips into place.
+3. Not SQL, and not rules.
