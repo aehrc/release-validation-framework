@@ -690,3 +690,68 @@ judged - take `jcmd GC.class_histogram` and `GC.heap_info` against a live run
 before and after. The axiom change looked correct, passed its tests, produced
 identical findings, and still retained 173 MB for nothing. Only the histogram
 showed it.
+
+### MRCM measured, 2026-09-02: 21.5 minutes, and it got none of our work
+
+**MRCM alone, Drools off, one small SQL group: 1,292 s and 1,037 tests.** That
+is 8x the whole Drools phase (154 s) and five times the assertion count of
+everything else combined. On the decided scope MRCM does not just dominate the
+nightly, it *is* the nightly.
+
+    16:28:11  submitted
+    16:29:09  unzipping, snomedboot, single thread (pool-15-thread-3)
+    16:30:50  index built: 722,404 concepts   (pool-20-thread-2)
+    16:31:01  index built: 722,404 concepts   (pool-20-thread-1)   <- a SECOND one
+    16:49:43  COMPLETE                        21 minutes
+
+| phase | cost | share |
+|---|---|---|
+| unzip (twice: snapshot and delta) | ~60 s | 5% |
+| two full Lucene index builds | ~110 s | 9% |
+| **ECL validation queries, single thread** | **~1,122 s** | **87%** |
+
+**It benefits from almost nothing we built.** The artefact it ran on carries
+every change - `snomed.drools.version 6.1.3-aehrc-perf` - but MRCM's code path
+touches hardly any of it:
+
+| what we did | does MRCM get it? | why |
+|---|---|---|
+| engine pin, SI's #6-#11 | **no** | those are `snomed-drools-{engine,rf2-validator}` classes; MRCM uses `mrcm-validator` + `snomed-query-service` |
+| parallel archive unpack | **no** | wired into `DroolsRulesValidationService`; `MRCMValidationService:110,114` still call `new ReleaseImporter().unzipRelease(...)` |
+| skip the pre-pass (#14) | **no** | `DroolsRF2Validator` |
+| parallel axiom parsing (#15) | **no** | `SnomedDroolsComponentFactory`; MRCM has its own `OWLExpressionAndDescriptionFactory`, still serial |
+| phases running concurrently | **yes** | `ValidationRunner`, engine-agnostic |
+
+So every class of waste removed from Drools is still present in MRCM, plus one
+that is larger than all of them together.
+
+**The dominant lever: the query loop is serial.** Every ECL query runs on
+`pool-20-thread-1`, and `ValidationService` contains no `parallelStream`, no
+executor - two `forEach` calls. Each query is an independent domain/attribute
+check:
+
+    Selecting content within domain '373873005' with attribute '999000051000168108'
+      without group cardinality ECL:'<<373873005:[0..*] { [0..*] 999000051000168108=* }'
+
+Timestamps put them at 0.09-0.55 s each, thousands of them. They are
+independent by construction - one assertion object per domain/attribute pair -
+so this is the same shape as the axiom parsing: embarrassingly parallel work
+pinned to one core.
+
+**Levers, in order of size:**
+
+1. **Parallelise the ECL query loop** - ~1,122 s, 87% of the phase. In
+   `mrcm-validator`'s `ValidationService`. Needs the same care as the axioms:
+   check what the assertions write into before fanning out.
+2. **Wire `RF2ReleaseTypeUnpacker` into `MRCMValidationService`** - ours, two
+   lines, ~40 s. No excuse for this one; it was an oversight when the unpacker
+   went in.
+3. **The two index builds** - ~110 s. Both report 722,404 concepts, so this
+   looks like duplicated work rather than snapshot-versus-delta. Needs
+   confirming before assuming.
+4. **`DiskReleaseStore`** for memory, once the above are done.
+
+**And the memory figure confirms the earlier correction.** The two index builds
+logged "approx 10,136 MB" and "approx 1,872 MB" minutes apart for the same
+722,404 concepts. Same `Runtime.totalMemory()` call, different heap at each
+moment. Neither is an index size.
