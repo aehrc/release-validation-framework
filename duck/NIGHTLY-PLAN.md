@@ -637,3 +637,56 @@ was nothing to remove.
    heavily and is partly GC-bound. A pooled or reused parser inside
    `AxiomDeserialiser` might do better, but that is a snomed-owl-toolkit change
    and worth ~10 s.
+
+### MRCM memory, and a correction to a number I quoted all day, 2026-09-02
+
+**I was wrong about MRCM needing ~12 GB.** The log line I built that on is
+
+    MRCMValidatorReleaseImportManager : Finished creating index. Using approx 11,952 MB of memory.
+
+and the bytecode of `ReleaseImportManager` shows it is computed from
+**`Runtime.totalMemory()`** - the JVM's committed heap at that instant, which
+included the Drools object graph and everything else in the process. It is not
+the index's footprint. The second line in the same run said 1,896 MB: the same
+measure, earlier, when the heap was smaller. Two wildly different "index sizes"
+for the same 722,404 concepts should have made me check sooner.
+
+**Measured properly** - MRCM enabled, Drools off, one small SQL group, sampling
+the worker's heap directly:
+
+    t+100 s   6.89 GB     during index build
+    t+160 s   7.79 GB     peak
+    t+220 s   1.04 GB     after the build, while validating
+    t+9 min   2.75 GB     still validating
+
+So the shape is a **~7.8 GB transient peak while building the Lucene index**,
+settling to **1-2.8 GB retained**. Not a 12 GB resident index.
+
+**The conclusion about worker sizing survives, for a different reason.** MRCM
+peaks near 7.8 GB and Drools near 8.7 GB; two such peaks in one 12 GB heap is
+what killed those runs, not one giant index.
+
+**The lever that exists.** `ValidationService$MRCMValidatorReleaseImportManager`
+calls `loadReleaseFilesToMemoryBasedIndex`, which uses `RamReleaseStore` - a
+Lucene `Directory` held on the heap. `snomed-query-service` ships
+`DiskReleaseStore(File)` right beside it, taking a directory. With a
+disk-backed store the flushed segments live in the page cache instead of the
+heap, which helps **both** halves: the transient peak, because flushing
+actually releases heap, and the retained index.
+
+`ValidationService.loadMRCM(...)` exposes no choice of store, so this is a
+change to **mrcm-validator** - a third library to patch after snomed-drools.
+Small, though: a disk variant of one method plus a way to pass the directory.
+
+**MRCM, not Drools, may be the real long pole.** This run had not finished
+after nine minutes with Drools disabled, against Drools' 154 s. Its validation
+phase issues a Lucene query per domain/attribute pair
+(`ValidationService : Selecting content within domain ... with attribute ...`).
+That needs measuring before the decided scope is costed, and it changes the
+answer to "what should the nightly include".
+
+**How to judge any of these changes:** the same way the axiom batching was
+judged - take `jcmd GC.class_histogram` and `GC.heap_info` against a live run
+before and after. The axiom change looked correct, passed its tests, produced
+identical findings, and still retained 173 MB for nothing. Only the histogram
+showed it.
