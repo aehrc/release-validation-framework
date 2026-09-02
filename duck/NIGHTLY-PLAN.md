@@ -808,3 +808,46 @@ still 4.8x the next phase, and the remaining levers on it are:
 3. **`executeAttributeDomainValidation`** is still serial. It has a different
    shape (attribute-major, with its own domain grouping) and was left alone
    rather than guessed at.
+
+### MRCM memory: the disk index is not the lever, 2026-09-02
+
+`mrcm.validator.index.directory` now builds the Lucene index on disk instead of
+the heap. Default off. Measured on the AU edition:
+
+| | RAM index | disk index |
+|---|---|---|
+| MRCM phase | **735 s** | 776 s |
+| index off heap | - | 312 MB |
+| peak heap | 11.32 GB | 11.32 GB |
+| findings | 1037/3/4/2 | identical |
+
+**Only 312 MB leaves the heap, because the peak is not the index.**
+`loadReleaseFiledToStore` materialises the whole concept map and only then
+writes it:
+
+    final Map<Long, ? extends Concept> conceptMap = componentFactory.getComponentStore().getConcepts();
+    return writeToIndex(conceptMap, releaseStore, loadingProfile);
+
+The several GB are that map. A disk-backed index cannot touch it, and the
+queries then read through `NIOFSDirectory` rather than the heap, which is where
+the extra 41 s goes.
+
+Kept, default off: a worker starved of heap can trade 5% of the runtime for
+312 MB. Not the default, because on the evidence it costs time and buys little.
+
+**The real MRCM memory lever** is streaming concepts into the index instead of
+building the full map first - in `snomed-query-service`'s
+`ReleaseImportManager`, not in `mrcm-validator`. Not attempted.
+
+**One thing found on the way that was worth more than the feature:** nothing
+called `ReleaseStore.destroy()` anywhere. Harmless for a RAM store, but a disk
+index would have leaked its directory every run, per content form - the third
+instance today of the same leak class after the MySQL schemas and the unpacked
+release directories. Now destroyed in a `finally`; verified 312 MB during the
+run, 0 after.
+
+**And a measurement invalidated by my own setup:** the first disk-index run was
+taken by a *second* worker still listening on the same queue without the
+property set. It showed as an empty index directory and a 0.11 GB peak.
+Competing consumers make a per-worker configuration change unmeasurable, and
+nothing in the report says which worker ran it.
