@@ -153,12 +153,42 @@ public class ValidationRunner {
 		}
 	}
 
+	/**
+	 * Every phase runs concurrently, so a run costs the slowest phase rather than
+	 * the sum of them.
+	 *
+	 * <p>Structure testing used to run to completion before the rest started, and
+	 * that ordering was not protecting anything: {@link #runRF2StructureTests}
+	 * writes an interim FAILED report when the archive is malformed and then
+	 * <em>falls through</em> - it has never returned early or thrown, so the
+	 * assertions always ran against a failed archive anyway. Nothing downstream
+	 * reads its outcome; the final state is computed from
+	 * {@code failureMessages} once every phase has been merged.
+	 *
+	 * <p>It therefore gets the same treatment as the other phases: its own
+	 * {@link ValidationStatusReport}, merged at the end. That part is
+	 * <b>required</b>, not tidiness - it previously wrote its findings straight
+	 * into the shared report, which is the same object
+	 * {@code mergeValidationStatusReports} mutates as each other phase finishes.
+	 * Left shared, the merges and the structural writes would race on the same
+	 * assertion lists.
+	 *
+	 * <p>The phases contend, so the saving is less than the phase's isolated
+	 * cost: structural is CPU-bound over the same files Drools is reading. It
+	 * still comes off the critical path, which is what matters once Drools is
+	 * fast enough that structural is a visible fraction of the run.
+	 */
 	private void doRunValidations(ValidationRunConfig validationConfig, ValidationStatusReport statusReport) throws Exception {
-		runRF2StructureTests(validationConfig, statusReport);
-
 		Map<String, Future<ValidationStatusReport>> taskMap = new HashMap<>();
 		try (ExecutorService executorService = Executors.newFixedThreadPool(5)) {
 			StringBuilder statusMessages = new StringBuilder();
+
+			ValidationStatusReport structuralStatusReport = new ValidationStatusReport(validationConfig);
+			structuralStatusReport.setResultReport(new ValidationReport());
+			taskMap.put("Structure Tests", executorService.submit(() -> {
+				runRF2StructureTests(validationConfig, structuralStatusReport);
+				return structuralStatusReport;
+			}));
 
 			if (!CollectionUtils.isEmpty(validationConfig.getGroupsList())) {
 				statusMessages.append("RVF assertions validation started");
