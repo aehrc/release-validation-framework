@@ -755,3 +755,56 @@ pinned to one core.
 logged "approx 10,136 MB" and "approx 1,872 MB" minutes apart for the same
 722,404 concepts. Same `Runtime.totalMemory()` call, different heap at each
 moment. Neither is an index size.
+
+### MRCM parallelised, 2026-09-02: 1,292 s -> 735 s
+
+| | baseline | parallel |
+|---|---|---|
+| MRCM phase | 1,292 s | **735 s** |
+| tests / failures / warnings / incomplete | 1037 / 3 / 4 / 2 | identical |
+| assertions differing in bucket or count | - | **0** |
+
+Two changes in RVF, one in `mrcm-validator`:
+
+* `MRCMValidationService` uses `RF2ReleaseTypeUnpacker` instead of snomedboot's
+  single-threaded `unzipRelease` - the same oversight Drools had, because the
+  unpacker was only wired into one caller when it went in.
+* `ValidationService`'s domain/attribute loops now run across all cores, and
+  `ValidationRun`'s assertion lists are synchronized because they were plain
+  `ArrayList`s appended from those loops.
+
+**The attribute-range pass is planned serially and only then executed in
+parallel**, and that split matters: its dedupe key omits the domain, so a range
+shared by two domains is validated once and the *winning* domain's constraint
+feeds the out-of-range ECL. Parallelising the domain walk would change which
+domain wins, and so the query, and so the findings.
+
+**A wrong turn worth keeping.** Parallelising the two cardinality loops first
+bought 4% - 1,292 s to 1,242 s - because those loops run in the last two minutes
+of the phase. The log's thread names proved the work really had spread over
+eight threads; it was simply the wrong loop. The attribute-range pass was the
+87%.
+
+### Where the nightly stands now
+
+    SQL assertions        131 s   } concurrent
+    structural             31 s   }
+    Drools                154 s   }
+    MRCM                  735 s   }  <- still the long pole
+    acquisition            42 s   serial, before all of them
+
+**Decided scope end to end: ~780 s, from an unoptimised ~2,000 s+.** MRCM is
+still 4.8x the next phase, and the remaining levers on it are:
+
+1. **The Lucene index on the heap.** `loadReleaseFilesToMemoryBasedIndex` uses
+   `RamReleaseStore`; `snomed-query-service` ships `DiskReleaseStore(File)`
+   beside it but `ValidationService` exposes no choice. Peak during the build is
+   ~7.8 GB, settling to 1-2.8 GB. A disk-backed store puts it in the page cache
+   and lets flushes actually release heap - the memory lever, and it may help
+   the build time too.
+2. **Two index builds**, one per content form (INFERRED and STATED), of the same
+   722,404 concepts. They already run concurrently, but if the index content is
+   form-independent they could share one - worth confirming before assuming.
+3. **`executeAttributeDomainValidation`** is still serial. It has a different
+   shape (attribute-major, with its own domain grouping) and was left alone
+   rather than guessed at.
