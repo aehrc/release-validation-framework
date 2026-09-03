@@ -35,76 +35,76 @@ a second concurrent consumer exists.
 
 ## 2. The image
 
-Already in ACR, pushed 2026-09-03 from `catchup-upgraded@6393b937dcca`:
+Built and pushed **by CI**, ADO definition **65 `rvf-duckdb-server-image`**,
+build 16157:
 
     ontoserver.azurecr.io/aehrc-rvf/release-validation-framework:9.0.1-duckdb
-    ontoserver.azurecr.io/aehrc-rvf/release-validation-framework:9.0.1-duckdb.6393b937dcca
+    ontoserver.azurecr.io/aehrc-rvf/release-validation-framework:9.0.1-duckdb.f405b6f2036e
 
-    digest  sha256:e866fa2cad9f81762763c7fdba98f96e52e6f2fbf791aff8e697bf76a078e894
+    digest  sha256:3a9a4a04e2b99e9db5ba49cae0623e6f69a0f96650b72dadb0b9e3f1ae3fef75
 
-Both tags are that one digest. **The manifests already reference
-`:9.0.1-duckdb`, so nothing needs editing** - though pinning the
-`.6393b937dcca` tag makes the deployed image immutable, which is the better
-choice for anything long-lived.
+`9.0.1-duckdb` is the moving tag within this version and is what the manifests
+reference, so **nothing needs editing**. The `.f405b6f2036e` tag is the same
+image pinned to the commit it was built from - use that if you want the deployed
+image immutable, which for anything long-lived is the better choice.
+
+An earlier tag `9.0.1-duckdb.6393b937dcca` exists from a manual push and is
+superseded. Ignore it.
 
 Nothing else in that repository was disturbed. It already held nine tags
 (`production-20260818`, `known-good-*`, `drools-*`, `latest`). `latest` still
-points at its 2023-05-03 image and was deliberately left alone: the repository
-is shared with other RVF builds, so `latest` there does not mean "the DuckDB
-engine". The registry has no webhooks - checked before pushing - so the push
-could not have redeployed anything.
-
-**What is inside:** the jar, the Drools rules at `/app/snomed-drools-rules`, the
-assertion corpus at `/app/snomed-release-validation-assertions`, and the
-precompiled assertion store at `/app/resources/duck/store.json`. Nothing needs
-provisioning afterwards — on the first run the log says
-`Assertion store bundled /duck/store.json verified against 360 corpus files`.
-
----
+points at its 2023-05-03 image and is deliberately left alone: the repository is
+shared with other RVF builds, so `latest` there does not mean "the DuckDB
+engine". The registry has no webhooks, so a push cannot redeploy anything.
 
 ### Rebuilding it
 
-**That first push was by hand, and that is the last one that should be.** The
-image must be rebuildable from a committed tree by CI, or the thing running in
-production is whatever happened to be on somebody's machine that afternoon.
+Run definition 65. It resolves the version from the pom, builds the three pinned
+forks from their upstream commits plus the patches in `duck/`, packages, and
+pushes tagged by version and commit. `trigger: none` is deliberate - an image
+push is not something a pull request should do.
 
-`az/azure-pipeline.image.yml` does it: it resolves the version from the pom,
-builds the three pinned forks, runs the test suite, and pushes tagged by both
-version and commit. It needs a pipeline definition creating against this repo
-and branch. `trigger: none` is deliberate - an image push is not something a
-pull request should do - so it is run manually or from a release process.
+It runs on a **hosted** agent, not `ncts-k8s-dedicated-pool`: build 16149 failed
+there with `Cannot access ihtsdo-releases (nexus3.ihtsdotools.org)`. That agent
+reaches Maven Central but not SI's Nexus. The image job needs internet and ACR,
+not the cluster, and every other Maven pipeline in this project already uses the
+hosted queue.
 
-**Definition 65 `rvf-duckdb-server-image`** is created and authorised for the
-ACR connection, the variable group and the pool. Getting it to build from a
-clean agent took fixing two things, both of which had been masked by `mvn -o`
-(offline) in the fork build scripts - they only ever resolved from a warm local
-repository, i.e. only on the machine that had already built them:
+Getting a clean agent to build took fixing four things, all of which had been
+invisible because the fork scripts passed `mvn -o` (offline) and so only ever
+resolved from a warm local repository:
 
 1. **`org.snomed:snomed-parent-bom` is not on Maven Central** - every version
    404s - and this project and all three forks inherit from it. A POM's own
-   `<repositories>` cannot resolve that POM's *parent*, because Maven reads the
-   parent first, when it knows only `settings.xml`. Hence
-   `duck/maven-settings.xml`, which declares SI's Nexus.
+   `<repositories>` cannot resolve that POM's *parent*: Maven reads the parent
+   first, when it knows only `settings.xml`. Hence `duck/maven-settings.xml`.
 2. **`snomed-parent-bom` binds OWASP dependency-check into the lifecycle.** With
-   no cached NVD data and no API key it downloads the whole CVE database -
-   385,855 records at the unauthenticated rate limit, which is hours. That is
-   what presented as a hang: three diagnostic runs sat at 40 minutes with no
-   output before I looked inside the JVM and found it 3% through the NVD feed.
-   Now skipped explicitly; a vulnerability scan should be a deliberate job, not
-   a side effect of building a patched library.
+   no cached NVD data and no API key it downloads the entire CVE database -
+   385,855 records at the unauthenticated rate limit. That presented as a hang:
+   three diagnostic runs sat at 40 minutes with no output before I attached to
+   the JVM and found it 3% through the NVD feed. Now skipped explicitly.
+3. **`build-query-service.sh` looked for its built jar in a hardcoded
+   `$HOME/.m2` and `/data/m2`**, which on an agent is not the repository it had
+   just installed into, so a successful install reported "did not install".
+4. **`MAVEN_OPTS` as a pipeline variable did not reach the RVF build**, so the
+   forks landed in `$(Pipeline.Workspace)/.m2` while RVF resolved against the
+   agent's default `~/.m2` and reported all four artefacts missing. Every `mvn`
+   call now passes `-Dmaven.repo.local` explicitly.
 
-**Verified: 386 seconds from a completely empty Maven repository.** So the image
-is now rebuildable from a committed tree, which is the point - the patches, the
-upstream commit each script checks out, and `checkout-resources.sh` pinned to
-explicit corpus and rules commits.
+Verified independently of CI: **318 seconds from a completely empty Maven
+repository in a non-default location**, which is what an agent does.
 
-Build 16149 on `ncts-k8s-dedicated-pool` had also failed on Nexus egress, which
-is why the job runs on a hosted agent: it needs internet and ACR, not the
-cluster, and every other Maven pipeline in this project already uses the hosted
-queue.
+So the image is now genuinely rebuildable from a committed tree - the patches,
+the upstream commit each script checks out, and `checkout-resources.sh` pinned
+to explicit corpus and rules commits.
 
-`duck/push-image.sh` remains for break-glass use and documents the
-subscription, the token dance and the tagging rules, but prefer the pipeline.
+**One thing left open:** the job runs with `runTests: false`. The suite has 14
+errors on any machine without Docker (testcontainers), which would fail `verify`.
+Either the agent needs Docker or those tests need excluding before the gate can
+include them.
+
+`duck/push-image.sh` remains for break-glass use and documents the subscription,
+the token dance and the tagging rules, but CI is the route.
 
 ## 3. What `rvf-aks.yaml` is, object by object
 
