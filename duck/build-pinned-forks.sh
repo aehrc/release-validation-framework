@@ -58,8 +58,20 @@ echo "      snomed-query-service $SQS_VERSION"
 echo "==> build scratch: $BUILD_DIR"
 echo
 
-export MAVEN_REPO_LOCAL="${MAVEN_REPO_LOCAL:-$HOME/.m2/repository}"
-export MAVEN_OPTS="${MAVEN_OPTS:--Dmaven.repo.local=$MAVEN_REPO_LOCAL}"
+# MAVEN_REPO_LOCAL and MAVEN_OPTS must agree, or this builds into one repository
+# and verifies against another - which reports all three forks missing after
+# installing all three of them. If the caller already pinned the repository in
+# MAVEN_OPTS, adopt that; otherwise MAVEN_REPO_LOCAL wins and is forced into
+# MAVEN_OPTS.
+if [ -z "${MAVEN_REPO_LOCAL:-}" ]; then
+  from_opts="$(printf '%s' "${MAVEN_OPTS:-}" \
+                 | grep -oE '\-Dmaven\.repo\.local=[^ ]+' | tail -1 | cut -d= -f2- || true)"
+  MAVEN_REPO_LOCAL="${from_opts:-$HOME/.m2/repository}"
+fi
+export MAVEN_REPO_LOCAL
+MAVEN_OPTS="$(printf '%s' "${MAVEN_OPTS:-}" | sed -E 's/-Dmaven\.repo\.local=[^ ]+//g')"
+export MAVEN_OPTS="${MAVEN_OPTS} -Dmaven.repo.local=$MAVEN_REPO_LOCAL"
+echo "==> maven repository: $MAVEN_REPO_LOCAL"
 
 DROOLS_BUILD_DIR="$BUILD_DIR/snomed-drools"   \
   bash "$SCRIPT_DIR/build-drools-engine.sh" "$DROOLS_VERSION"

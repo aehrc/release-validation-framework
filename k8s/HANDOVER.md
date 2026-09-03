@@ -118,6 +118,30 @@ provisioning afterwards — on the first run the log says
 
 ---
 
+## 2. DONE — the image is in ACR
+
+Pushed 2026-09-03 from `catchup-upgraded@6393b937dcca`:
+
+    ontoserver.azurecr.io/aehrc-rvf/release-validation-framework:9.0.1-duckdb
+    ontoserver.azurecr.io/aehrc-rvf/release-validation-framework:9.0.1-duckdb.6393b937dcca
+
+    digest  sha256:e866fa2cad9f81762763c7fdba98f96e52e6f2fbf791aff8e697bf76a078e894
+
+Both tags point at that one digest. `k8s/rvf-aks.yaml` and
+`k8s/rvf-scaledjob.yaml` already reference `:9.0.1-duckdb`, so **the manifests
+need no editing** — but pin the `.6393b937dcca` tag instead if you want the
+deployed image immutable.
+
+**Nothing else in that repository was disturbed.** It already held nine tags
+(`production-20260818`, `known-good-*`, `drools-*`, `latest` and others).
+`latest` still points at its 2023-05-03 image and was deliberately left alone:
+this repository is shared, and `latest` here does not mean "the DuckDB engine".
+The registry has **no webhooks**, checked before pushing, so the push could not
+trigger a redeploy of anything.
+
+Re-push a newer commit with `./duck/push-image.sh`. It refuses to overwrite the
+immutable tag for a commit already pushed.
+
 ## 2a. Building it on a different machine first
 
 **A fresh checkout cannot build.** The pom pins three libraries to

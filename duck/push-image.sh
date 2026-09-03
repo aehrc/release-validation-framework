@@ -147,7 +147,17 @@ TOKEN="$(az acr login --name "$REGISTRY_NAME" --expose-token \
 [ -n "$TOKEN" ] || { echo "FATAL: no token returned" >&2; exit 1; }
 
 echo "==> building the three pinned forks if they are missing"
-"$SCRIPT_DIR/build-pinned-forks.sh" >/dev/null
+# Logged rather than discarded: this step failing is the most likely reason the
+# push never happens, and >/dev/null once hid a repository mismatch that looked
+# like nothing at all.
+FORK_LOG="$(mktemp "${TMPDIR:-/tmp}/rvf-forks.XXXXXX.log")"
+if ! "$SCRIPT_DIR/build-pinned-forks.sh" >"$FORK_LOG" 2>&1; then
+  echo "FATAL: the pinned forks did not build. Last 25 lines:" >&2
+  tail -25 "$FORK_LOG" >&2
+  echo "(full log: $FORK_LOG)" >&2
+  exit 1
+fi
+rm -f "$FORK_LOG"
 
 echo "==> pushing"
 # The null GUID is ACR's documented username for a token credential.
