@@ -20,7 +20,21 @@
 #
 #     ./duck/build-pinned-forks.sh
 #
-# Needs: JDK 25, maven, git, network to github.com and Maven Central.
+# KNOWN LIMITATION, 2026-09-03. This does NOT reliably work on a machine that
+# has not built it before. The forks inherit from `org.snomed:snomed-parent-bom`,
+# which is not on Maven Central (404) and comes only from
+# nexus3.ihtsdotools.org. Fetching that POM by hand takes 1.4s, but a full
+# resolution against an EMPTY local repository hangs - 40 minutes with no
+# output, then an HTTP reactor error. These scripts previously passed `-o`
+# (offline), which hid this completely: they only ever worked against a warm
+# local repository, i.e. only on the machine that had already built them.
+#
+# So read this as "rebuild the forks where they have been built before".
+# Making the image reproducible anywhere needs the three artefacts published to
+# a feed instead - see k8s/HANDOVER.md.
+#
+# Needs: JDK 25, maven, git, network to github.com, Maven Central and
+# nexus3.ihtsdotools.org.
 # Honours MAVEN_REPO_LOCAL (default: maven's own ~/.m2/repository) and
 # FORKS_BUILD_DIR (default: a temporary directory).
 

@@ -74,19 +74,38 @@ version and commit. It needs a pipeline definition creating against this repo
 and branch. `trigger: none` is deliberate - an image push is not something a
 pull request should do - so it is run manually or from a release process.
 
-Everything it needs is committed: the patches in `duck/`, the build scripts, and
-`checkout-resources.sh` pinned to explicit corpus and rules commits so two
-builds of one tree produce the same image.
+**It does not work yet, and the reason matters.** Definition 65
+`rvf-duckdb-server-image` exists, is authorised for the ACR connection, the
+variable group and the pool, and has been run twice:
 
-Two other places build an image and neither publishes THIS one, which is worth
-knowing before assuming CI already covers it:
+* On `ncts-k8s-dedicated-pool` (build 16149):
+  `Cannot access ihtsdo-releases (https://nexus3.ihtsdotools.org/...)`. That
+  agent reaches Maven Central - it fetched plexus artifacts in the same step -
+  but not SI's Nexus.
+* On a hosted agent (build 16150): `artifacts could not be resolved`.
 
-* `azure-pipeline.engine-ab.yml` runs `jib:buildTar` and attaches the tarball as
-  a pipeline artifact. Deliberate: it is a PR gate, and a gate that pushes to a
-  shared registry on every pull request is how `latest` gets broken.
-* ADO definition **63 `rvf-duck-image` does push** - but it builds the **Python**
-  DuckDB engine from `aehrc/rvf@rvf-duck`, a different codebase, and it pushes
-  `aehrc-rvf/rvf-duck`.
+Same root cause both times. `org.snomed:snomed-parent-bom` is **not on Maven
+Central** - every version 404s - and this project and all three forked libraries
+inherit from it. Fetching that POM from nexus3 by hand takes **1.4 seconds**,
+but a full Maven resolution against an **empty** local repository hangs: 40
+minutes with no output, then an HTTP reactor error.
+
+The build scripts previously passed `-o` (offline), which hid this entirely -
+they only ever worked on a machine with a warm local repository, which is to say
+only on the machine that had already built them. Removed, so the failure is
+visible rather than latent.
+
+**What that means for a committed, rebuildable image.** The *source* is
+committed and pinned: the patches in `duck/`, the upstream commit each script
+checks out, and `checkout-resources.sh` on explicit corpus and rules commits.
+What is not reproducible is resolving SI's parent POMs from scratch. The fix is
+to stop rebuilding the forks in CI and publish the three artefacts to the
+org-scoped Azure Artifacts feed (`OD225632-NCTS-ContentAndTooling`, which
+already exists), then resolve them as ordinary versioned dependencies - which
+also removes a 40-minute fork build from every image build.
+
+**The image already in ACR is unaffected.** It was built from this tree and its
+provenance is the commit in its tag.
 
 `duck/push-image.sh` remains for break-glass use and documents the
 subscription, the token dance and the tagging rules, but prefer the pipeline.
