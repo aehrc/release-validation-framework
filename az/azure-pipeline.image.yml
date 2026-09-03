@@ -49,6 +49,10 @@ parameters:
 
 variables:
   - group: ncts-release
+  # Kept for anything that reads MAVEN_OPTS, but every mvn call below ALSO
+  # passes -Dmaven.repo.local explicitly. Relying on this variable alone put the
+  # three forks in $(Pipeline.Workspace)/.m2 while the RVF build resolved against
+  # the agent's default ~/.m2 and reported all four artefacts missing.
   - name: MAVEN_OPTS
     value: '-Dmaven.repo.local=$(Pipeline.Workspace)/.m2'
   # `ontoserver` is the dockerregistry service connection for
@@ -159,7 +163,7 @@ stages:
                 # builds an S3 client in @PostConstruct and the SDK refuses one
                 # without a region.
                 export AWS_REGION=us-east-1 AWS_DEFAULT_REGION=us-east-1
-                mvn -B -ntp -s "$(Build.SourcesDirectory)/duck/maven-settings.xml" -Ddependency-check.skip=true verify
+                mvn -B -ntp -s "$(Build.SourcesDirectory)/duck/maven-settings.xml" -Dmaven.repo.local=$(Pipeline.Workspace)/.m2 -Ddependency-check.skip=true verify
 
           - task: Bash@3
             displayName: 'Package'
@@ -168,7 +172,7 @@ stages:
               targetType: 'inline'
               script: |
                 set -euo pipefail
-                mvn -B -ntp -s "$(Build.SourcesDirectory)/duck/maven-settings.xml" -Ddependency-check.skip=true package -DskipTests
+                mvn -B -ntp -s "$(Build.SourcesDirectory)/duck/maven-settings.xml" -Dmaven.repo.local=$(Pipeline.Workspace)/.m2 -Ddependency-check.skip=true package -DskipTests
 
           - task: Docker@2
             displayName: 'Log in to ACR'
@@ -209,7 +213,7 @@ stages:
                 #
                 # jib pushes registry layers itself and reads the credentials
                 # Docker@2 just wrote, so no daemon is involved.
-                mvn -B -ntp -s "$(Build.SourcesDirectory)/duck/maven-settings.xml" -Ddependency-check.skip=true jib:build -DskipTests \
+                mvn -B -ntp -s "$(Build.SourcesDirectory)/duck/maven-settings.xml" -Dmaven.repo.local=$(Pipeline.Workspace)/.m2 -Ddependency-check.skip=true jib:build -DskipTests \
                     -Djib.from.platforms=linux/amd64 \
                     -Djib.to.image="$IMAGE:$PRIMARY" \
                     -Djib.to.tags="$TAGS"
