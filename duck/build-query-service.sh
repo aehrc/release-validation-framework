@@ -74,22 +74,30 @@ pom.write_text(patched)
 print(f'==> version set to {version}')
 PY
 
-# No machine-specific default: an unset MAVEN_OPTS means maven's own
-# ~/.m2/repository, which is right everywhere.
-export MAVEN_OPTS="${MAVEN_OPTS:-}"
-# NOT offline - see build-drools-engine.sh.
+# The repository this installs into, and the one the jar is then looked for in,
+# must be the SAME one. They were not: the lookup searched a hardcoded
+# $HOME/.m2 and /data/m2, so on any machine using a different local repository -
+# a CI agent at /home/vsts/work/1/.m2, for one - the install succeeded and the
+# gate below reported "did not install".
+REPO="${MAVEN_REPO_LOCAL:-$HOME/.m2/repository}"
+export MAVEN_OPTS="${MAVEN_OPTS:-} -Dmaven.repo.local=$REPO"
 
+# NOT offline - see build-drools-engine.sh.
+#
 # -Ddependency-check.skip=true because snomed-parent-bom binds OWASP
 # dependency-check into the lifecycle. With no cached NVD data and no API key it
 # downloads the whole CVE database - 385,855 records at NVD's unauthenticated
 # rate limit, which is hours - and that, not Maven resolution, is what made a
 # clean-machine build look like it hung. A vulnerability scan is a thing to run
 # deliberately, not a side effect of building a patched library.
-mvn -q -s "$MAVEN_SETTINGS" -Dmaven.legacyLocalRepo=true -Ddependency-check.skip=true install
+#
+# -DskipTests: the library's own suite is run by build-pinned-forks.sh callers
+# and by its own CI. Building an artefact here should not depend on it.
+mvn -q -s "$MAVEN_SETTINGS" -Dmaven.legacyLocalRepo=true -Ddependency-check.skip=true -DskipTests install
 
-JAR="$(find "$HOME/.m2" /data/m2 -path "*snomed-query-service/$VERSION/snomed-query-service-$VERSION.jar" 2>/dev/null | head -1)"
-if [ -z "$JAR" ]; then
-  echo "FATAL: $VERSION did not install" >&2
+JAR="$REPO/org/ihtsdo/otf/snomed-query-service/$VERSION/snomed-query-service-$VERSION.jar"
+if [ ! -f "$JAR" ]; then
+  echo "FATAL: $VERSION did not install into $REPO" >&2
   exit 1
 fi
 
