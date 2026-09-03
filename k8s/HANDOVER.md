@@ -42,10 +42,47 @@ access from where it was written. Everything checkable without one has been
 checked, and where something is unverified it says so rather than implying
 otherwise.
 
+## 0a. Which cluster, and why
+
+There is no cluster called `ncts-dev-k8s`. The estate is:
+
+| cluster | resource group | 8-core pools | Argo repo |
+|---|---|---|---|
+| **`ncts-k8s-cluster`** | `ncts` | `large` (D8a_v4), `largespot`, `largespotv5` | **`aehrc/ncts-argo`** |
+| `prod-ncts-k8s-cluster` | `ncts-prod` | `larv59b7e` (D8as_v5) x **1** | `aehrc/ncts-argocd-prod` |
+| `ontoserver-dev-k8s`, `dev-terminology-k8s-cluster`, `ontoserver-prod-aks` | — | — | different product |
+
+`ncts-argo`'s README calls `ncts-k8s-cluster` "the NCTS **development** AKS
+cluster", and it manages only `clusters/ncts-cluster`.
+
+**Target `ncts-k8s-cluster` first.** Three reasons, not one:
+
+* `daily-rvf` already runs its ephemeral RVF job there, in the `rvf-tests`
+  namespace. Replacing that pipeline means running the replacement beside it, on
+  the same cluster, which is the entire point of the parallel period.
+* Every fact in §0b was read from it. Nothing here has been verified against
+  prod - not KEDA, not cert-manager, not the storage classes, not the ingress
+  arrangement. Do not assume §0b transfers.
+* It is the natural first step of the promotion path this shop already uses:
+  Kargo promotes Snomio dev -> uat, and Argo has separate repos per cluster.
+
+**The SI-facing, internet-exposed deployment is a SECOND decision, and probably
+prod.** Exposing a service for SI to run releases against is not a development
+concern, and it would move to `prod-ncts-k8s-cluster` via `ncts-argocd-prod`.
+Worth knowing before that day:
+
+**Worker concurrency is capped by hardware, not by KEDA.** The worker needs
+8 CPU and a 16Gi limit, so it only fits a 32GB 8-core node. Dev has **one**
+non-spot `large` node; prod has **one** `larv59b7e` (D8as_v5). So
+`maxReplicaCount: 6` in the ScaledObject is aspirational - in practice you get
+one worker, maybe two, until a pool scales out. That is fine for one nightly and
+is worth saying out loud before anyone reads 6 as capacity.
+
 ## 0b. What the live cluster already told us
 
-Read read-only from `ncts-k8s-cluster` (subscription
-`9a9e2788-…`, resource group `ncts`) on 2026-09-03. This closed four of §8's
+Read read-only from **`ncts-k8s-cluster`** - the dev cluster, see §0a -
+(subscription `9a9e2788-…`, resource group `ncts`) on 2026-09-03. **None of it
+has been checked against `prod-ncts-k8s-cluster`.** This closed four of §8's
 questions and found four errors in these manifests before anyone applied them.
 
 **Already there, nothing to install:**
