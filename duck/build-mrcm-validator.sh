@@ -43,6 +43,11 @@
 
 set -euo pipefail
 
+# SI's parent POMs are not on Maven Central and a POM's own <repositories>
+# cannot resolve that POM's parent, so the repositories must come from
+# settings.xml or an empty local repository cannot build this at all.
+MAVEN_SETTINGS="${MAVEN_SETTINGS:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/maven-settings.xml}"
+
 # Resolved before any cd: this script changes directory into the clone.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -92,7 +97,14 @@ PY
 # NOT offline - see build-drools-engine.sh. legacyLocalRepo stays because
 # it also relaxes the _remote.repositories check on artifacts that a
 # previous run installed locally.
-mvn -Dmaven.legacyLocalRepo=true -q install -DskipTests -Dmaven.repo.local="$REPO"
+
+# -Ddependency-check.skip=true because snomed-parent-bom binds OWASP
+# dependency-check into the lifecycle. With no cached NVD data and no API key it
+# downloads the whole CVE database - 385,855 records at NVD's unauthenticated
+# rate limit, which is hours - and that, not Maven resolution, is what made a
+# clean-machine build look like it hung. A vulnerability scan is a thing to run
+# deliberately, not a side effect of building a patched library.
+mvn -q -s "$MAVEN_SETTINGS" -Dmaven.legacyLocalRepo=true -Ddependency-check.skip=true install -DskipTests -Dmaven.repo.local="$REPO"
 
 JAR="$REPO/org/snomed/quality/mrcm-validator/$VERSION/mrcm-validator-$VERSION.jar"
 [ -f "$JAR" ] || { echo "FATAL: $JAR not produced" >&2; exit 1; }

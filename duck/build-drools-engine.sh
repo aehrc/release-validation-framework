@@ -37,6 +37,11 @@
 
 set -euo pipefail
 
+# SI's parent POMs are not on Maven Central and a POM's own <repositories>
+# cannot resolve that POM's parent, so the repositories must come from
+# settings.xml or an empty local repository cannot build this at all.
+MAVEN_SETTINGS="${MAVEN_SETTINGS:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/maven-settings.xml}"
+
 # Resolved BEFORE any cd: the script changes directory into the clone, so a
 # path relative to $0 would not survive. Silently building without the patch is
 # the failure this avoids - it produced an artefact that looked right.
@@ -134,7 +139,14 @@ fetch org/codehaus/plexus/plexus/3.1/plexus-3.1.pom
 # friends) are not on Maven Central and are not in a fresh local
 # repository, so -o makes this script work only on a machine that has
 # already built it once - which is not a reproducible build.
-mvn -q install -DskipTests -Dmaven.repo.local="$REPO"
+
+# -Ddependency-check.skip=true because snomed-parent-bom binds OWASP
+# dependency-check into the lifecycle. With no cached NVD data and no API key it
+# downloads the whole CVE database - 385,855 records at NVD's unauthenticated
+# rate limit, which is hours - and that, not Maven resolution, is what made a
+# clean-machine build look like it hung. A vulnerability scan is a thing to run
+# deliberately, not a side effect of building a patched library.
+mvn -q -s "$MAVEN_SETTINGS" -Ddependency-check.skip=true install -DskipTests -Dmaven.repo.local="$REPO"
 
 JAR="$REPO/org/ihtsdo/drools/snomed-drools-engine/$VERSION/snomed-drools-engine-$VERSION.jar"
 [ -f "$JAR" ] || { echo "FATAL: $JAR not produced" >&2; exit 1; }

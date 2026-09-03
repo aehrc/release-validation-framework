@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Maven settings that let this project and its three forked libraries build on a
+  machine with an EMPTY local repository.
+
+  THE PROBLEM THIS SOLVES
+
+  `org.snomed:snomed-parent-bom` is not on Maven Central - every version 404s -
+  and it is the parent of this project and of all three forks. The forks do
+  declare SI's Nexus in their own `<repositories>`, but that does not help:
+
+      a POM's <repositories> cannot be used to resolve that POM's own parent.
+
+  Maven has to read the parent before it can read the child's repository list,
+  so at parent-resolution time it knows only the repositories from settings.xml
+  plus Central. On a warm local repository the parent is already there and
+  everything appears fine; on an empty one it fails with
+  "Non-resolvable parent POM" or "artifacts could not be resolved" - which is
+  exactly what ADO builds 16149 and 16150 hit, and what `mvn -o` in the build
+  scripts had been hiding.
+
+  Declaring the same repositories HERE fixes it, because settings.xml is read
+  first.
+
+  USAGE
+
+      mvn -s duck/maven-settings.xml ...
+
+  The build scripts and az/azure-pipeline.image.yml pass it automatically.
+
+  NOTE ON MIRRORS: deliberately no <mirrors> entry. Mirroring everything at
+  Central makes SI artefacts unresolvable, and mirroring at Nexus routes every
+  third-party download through a host we do not control.
+-->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0
+                              https://maven.apache.org/xsd/settings-1.0.0.xsd">
+
+  <profiles>
+    <profile>
+      <id>ihtsdo</id>
+      <repositories>
+        <repository>
+          <id>ihtsdo-releases</id>
+          <name>IHTSDO releases</name>
+          <url>https://nexus3.ihtsdotools.org/repository/maven-releases/</url>
+          <releases><enabled>true</enabled></releases>
+          <snapshots><enabled>false</enabled></snapshots>
+        </repository>
+        <repository>
+          <id>ihtsdo-snapshots</id>
+          <name>IHTSDO snapshots</name>
+          <url>https://nexus3.ihtsdotools.org/repository/maven-snapshots/</url>
+          <releases><enabled>false</enabled></releases>
+          <snapshots><enabled>true</enabled></snapshots>
+        </repository>
+        <!-- Central stays explicit: adding repositories to a profile does not
+             remove Central, but naming it makes the resolution order obvious. -->
+        <repository>
+          <id>central</id>
+          <url>https://repo1.maven.org/maven2</url>
+          <releases><enabled>true</enabled></releases>
+          <snapshots><enabled>false</enabled></snapshots>
+        </repository>
+      </repositories>
+      <pluginRepositories>
+        <pluginRepository>
+          <id>ihtsdo-releases-plugins</id>
+          <url>https://nexus3.ihtsdotools.org/repository/maven-releases/</url>
+          <releases><enabled>true</enabled></releases>
+          <snapshots><enabled>false</enabled></snapshots>
+        </pluginRepository>
+        <pluginRepository>
+          <id>central-plugins</id>
+          <url>https://repo1.maven.org/maven2</url>
+          <releases><enabled>true</enabled></releases>
+          <snapshots><enabled>false</enabled></snapshots>
+        </pluginRepository>
+      </pluginRepositories>
+    </profile>
+  </profiles>
+
+  <activeProfiles>
+    <activeProfile>ihtsdo</activeProfile>
+  </activeProfiles>
+
+</settings>

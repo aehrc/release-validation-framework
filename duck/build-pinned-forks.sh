@@ -20,18 +20,19 @@
 #
 #     ./duck/build-pinned-forks.sh
 #
-# KNOWN LIMITATION, 2026-09-03. This does NOT reliably work on a machine that
-# has not built it before. The forks inherit from `org.snomed:snomed-parent-bom`,
-# which is not on Maven Central (404) and comes only from
-# nexus3.ihtsdotools.org. Fetching that POM by hand takes 1.4s, but a full
-# resolution against an EMPTY local repository hangs - 40 minutes with no
-# output, then an HTTP reactor error. These scripts previously passed `-o`
-# (offline), which hid this completely: they only ever worked against a warm
-# local repository, i.e. only on the machine that had already built them.
+# Two things had to be fixed before this worked on a machine that had never
+# built it, and both were masked by `mvn -o` (offline), which made the scripts
+# appear to work while only ever resolving from a warm local repository:
 #
-# So read this as "rebuild the forks where they have been built before".
-# Making the image reproducible anywhere needs the three artefacts published to
-# a feed instead - see k8s/HANDOVER.md.
+#   1. `org.snomed:snomed-parent-bom` is not on Maven Central (404) and a POM's
+#      own <repositories> cannot resolve that POM's PARENT - Maven reads the
+#      parent first, when it knows only settings.xml. Hence duck/maven-settings.xml.
+#   2. snomed-parent-bom binds OWASP dependency-check into the lifecycle, which
+#      with no cached NVD data and no API key downloads 385,855 CVE records at
+#      the unauthenticated rate limit. That is what looked like a hang: three
+#      diagnostic runs sat at 40 minutes with no output. Skipped explicitly.
+#
+# Verified 2026-09-03: 386 seconds against a completely empty local repository.
 #
 # Needs: JDK 25, maven, git, network to github.com, Maven Central and
 # nexus3.ihtsdotools.org.
@@ -83,6 +84,7 @@ if [ -z "${MAVEN_REPO_LOCAL:-}" ]; then
   MAVEN_REPO_LOCAL="${from_opts:-$HOME/.m2/repository}"
 fi
 export MAVEN_REPO_LOCAL
+export MAVEN_SETTINGS="${MAVEN_SETTINGS:-$SCRIPT_DIR/maven-settings.xml}"
 MAVEN_OPTS="$(printf '%s' "${MAVEN_OPTS:-}" | sed -E 's/-Dmaven\.repo\.local=[^ ]+//g')"
 export MAVEN_OPTS="${MAVEN_OPTS} -Dmaven.repo.local=$MAVEN_REPO_LOCAL"
 echo "==> maven repository: $MAVEN_REPO_LOCAL"

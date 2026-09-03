@@ -74,38 +74,34 @@ version and commit. It needs a pipeline definition creating against this repo
 and branch. `trigger: none` is deliberate - an image push is not something a
 pull request should do - so it is run manually or from a release process.
 
-**It does not work yet, and the reason matters.** Definition 65
-`rvf-duckdb-server-image` exists, is authorised for the ACR connection, the
-variable group and the pool, and has been run twice:
+**Definition 65 `rvf-duckdb-server-image`** is created and authorised for the
+ACR connection, the variable group and the pool. Getting it to build from a
+clean agent took fixing two things, both of which had been masked by `mvn -o`
+(offline) in the fork build scripts - they only ever resolved from a warm local
+repository, i.e. only on the machine that had already built them:
 
-* On `ncts-k8s-dedicated-pool` (build 16149):
-  `Cannot access ihtsdo-releases (https://nexus3.ihtsdotools.org/...)`. That
-  agent reaches Maven Central - it fetched plexus artifacts in the same step -
-  but not SI's Nexus.
-* On a hosted agent (build 16150): `artifacts could not be resolved`.
+1. **`org.snomed:snomed-parent-bom` is not on Maven Central** - every version
+   404s - and this project and all three forks inherit from it. A POM's own
+   `<repositories>` cannot resolve that POM's *parent*, because Maven reads the
+   parent first, when it knows only `settings.xml`. Hence
+   `duck/maven-settings.xml`, which declares SI's Nexus.
+2. **`snomed-parent-bom` binds OWASP dependency-check into the lifecycle.** With
+   no cached NVD data and no API key it downloads the whole CVE database -
+   385,855 records at the unauthenticated rate limit, which is hours. That is
+   what presented as a hang: three diagnostic runs sat at 40 minutes with no
+   output before I looked inside the JVM and found it 3% through the NVD feed.
+   Now skipped explicitly; a vulnerability scan should be a deliberate job, not
+   a side effect of building a patched library.
 
-Same root cause both times. `org.snomed:snomed-parent-bom` is **not on Maven
-Central** - every version 404s - and this project and all three forked libraries
-inherit from it. Fetching that POM from nexus3 by hand takes **1.4 seconds**,
-but a full Maven resolution against an **empty** local repository hangs: 40
-minutes with no output, then an HTTP reactor error.
+**Verified: 386 seconds from a completely empty Maven repository.** So the image
+is now rebuildable from a committed tree, which is the point - the patches, the
+upstream commit each script checks out, and `checkout-resources.sh` pinned to
+explicit corpus and rules commits.
 
-The build scripts previously passed `-o` (offline), which hid this entirely -
-they only ever worked on a machine with a warm local repository, which is to say
-only on the machine that had already built them. Removed, so the failure is
-visible rather than latent.
-
-**What that means for a committed, rebuildable image.** The *source* is
-committed and pinned: the patches in `duck/`, the upstream commit each script
-checks out, and `checkout-resources.sh` on explicit corpus and rules commits.
-What is not reproducible is resolving SI's parent POMs from scratch. The fix is
-to stop rebuilding the forks in CI and publish the three artefacts to the
-org-scoped Azure Artifacts feed (`OD225632-NCTS-ContentAndTooling`, which
-already exists), then resolve them as ordinary versioned dependencies - which
-also removes a 40-minute fork build from every image build.
-
-**The image already in ACR is unaffected.** It was built from this tree and its
-provenance is the commit in its tag.
+Build 16149 on `ncts-k8s-dedicated-pool` had also failed on Nexus egress, which
+is why the job runs on a hosted agent: it needs internet and ACR, not the
+cluster, and every other Maven pipeline in this project already uses the hosted
+queue.
 
 `duck/push-image.sh` remains for break-glass use and documents the
 subscription, the token dance and the tagging rules, but prefer the pipeline.

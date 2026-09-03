@@ -31,6 +31,11 @@
 
 set -euo pipefail
 
+# SI's parent POMs are not on Maven Central and a POM's own <repositories>
+# cannot resolve that POM's parent, so the repositories must come from
+# settings.xml or an empty local repository cannot build this at all.
+MAVEN_SETTINGS="${MAVEN_SETTINGS:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/maven-settings.xml}"
+
 VERSION="${1:-6.0.1-aehrc-perf}"
 BASE_TAG="${BASE_TAG:-6.0.1}"
 BUILD_DIR="${QUERY_SERVICE_BUILD_DIR:-/data/work/sqs-build}"
@@ -73,7 +78,14 @@ PY
 # ~/.m2/repository, which is right everywhere.
 export MAVEN_OPTS="${MAVEN_OPTS:-}"
 # NOT offline - see build-drools-engine.sh.
-mvn -q -Dmaven.legacyLocalRepo=true install
+
+# -Ddependency-check.skip=true because snomed-parent-bom binds OWASP
+# dependency-check into the lifecycle. With no cached NVD data and no API key it
+# downloads the whole CVE database - 385,855 records at NVD's unauthenticated
+# rate limit, which is hours - and that, not Maven resolution, is what made a
+# clean-machine build look like it hung. A vulnerability scan is a thing to run
+# deliberately, not a side effect of building a patched library.
+mvn -q -s "$MAVEN_SETTINGS" -Dmaven.legacyLocalRepo=true -Ddependency-check.skip=true install
 
 JAR="$(find "$HOME/.m2" /data/m2 -path "*snomed-query-service/$VERSION/snomed-query-service-$VERSION.jar" 2>/dev/null | head -1)"
 if [ -z "$JAR" ]; then
