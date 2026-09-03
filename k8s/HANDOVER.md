@@ -430,6 +430,24 @@ anywhere" and would silently negate the first, which looks like a policy and is
 not one. If your CNI blocks kubelet probes, add the node CIDR rather than
 widening it.
 
+### Confirmed values
+
+    issuer      https://auth.ontoserver.csiro.au/auth/realms/aehrc
+    jwks        https://auth.ontoserver.csiro.au/auth/realms/aehrc/protocol/openid-connect/certs
+    realm       aehrc
+    hostname    ncts-rvf.australiaeast.cloudapp.azure.com
+    vault path  acl_vlt_od225632/kv/data/rvf   (client_id, client_secret)
+
+Verified against the discovery document 2026-09-03. **Note the `/auth` path
+segment** - this is a legacy-path Keycloak, so the issuer is
+`…/auth/realms/aehrc`, not `…/realms/aehrc`. Getting that wrong fails JWKS
+retrieval and every request 401s with nothing useful in the logs.
+`client_credentials` is advertised, so SI's CI can use it, and
+`preferred_username` is advertised so it is available for `X-AUTH-username`.
+
+The hostname follows the house pattern used by grafana, kargo, fhirpit and the
+indexer (`<name>.australiaeast.cloudapp.azure.com`).
+
 ### What to create in Keycloak
 
 1. A confidential client `rvf` with the redirect URI
