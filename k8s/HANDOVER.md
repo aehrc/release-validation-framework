@@ -98,10 +98,15 @@ So the image is now genuinely rebuildable from a committed tree - the patches,
 the upstream commit each script checks out, and `checkout-resources.sh` pinned
 to explicit corpus and rules commits.
 
-**One thing left open:** the job runs with `runTests: false`. The suite has 14
-errors on any machine without Docker (testcontainers), which would fail `verify`.
-Either the agent needs Docker or those tests need excluding before the gate can
-include them.
+**The gate includes the test suite.** `runTests` defaults to true and build
+16159 ran with it: **340 tests, 0 failures, 0 errors, 21 skipped**, and
+testcontainers spun up real MySQL containers on the way.
+
+Worth recording because I got it wrong first: I had this documented as
+"`runTests: false`, because the suite has 14 errors without Docker". Those 14
+errors are specific to the machine I develop on, which has no Docker daemon -
+hosted agents ship one, so the full suite passes in CI. The earlier green builds
+were queued with tests off on an assumption I had not tested.
 
 `duck/push-image.sh` remains for break-glass use and documents the subscription,
 the token dance and the tagging rules, but CI is the route.
