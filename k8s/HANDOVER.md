@@ -167,6 +167,29 @@ So the whole sequence on a laptop is:
         -Djib.to.auth.username=00000000-0000-0000-0000-000000000000 \
         -Djib.to.auth.password="$TOKEN"
 
+## 2b. Registry coordinates, confirmed
+
+    registry        ontoserver.azurecr.io
+    repository      aehrc-rvf/release-validation-framework
+    subscription    4407201c-ec5b-4324-8190-643fd3b0d49a
+                    "CSIRO EA Dev_Test - ontoserver dev"
+    tenant          0fe05593-19ac-4f98-adbf-0375fce7f160  (CSIRO)
+
+Confirmed 2026-09-03. Two things about this are worth writing down because they
+cost a round of failed logins:
+
+* That is a CSIRO **subscription** named "ontoserver dev". There is also a
+  separate **tenant** named `Ontoserver`
+  (`2c78fe1e-6ae0-4f69-ada0-b39b4f6ffa30`) which is NOT where the registry is,
+  and which rejects a plain `az login` with `AADSTS50076` - MFA required. Do not
+  chase it.
+* A plain `az login` lands in the CSIRO tenant, which is the right one, even
+  though it emits conditional-access warnings for the ADHA, Ontoserver and DXC
+  tenants on the way. Those warnings are noise for this purpose.
+
+`duck/push-image.sh` tries this subscription first and falls back to scanning
+every visible one, so it keeps working if the registry moves.
+
 ## 3. What `rvf-aks.yaml` is, object by object
 
     Namespace rvf

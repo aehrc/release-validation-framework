@@ -30,6 +30,15 @@ REGISTRY_HOST="${REGISTRY_HOST:-${REGISTRY_NAME}.azurecr.io}"
 REPOSITORY="${REPOSITORY:-aehrc-rvf/release-validation-framework}"
 ENGINE_SUFFIX="${ENGINE_SUFFIX:-duckdb}"
 
+# Confirmed 2026-09-03: ontoserver.azurecr.io lives here, in the CSIRO tenant
+# (0fe05593-19ac-4f98-adbf-0375fce7f160), which is the tenant a plain
+# `az login` lands in. Note this is a CSIRO SUBSCRIPTION named "ontoserver
+# dev" - NOT the separate tenant named `Ontoserver` (2c78fe1e-...), which
+# enforces MFA and is a dead end for this push.
+#
+# Tried first; if it does not resolve, every visible subscription is scanned.
+SUBSCRIPTION="${SUBSCRIPTION:-4407201c-ec5b-4324-8190-643fd3b0d49a}"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$ROOT"
@@ -65,16 +74,25 @@ echo
 # --- find the subscription that actually owns the registry -------------------
 echo "==> locating registry '$REGISTRY_NAME'"
 FOUND_SUB=""
-while read -r sub_id sub_name; do
-  [ -n "$sub_id" ] || continue
-  if az acr show --name "$REGISTRY_NAME" --subscription "$sub_id" \
-        --query loginServer -o tsv >/dev/null 2>&1; then
-    echo "    found in: $sub_name  ($sub_id)"
-    FOUND_SUB="$sub_id"
-    break
-  fi
-  echo "    not in  : $sub_name"
-done < <(az account list --query "[].[id,name]" -o tsv 2>/dev/null | sed 's/\t/ /')
+
+# The known one first, so the common case is a single call rather than a scan.
+if [ -n "$SUBSCRIPTION" ] && az acr show --name "$REGISTRY_NAME" \
+      --subscription "$SUBSCRIPTION" --query loginServer -o tsv >/dev/null 2>&1; then
+  echo "    found in: $SUBSCRIPTION (the recorded subscription)"
+  FOUND_SUB="$SUBSCRIPTION"
+else
+  [ -n "$SUBSCRIPTION" ] && echo "    not in the recorded subscription - scanning"
+  while read -r sub_id sub_name; do
+    [ -n "$sub_id" ] || continue
+    if az acr show --name "$REGISTRY_NAME" --subscription "$sub_id" \
+          --query loginServer -o tsv >/dev/null 2>&1; then
+      echo "    found in: $sub_name  ($sub_id)"
+      FOUND_SUB="$sub_id"
+      break
+    fi
+    echo "    not in  : $sub_name"
+  done < <(az account list --query "[].[id,name]" -o tsv 2>/dev/null | sed 's/\t/ /')
+fi
 
 if [ -z "$FOUND_SUB" ]; then
   cat >&2 <<EOF
