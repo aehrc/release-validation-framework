@@ -92,7 +92,7 @@ spec:
     spec:
       containers:
         - name: rvf
-          image: ontoserver.azurecr.io/aehrc-rvf/rvf-duck:latest
+          image: ontoserver.azurecr.io/aehrc-rvf/rvf-server:9.0.1
           ports: [{ containerPort: 8080 }]
           env:
             - { name: RVF_EXECUTION_ENGINE, value: "duckdb" }
@@ -156,7 +156,7 @@ spec:
       terminationGracePeriodSeconds: 600
       containers:
         - name: rvf
-          image: ontoserver.azurecr.io/aehrc-rvf/rvf-duck:latest
+          image: ontoserver.azurecr.io/aehrc-rvf/rvf-server:9.0.1
           env:
             - { name: RVF_EXECUTION_ENGINE, value: "duckdb" }
             - { name: RVF_EXECUTION_ISWORKER, value: "true" }

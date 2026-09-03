@@ -103,7 +103,7 @@ echo
 echo "      TOKEN=\$(az acr login --name ontoserver --expose-token --output tsv --query accessToken)"
 echo "      mvn -B -ntp package -DskipTests jib:build \\"
 echo "          -Djib.from.platforms=linux/amd64 \\"
-echo "          -Djib.to.image=ontoserver.azurecr.io/aehrc-rvf/rvf-duck:$(version_of project.version 2>/dev/null || echo 9.0.1) \\"
+echo "          -Djib.to.image=ontoserver.azurecr.io/aehrc-rvf/rvf-server:$(version_of project.version 2>/dev/null || echo 9.0.1) \\"
 echo "          -Djib.to.tags=latest \\"
 echo "          -Djib.to.auth.username=00000000-0000-0000-0000-000000000000 \\"
 echo "          -Djib.to.auth.password=\"\$TOKEN\""

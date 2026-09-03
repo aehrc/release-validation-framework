@@ -78,7 +78,7 @@ spec:
         restartPolicy: Never
         containers:
           - name: rvf-worker
-            image: ontoserver.azurecr.io/aehrc/rvf-duck:latest
+            image: ontoserver.azurecr.io/aehrc-rvf/rvf-server:9.0.1
             args:
               - "--rvf.execution.oneShot=true"
               # REQUIRED. isWorker defaults to true, which would start the

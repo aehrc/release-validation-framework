@@ -34,12 +34,38 @@ a second concurrent consumer exists.
 
 ## 2. Push the image
 
+**Prefer CI.** `az/azure-pipeline.image.yml` in this repo builds and pushes it,
+tagged by both version and commit, so a running pod is traceable to a tree and
+nobody's laptop is in the supply chain. Create it as a definition against this
+repo and branch and run it manually - it is `trigger: none` deliberately, since
+an image push is not something a pull request should do.
+
+Two other places build an image and neither publishes THIS one, which is worth
+knowing before assuming CI already covers it:
+
+* `azure-pipeline.engine-ab.yml` runs `jib:buildTar` and attaches the tarball as
+  a pipeline artifact. Deliberate: it is a PR gate, and a gate that pushes to a
+  shared registry on every pull request is how `latest` gets broken.
+* ADO definition **63 `rvf-duck-image` does push** - but it builds the **Python**
+  DuckDB engine from `aehrc/rvf@rvf-duck`, a different codebase, and it pushes
+  `aehrc-rvf/rvf-duck`.
+
+**That last point mattered.** The manifests here used to pull
+`aehrc-rvf/rvf-duck:latest`, which is definition 63's Python engine image, not
+this Java server. Applying them would have deployed the wrong artefact, or
+whichever of the two pushed last. Renamed to **`aehrc-rvf/rvf-server`**, pinned
+to the version tag rather than `latest`. Worth confirming against ACR that
+`aehrc-rvf/rvf-server` is genuinely unused before the first push.
+
+### Doing it by hand instead
+
+
 Built with jib, so **no Docker daemon is required** — it assembles and pushes
 layers itself. Verified: a 480 MB amd64 tarball builds from a clean tree.
 
 Note two things the command has to override, because the defaults are wrong for
 us: the pom's coordinates produce `.../release-validation-framework`, while the
-manifests pull `.../rvf-duck`, and the default registry is Docker Hub.
+manifests pull `.../rvf-server`, and the default registry is Docker Hub.
 
     # daemon-free: ACR issues a token, jib uses it directly
     TOKEN=$(az acr login --name ontoserver --expose-token \
@@ -47,7 +73,7 @@ manifests pull `.../rvf-duck`, and the default registry is Docker Hub.
 
     mvn -B -ntp package -DskipTests jib:build \
         -Djib.from.platforms=linux/amd64 \
-        -Djib.to.image=ontoserver.azurecr.io/aehrc-rvf/rvf-duck:9.0.1 \
+        -Djib.to.image=ontoserver.azurecr.io/aehrc-rvf/rvf-server:9.0.1 \
         -Djib.to.tags=latest \
         -Djib.to.auth.username=00000000-0000-0000-0000-000000000000 \
         -Djib.to.auth.password="$TOKEN"
@@ -110,7 +136,7 @@ So the whole sequence on a laptop is:
     TOKEN=$(az acr login --name ontoserver --expose-token --output tsv --query accessToken)
     mvn -B -ntp package -DskipTests jib:build \
         -Djib.from.platforms=linux/amd64 \
-        -Djib.to.image=ontoserver.azurecr.io/aehrc-rvf/rvf-duck:9.0.1 \
+        -Djib.to.image=ontoserver.azurecr.io/aehrc-rvf/rvf-server:9.0.1 \
         -Djib.to.tags=latest \
         -Djib.to.auth.username=00000000-0000-0000-0000-000000000000 \
         -Djib.to.auth.password="$TOKEN"

@@ -1,0 +1,197 @@
+# Build and PUSH the RVF server image to ACR.
+#
+# WHY THIS IS A SEPARATE PIPELINE
+#
+# Two other places build an image and neither publishes this one:
+#
+#   * `azure-pipeline.engine-ab.yml` runs `jib:buildTar` and attaches the
+#     tarball as a pipeline artifact. That is deliberate - it is a PR gate, and
+#     a gate that pushes to a shared registry on every pull request is a way to
+#     get a broken `latest`.
+#   * ADO definition 63 `rvf-duck-image` DOES push, but it builds the **Python**
+#     DuckDB engine from `aehrc/rvf@rvf-duck` - a different codebase - and it
+#     pushes `aehrc-rvf/rvf-duck`. This image is the Java RVF server, so it is
+#     `aehrc-rvf/rvf-server`. Sharing a repository name between two unrelated
+#     artefacts is how a cluster ends up running the wrong one.
+#
+# NOT VERIFIED. Written 2026-09-03 on a host with no `az`, no Docker and no
+# registry credentials, so it has never run. What was checked: the YAML parses,
+# every inline script passes `bash -n`, and the build it invokes produces a
+# 480MB amd64 image whose tags come out as this file claims.
+#
+# The pinned forks are the part most likely to surprise a fresh agent - see the
+# first real step.
+
+name: 'rvf-image-$(Build.SourceBranchName)-$(Date:yyyyMMdd)$(Rev:.r)'
+
+# Manual or explicit only. An image push is a deliberate act, and the branch
+# this lives on is not `main`.
+trigger: none
+pr: none
+
+parameters:
+  - name: imageRepository
+    displayName: 'ACR repository (NOT rvf-duck - that is the Python engine)'
+    type: string
+    default: 'aehrc-rvf/rvf-server'
+  - name: alsoTagLatest
+    displayName: 'Also move :latest to this build'
+    type: boolean
+    default: false
+  - name: runTests
+    displayName: 'Run the test suite before pushing'
+    type: boolean
+    default: true
+
+variables:
+  - group: ncts-release
+  - name: MAVEN_OPTS
+    value: '-Dmaven.repo.local=$(Pipeline.Workspace)/.m2'
+  # `ontoserver` is the dockerregistry service connection for
+  # ontoserver.azurecr.io. Its login writes ~/.docker/config.json, which jib
+  # reads directly - so this needs no Docker daemon.
+  - name: registryConnection
+    value: 'ontoserver'
+  - name: registryHost
+    value: 'ontoserver.azurecr.io'
+
+stages:
+  - stage: Image
+    displayName: 'Build and push the RVF server image'
+    jobs:
+      - job: Push
+        pool:
+          name: ncts-k8s-dedicated-pool
+        timeoutInMinutes: 90
+        steps:
+          - checkout: self
+            # The version and the forks come from the tree, and the commit is
+            # baked in as a tag, so a shallow checkout is fine.
+            fetchDepth: 1
+
+          - task: Bash@3
+            name: coords
+            displayName: 'Resolve the version from the pom'
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                VERSION="$(python3 - <<'PY'
+                import xml.etree.ElementTree as ET
+                # The project version sits BEFORE <parent> in this pom, and the
+                # first <version> after </parent> is a property (1.5.5.1), so
+                # any text-splitting heuristic reads the wrong number and pushes
+                # a tag no manifest references. Ask the XML.
+                ns = {'m': 'http://maven.apache.org/POM/4.0.0'}
+                root = ET.parse('pom.xml').getroot()
+                version = root.find('m:version', ns)
+                if version is None or not (version.text or '').strip():
+                    raise SystemExit('FATAL: no project <version> in pom.xml')
+                print(version.text.strip())
+                PY
+                )"
+                SHA="$(git rev-parse --short=12 HEAD)"
+                echo "version : $VERSION"
+                echo "commit  : $SHA"
+                echo "##vso[task.setvariable variable=version;isOutput=true]$VERSION"
+                echo "##vso[task.setvariable variable=sha;isOutput=true]$SHA"
+
+          - task: Bash@3
+            displayName: 'Build the three pinned forks'
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                # The pom pins three libraries to -aehrc-perf versions that
+                # exist in NO remote repository: they are built from IHTSDO
+                # sources plus the patches in duck/. Without this the very first
+                # dependency resolution fails, and it fails for a reason nobody
+                # guesses from the message.
+                MAVEN_REPO_LOCAL="$(Pipeline.Workspace)/.m2" \
+                FORKS_BUILD_DIR="$(Agent.TempDirectory)/forks" \
+                  ./duck/build-pinned-forks.sh
+
+          - task: Bash@3
+            displayName: 'Build and test'
+            condition: eq('${{ parameters.runTests }}', true)
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                # AWS_REGION is needed even to START: DroolsRulesValidationService
+                # builds an S3 client in @PostConstruct and the SDK refuses one
+                # without a region.
+                export AWS_REGION=us-east-1 AWS_DEFAULT_REGION=us-east-1
+                mvn -B -ntp verify
+
+          - task: Bash@3
+            displayName: 'Package'
+            condition: ne('${{ parameters.runTests }}', true)
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                mvn -B -ntp package -DskipTests
+
+          - task: Docker@2
+            displayName: 'Log in to ACR'
+            inputs:
+              command: login
+              containerRegistry: '$(registryConnection)'
+
+          - task: Bash@3
+            displayName: 'Push the image'
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+
+                VERSION='$(coords.version)'
+                SHA='$(coords.sha)'
+                IMAGE='$(registryHost)/${{ parameters.imageRepository }}'
+
+                # Tagged by version AND commit. The commit tag is what makes a
+                # running pod traceable to a tree; the version tag is what the
+                # manifests reference.
+                TAGS="$SHA"
+                if [ '${{ parameters.alsoTagLatest }}' = 'True' ]; then
+                  TAGS="$TAGS,latest"
+                fi
+                echo "pushing $IMAGE:$VERSION (also: $TAGS)"
+
+                # amd64 only: the pom declares arm64 for local Macs, and building
+                # both doubles push time for a platform no node runs.
+                #
+                # jib pushes registry layers itself and reads the credentials
+                # Docker@2 just wrote, so no daemon is involved.
+                mvn -B -ntp jib:build -DskipTests \
+                    -Djib.from.platforms=linux/amd64 \
+                    -Djib.to.image="$IMAGE:$VERSION" \
+                    -Djib.to.tags="$TAGS"
+
+          - task: Bash@3
+            displayName: 'State what to deploy'
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                IMAGE='$(registryHost)/${{ parameters.imageRepository }}'
+                echo "##vso[task.uploadsummary]$(Build.ArtifactStagingDirectory)/image.md"
+                mkdir -p '$(Build.ArtifactStagingDirectory)'
+                cat > '$(Build.ArtifactStagingDirectory)/image.md' <<EOF
+                ## RVF server image pushed
+
+                | | |
+                |---|---|
+                | image | \`$IMAGE:$(coords.version)\` |
+                | commit tag | \`$IMAGE:$(coords.sha)\` |
+                | branch | \`$(Build.SourceBranchName)\` |
+
+                \`k8s/rvf-aks.yaml\` references the version tag. Deploy with:
+
+                \`\`\`
+                kubectl -n rvf set image deploy/rvf-api    rvf=$IMAGE:$(coords.version)
+                kubectl -n rvf set image deploy/rvf-worker rvf=$IMAGE:$(coords.version)
+                \`\`\`
+                EOF
+                cat '$(Build.ArtifactStagingDirectory)/image.md'
