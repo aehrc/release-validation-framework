@@ -42,6 +42,59 @@ access from where it was written. Everything checkable without one has been
 checked, and where something is unverified it says so rather than implying
 otherwise.
 
+## 0b. What the live cluster already told us
+
+Read read-only from `ncts-k8s-cluster` (subscription
+`9a9e2788-…`, resource group `ncts`) on 2026-09-03. This closed four of §8's
+questions and found four errors in these manifests before anyone applied them.
+
+**Already there, nothing to install:**
+
+| | |
+|---|---|
+| KEDA | installed since 2024-12-02 (`scaledobjects`, `scaledjobs` CRDs) |
+| cert-manager | ClusterIssuer **`letsencrypt`** - note the name, not `letsencrypt-prod` |
+| `azurefile-csi-premium` | present, so both PVCs are valid |
+| namespace `rvf-tests` | exists, 447 days - that is where `daily-rvf`'s ephemeral job runs |
+
+**Four things these manifests had wrong, now fixed:**
+
+1. **The worker could never have scheduled.** The pools are
+   `nctspool` (D4as_v5, 4 CPU / 16GB, **untainted, the default**), `large`
+   (D8a_v4, 8 CPU / 32GB, tainted `node-type=large-production:NoSchedule`), and
+   two spot pools. The worker asks for 8 CPU and a 16Gi limit, which cannot fit
+   a 16GB node - so with no `nodeSelector` it would have sat **Pending forever**
+   on `nctspool`. Now pinned to `large` with the matching toleration, and
+   deliberately not the spot pools: an eviction mid-validation loses a
+   13-minute run.
+2. **The ingress annotations were the wrong family.** Every ingressclass here
+   reports `controller=nginx.org/ingress-controller` - **NGINX Inc's**
+   controller, not community `ingress-nginx`. The
+   `nginx.ingress.kubernetes.io/*` annotations it carried are silently ignored
+   by it, which would have left the default 1MB body limit quietly rejecting an
+   853MB release. Now `nginx.org/client-max-body-size` and friends.
+3. **The ClusterIssuer name was wrong** - `letsencrypt`, not `letsencrypt-prod`.
+4. **There is no default ingress class.** This cluster runs **one nginx
+   controller per application** (`ontoserver-amtv4-nginx`,
+   `ontoserver-fhirpit-r4-nginx`, `llm2hse-nginx-hse`, …), so RVF needs its own
+   class and controller following that pattern. Left as
+   `REPLACE_WITH_RVF_INGRESS_CLASS` because it cannot be guessed.
+
+**And one thing that changes how you deploy at all: this cluster is ArgoCD-
+managed.** `argocd` has been running two years, every Application reports
+`Synced`, Kargo handles promotion, and each Ingress carries an
+`argocd.argoproj.io/tracking-id`. So `kubectl apply` is not the house
+mechanism - these manifests should land in whatever repository drives Argo for
+this cluster, as an Application. That is the owner's call, not something to work
+around, and it is why §0's step 3 says "apply" only as shorthand.
+
+**Still genuinely open:** §8's KEDA question - whether its ActiveMQ scaler
+counts in-flight unacknowledged messages - is a behaviour, not a fact about the
+cluster, so it still needs observing under load.
+
+Ephemeral disk is fine everywhere for the 40Gi `emptyDir`: 124GB on the small
+pools, 248GB on `large`, 992GB on `largespot`.
+
 ## 1. What this deployment is
 
 An RVF that validates a SNOMED release using **DuckDB instead of MySQL**. Same
@@ -454,7 +507,8 @@ relocating them into a `deploy/` tree would break both for tidiness alone.
    not, the only thing preventing a worker being killed mid-run is
    `terminationGracePeriodSeconds: 600` — which covers a 13-minute DuckDB run
    but would not have covered a 23-minute MySQL one.
-4. **Whether the node SKU can back a 40Gi `emptyDir`** per worker.
+4. ~~Whether the node SKU can back a 40Gi `emptyDir`~~ - **answered**: 124GB
+   on the small pools, 248GB on `large`, 992GB on `largespot`. See §0b.
 5. **The public hostname** you give it, and the Keycloak realm and issuer URL,
    so `k8s/rvf-auth-ingress.yaml`'s placeholders can be filled in and the SI
    service-account client can be described to them.

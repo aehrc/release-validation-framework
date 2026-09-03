@@ -157,6 +157,28 @@ spec:
       # A worker that is terminated mid-validation loses the run, and a full
       # edition takes minutes. Long enough to finish what it started.
       terminationGracePeriodSeconds: 600
+      # SCHEDULING IS NOT OPTIONAL on ncts-k8s-cluster. Read from the live
+      # cluster 2026-09-03:
+      #
+      #   nctspool    Standard_D4as_v5   4 CPU  16GB  untainted  <- the default
+      #   large       Standard_D8a_v4    8 CPU  32GB  node-type=large-production:NoSchedule
+      #   largespot   Standard_D8a_v4    8 CPU  32GB  spot:NoSchedule
+      #   mediumspot  Standard_D4a_v4    4 CPU  16GB  spot:NoSchedule
+      #
+      # The worker asks for 8 CPU and a 16Gi memory limit, which cannot fit a
+      # 16GB node once kubelet reservations are taken out - so with no
+      # nodeSelector it lands on nctspool and sits Pending forever. It has to go
+      # to `large`, which is tainted, hence the toleration.
+      #
+      # Deliberately NOT the spot pools: an eviction mid-validation loses the
+      # run, and a full edition is about 13 minutes of work.
+      nodeSelector:
+        agentpool: large
+      tolerations:
+        - key: node-type
+          operator: Equal
+          value: large-production
+          effect: NoSchedule
       containers:
         - name: rvf
           image: ontoserver.azurecr.io/aehrc-rvf/release-validation-framework:9.0.1-duckdb

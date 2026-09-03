@@ -174,17 +174,31 @@ metadata:
   name: rvf
   namespace: rvf
   annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-prod
-    # A release is 853MB. The nginx default is 1m, which fails an upload as a
-    # 413 after the client has sent the whole body.
-    nginx.ingress.kubernetes.io/proxy-body-size: "2g"
-    # Do not spool a multi-hundred-megabyte body to the ingress pod's disk
-    # before forwarding a byte of it.
-    nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    # THIS CLUSTER RUNS NGINX INC'S CONTROLLER, not the community one. Read
+    # 2026-09-03: every ingressclass on ncts-k8s-cluster reports
+    # controller=nginx.org/ingress-controller. So the annotation family is
+    # `nginx.org/*`; the community `nginx.ingress.kubernetes.io/*` annotations
+    # this file used to carry are silently IGNORED by it - which would have
+    # meant the default 1MB body limit quietly rejecting an 853MB release.
+    #
+    # A release is 853MB.
+    nginx.org/client-max-body-size: "2g"
+    # Do not spool a multi-hundred-megabyte body before forwarding a byte.
+    nginx.org/proxy-buffering: "false"
+    nginx.org/proxy-read-timeout: "600s"
+    nginx.org/proxy-send-timeout: "600s"
+    # The issuer is named `letsencrypt` on this cluster, not letsencrypt-prod.
+    cert-manager.io/cluster-issuer: letsencrypt
+    # Matching the house style used by the ontoserver/fhirpit ingresses here.
+    cert-manager.io/issue-temporary-certificate: "true"
+    acme.cert-manager.io/http01-edit-in-place: "true"
 spec:
-  ingressClassName: nginx
+  # NO DEFAULT INGRESS CLASS EXISTS. This cluster runs one nginx controller per
+  # application - ontoserver-amtv4-nginx, ontoserver-fhirpit-r4-nginx,
+  # llm2hse-nginx-hse and so on - so RVF needs its own class and controller
+  # deployment following that pattern. Fill this in with the class whoever owns
+  # the cluster creates; it cannot be guessed.
+  ingressClassName: REPLACE_WITH_RVF_INGRESS_CLASS
   tls:
     - hosts: [RVF_PUBLIC_HOST]
       secretName: rvf-tls
