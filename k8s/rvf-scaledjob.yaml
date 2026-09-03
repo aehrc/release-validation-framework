@@ -78,7 +78,10 @@ spec:
         restartPolicy: Never
         containers:
           - name: rvf-worker
-            image: ontoserver.azurecr.io/aehrc-rvf/rvf-server:9.0.1
+            image: ontoserver.azurecr.io/aehrc-rvf/release-validation-framework:9.0.1-duckdb
+            # The tag is stable within a version and gets re-pushed, so IfNotPresent
+            # (the default for any tag but `latest`) would keep an old layer set.
+            imagePullPolicy: Always
             args:
               - "--rvf.execution.oneShot=true"
               # REQUIRED. isWorker defaults to true, which would start the

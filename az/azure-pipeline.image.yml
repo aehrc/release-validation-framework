@@ -33,9 +33,13 @@ parameters:
   - name: imageRepository
     displayName: 'ACR repository (NOT rvf-duck - that is the Python engine)'
     type: string
-    default: 'aehrc-rvf/rvf-server'
+    default: 'aehrc-rvf/release-validation-framework'
+  - name: engineSuffix
+    displayName: 'Tag suffix naming the engine, so this cannot be mistaken for a MySQL build'
+    type: string
+    default: 'duckdb'
   - name: alsoTagLatest
-    displayName: 'Also move :latest to this build'
+    displayName: 'Also move the bare engine tag (e.g. :duckdb) to this build'
     type: boolean
     default: false
   - name: runTests
@@ -148,16 +152,24 @@ stages:
 
                 VERSION='$(coords.version)'
                 SHA='$(coords.sha)'
+                SUFFIX='${{ parameters.engineSuffix }}'
                 IMAGE='$(registryHost)/${{ parameters.imageRepository }}'
 
-                # Tagged by version AND commit. The commit tag is what makes a
-                # running pod traceable to a tree; the version tag is what the
-                # manifests reference.
-                TAGS="$SHA"
+                # This repository ALSO holds MySQL-engine builds of RVF, so the
+                # engine goes in the tag. A bare 9.0.1 here would be ambiguous
+                # at best and would shadow an existing build at worst - never
+                # push one.
+                PRIMARY="$VERSION-$SUFFIX"
+                # Immutable companion, so a running pod is traceable to a tree
+                # even after the primary tag moves.
+                TAGS="$PRIMARY.$SHA"
                 if [ '${{ parameters.alsoTagLatest }}' = 'True' ]; then
-                  TAGS="$TAGS,latest"
+                  # Deliberately NOT `latest`: that would claim to be the
+                  # canonical RVF for a repository shared with MySQL builds.
+                  TAGS="$TAGS,$SUFFIX"
                 fi
-                echo "pushing $IMAGE:$VERSION (also: $TAGS)"
+                echo "pushing $IMAGE:$PRIMARY"
+                echo "    and $IMAGE:$TAGS" | tr ',' '\n' | sed 's/^/         /'
 
                 # amd64 only: the pom declares arm64 for local Macs, and building
                 # both doubles push time for a platform no node runs.
@@ -166,8 +178,10 @@ stages:
                 # Docker@2 just wrote, so no daemon is involved.
                 mvn -B -ntp jib:build -DskipTests \
                     -Djib.from.platforms=linux/amd64 \
-                    -Djib.to.image="$IMAGE:$VERSION" \
+                    -Djib.to.image="$IMAGE:$PRIMARY" \
                     -Djib.to.tags="$TAGS"
+
+                echo "##vso[task.setvariable variable=pushedImage]$IMAGE:$PRIMARY"
 
           - task: Bash@3
             displayName: 'State what to deploy'
@@ -183,15 +197,15 @@ stages:
 
                 | | |
                 |---|---|
-                | image | \`$IMAGE:$(coords.version)\` |
-                | commit tag | \`$IMAGE:$(coords.sha)\` |
+                | image | \`$(pushedImage)\` |
+                | immutable tag | \`$(pushedImage).$(coords.sha)\` |
                 | branch | \`$(Build.SourceBranchName)\` |
 
                 \`k8s/rvf-aks.yaml\` references the version tag. Deploy with:
 
                 \`\`\`
-                kubectl -n rvf set image deploy/rvf-api    rvf=$IMAGE:$(coords.version)
-                kubectl -n rvf set image deploy/rvf-worker rvf=$IMAGE:$(coords.version)
+                kubectl -n rvf set image deploy/rvf-api    rvf=$(pushedImage)
+                kubectl -n rvf set image deploy/rvf-worker rvf=$(pushedImage)
                 \`\`\`
                 EOF
                 cat '$(Build.ArtifactStagingDirectory)/image.md'

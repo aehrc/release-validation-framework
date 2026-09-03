@@ -53,9 +53,19 @@ knowing before assuming CI already covers it:
 **That last point mattered.** The manifests here used to pull
 `aehrc-rvf/rvf-duck:latest`, which is definition 63's Python engine image, not
 this Java server. Applying them would have deployed the wrong artefact, or
-whichever of the two pushed last. Renamed to **`aehrc-rvf/rvf-server`**, pinned
-to the version tag rather than `latest`. Worth confirming against ACR that
-`aehrc-rvf/rvf-server` is genuinely unused before the first push.
+whichever of the two pushed last.
+
+Now they pull **`aehrc-rvf/release-validation-framework:9.0.1-duckdb`** - the
+repository the pom's own coordinates produce, which is also where MySQL-engine
+builds of RVF live. **The engine is therefore in the TAG**, and a bare `9.0.1`
+must never be pushed here: it would be ambiguous at best and would shadow an
+existing build at worst. `latest` is left alone for the same reason.
+
+Every push also gets an immutable `9.0.1-duckdb.<sha12>` companion, so a running
+pod is traceable to a tree after the primary tag moves. Because the primary tag
+moves, both manifests set `imagePullPolicy: Always` - the default for any tag
+other than `latest` is `IfNotPresent`, which would quietly keep an old layer set
+after a re-push.
 
 ### Doing it by hand instead
 
@@ -73,7 +83,7 @@ manifests pull `.../rvf-server`, and the default registry is Docker Hub.
 
     mvn -B -ntp package -DskipTests jib:build \
         -Djib.from.platforms=linux/amd64 \
-        -Djib.to.image=ontoserver.azurecr.io/aehrc-rvf/rvf-server:9.0.1 \
+        -Djib.to.image=ontoserver.azurecr.io/aehrc-rvf/release-validation-framework:9.0.1-duckdb \
         -Djib.to.tags=latest \
         -Djib.to.auth.username=00000000-0000-0000-0000-000000000000 \
         -Djib.to.auth.password="$TOKEN"
@@ -136,7 +146,7 @@ So the whole sequence on a laptop is:
     TOKEN=$(az acr login --name ontoserver --expose-token --output tsv --query accessToken)
     mvn -B -ntp package -DskipTests jib:build \
         -Djib.from.platforms=linux/amd64 \
-        -Djib.to.image=ontoserver.azurecr.io/aehrc-rvf/rvf-server:9.0.1 \
+        -Djib.to.image=ontoserver.azurecr.io/aehrc-rvf/release-validation-framework:9.0.1-duckdb \
         -Djib.to.tags=latest \
         -Djib.to.auth.username=00000000-0000-0000-0000-000000000000 \
         -Djib.to.auth.password="$TOKEN"
