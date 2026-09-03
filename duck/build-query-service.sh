@@ -69,8 +69,11 @@ pom.write_text(patched)
 print(f'==> version set to {version}')
 PY
 
-export MAVEN_OPTS="${MAVEN_OPTS:--Dmaven.repo.local=/data/m2}"
-mvn -o -q -Dmaven.legacyLocalRepo=true install
+# No machine-specific default: an unset MAVEN_OPTS means maven's own
+# ~/.m2/repository, which is right everywhere.
+export MAVEN_OPTS="${MAVEN_OPTS:-}"
+# NOT offline - see build-drools-engine.sh.
+mvn -q -Dmaven.legacyLocalRepo=true install
 
 JAR="$(find "$HOME/.m2" /data/m2 -path "*snomed-query-service/$VERSION/snomed-query-service-$VERSION.jar" 2>/dev/null | head -1)"
 if [ -z "$JAR" ]; then

@@ -130,7 +130,11 @@ done
 fetch org/codehaus/plexus/plexus-components/1.1.7/plexus-components-1.1.7.pom
 fetch org/codehaus/plexus/plexus/3.1/plexus-3.1.pom
 
-mvn -o -q install -DskipTests -Dmaven.repo.local="$REPO"
+# NOT offline. The SI parent POMs (org.snomed:snomed-parent-bom and
+# friends) are not on Maven Central and are not in a fresh local
+# repository, so -o makes this script work only on a machine that has
+# already built it once - which is not a reproducible build.
+mvn -q install -DskipTests -Dmaven.repo.local="$REPO"
 
 JAR="$REPO/org/ihtsdo/drools/snomed-drools-engine/$VERSION/snomed-drools-engine-$VERSION.jar"
 [ -f "$JAR" ] || { echo "FATAL: $JAR not produced" >&2; exit 1; }

@@ -89,7 +89,10 @@ PY
 # -Dmaven.legacyLocalRepo=true because this repository holds artifacts fetched
 # under other repository ids; without it, offline resolution refuses files that
 # are present on disk.
-mvn -o -Dmaven.legacyLocalRepo=true -q install -DskipTests -Dmaven.repo.local="$REPO"
+# NOT offline - see build-drools-engine.sh. legacyLocalRepo stays because
+# it also relaxes the _remote.repositories check on artifacts that a
+# previous run installed locally.
+mvn -Dmaven.legacyLocalRepo=true -q install -DskipTests -Dmaven.repo.local="$REPO"
 
 JAR="$REPO/org/snomed/quality/mrcm-validator/$VERSION/mrcm-validator-$VERSION.jar"
 [ -f "$JAR" ] || { echo "FATAL: $JAR not produced" >&2; exit 1; }
