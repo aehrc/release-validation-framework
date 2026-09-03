@@ -69,6 +69,22 @@ after a re-push.
 
 ### Doing it by hand instead
 
+    ./duck/push-image.sh              # resolves the subscription, pushes both tags
+    DRY_RUN=1 ./duck/push-image.sh    # resolve and report, push nothing
+
+The script exists because three things here are easy to get wrong: `az acr
+login` wants a Docker daemon while `--expose-token` does not; the registry may
+not be in the subscription you are defaulted to; and the repository is shared
+with MySQL-engine builds, so it refuses to push a tag that does not name the
+engine. It prints the tags that already exist before pushing, and fails if the
+immutable tag for the current commit is already there.
+
+Note that a tenant named for the registry is not the same thing as a
+subscription named similarly, and the two can differ in whether MFA or
+conditional access blocks token issuance. The script says which subscription it
+found the registry in, and what to do if it finds none.
+
+
 
 Built with jib, so **no Docker daemon is required** — it assembles and pushes
 layers itself. Verified: a 480 MB amd64 tarball builds from a clean tree.
