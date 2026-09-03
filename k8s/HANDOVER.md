@@ -450,15 +450,57 @@ indexer (`<name>.australiaeast.cloudapp.azure.com`).
 
 ### What to create in Keycloak
 
-1. A confidential client `rvf` with the redirect URI
-   `https://RVF_PUBLIC_HOST/oauth2/callback`.
-2. A group `rvf-users`, and a `groups` claim mapper so membership reaches the
-   token.
-3. A `rvf_roles` claim mapper emitting a **comma-separated** string. If a
-   multi-valued mapper is used instead, verify how oauth2-proxy joins it before
-   trusting the result - see the acceptance tests.
-4. For SI: a service-account client with the `rvf-users` group, so their CI can
-   fetch a token by client credentials.
+Two clients, deliberately - see below for why they are not one.
+
+| # | create | settings |
+|---|---|---|
+| 1 | client **`rvf`** | confidential, standard flow **on**, service accounts **off**, redirect URI `https://ncts-rvf.australiaeast.cloudapp.azure.com/oauth2/callback` |
+| 2 | client **`si-rvf-client`** | confidential, standard flow **off**, service accounts **on**, no redirect URI |
+| 3 | group **`rvf-users`** | human users **and** the auto-created `service-account-si-rvf-client` |
+| 4 | mapper on both | Group Membership -> claim `groups`, full path **off** (the policy matches it as `valueType: StringArray`) |
+| 5 | mapper on both | Hardcoded claim -> `rvf_roles` = `ROLE_ihtsdo-ops-admin`, type String, in the access token |
+
+**Why two clients rather than service accounts on `rvf`:** sharing one client
+means handing SI the secret that also protects the human login flow; rotating
+after an SI leak would log out every person at the same moment; and every token
+would carry the same `azp`, so an SI submission and a person clicking in the UI
+would be indistinguishable in the logs. They also want opposite settings -
+`rvf` needs a redirect URI and no service account, `si-rvf-client` the reverse.
+
+**Why `rvf_roles` is a hardcoded String and not a role mapper.** RVF passes
+`X-AUTH-roles` straight to Spring's `commaSeparatedStringToAuthorityList`, which
+splits **one string** on commas. Keycloak's role and group mappers emit JSON
+**arrays**, and how Envoy's `claimToHeaders` renders an array into a header is
+not something to guess at. It does not matter what the value is: RVF has no
+`@PreAuthorize`, `@Secured` or `hasRole` anywhere, so the header only has to be
+present and non-empty - absent headers give 401. All real access control is the
+SecurityPolicy's `groups` rule.
+
+### The two secrets, and where each lives
+
+They are consumed by different things in different places, so they do not live
+together:
+
+| secret | consumer | where |
+|---|---|---|
+| `rvf` client secret | the gateway's SecurityPolicy, in-cluster | **Vault** `acl_vlt_od225632/kv/data/rvf` as `client_secret`, surfaced by an ExternalSecret via ClusterSecretStore `vault-backend` |
+| `si-rvf-client` secret | the nightly ADO pipeline | **ADO**, as a secret variable `rvf.si.client.secret` in the `ncts-release` variable group |
+
+The nightly runs on an ADO agent, not in the cluster, so Vault is not reachable
+to it and the secret has to be in the pipeline's own store. Add it as a **secret**
+variable, not plain text.
+
+**The nightly authenticates as `si-rvf-client`**, exactly as SI will. It fetches
+a token by `client_credentials` and sends `Authorization: Bearer` - it no longer
+sends `X-AUTH-*` headers at all, because the gateway injects those from the
+token's claims and strips anything the client supplied. Its `rvfBaseUrl` is the
+**public** URL for the same reason: it exercises the path SI takes rather than a
+shortcut nobody else uses, and it keeps the NetworkPolicy tight.
+
+Verified against the live Keycloak 2026-09-03: the token endpoint answers a
+credential-less `client_credentials` request with
+`401 unauthorized_client`, which is the shape the pipeline's error handling
+expects, so only the client and secret are missing.
 
 ### The acceptance tests that matter
 

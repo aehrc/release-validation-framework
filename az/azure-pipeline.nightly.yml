@@ -39,8 +39,11 @@
 #      DYNAMIC azurefile PVC, whose share name is generated - so either bind a
 #      static share or read the generated name once and set it here. This is the
 #      one precondition that cannot be inferred from the repo.
-#   3. `X-AUTH-*` headers accepted. RVF validates none of them, so the API must
-#      sit behind a gateway that injects them and strips client-supplied ones.
+#   3. A Keycloak service-account client whose token this pipeline can obtain,
+#      and whose service-account user is in the group the gateway's
+#      SecurityPolicy requires. The gateway injects the `X-AUTH-*` headers RVF
+#      reads from the token's claims and strips any the client sent, so this
+#      pipeline sends a Bearer token and nothing else.
 
 name: 'nightly-rvf-duck-$(Date:yyyyMMdd)$(Rev:.r)'
 
@@ -58,9 +61,23 @@ resources:
 
 parameters:
   - name: rvfBaseUrl
-    displayName: 'Base URL of the deployed RVF API'
+    displayName: 'Base URL of the deployed RVF API, through the gateway'
     type: string
-    default: 'http://rvf-api.rvf.svc.cluster.local:8080'
+    # The PUBLIC URL, deliberately, not the in-cluster Service. Going through
+    # the Envoy gateway means this pipeline exercises exactly the path SI uses -
+    # OIDC/JWT, header injection, body limits and all - rather than a route
+    # nobody else takes. It also keeps the NetworkPolicy tight: only the gateway
+    # may reach rvf-api, so an in-cluster shortcut would have to be punched
+    # through it.
+    default: 'https://ncts-rvf.australiaeast.cloudapp.azure.com'
+  - name: keycloakIssuer
+    displayName: 'Keycloak issuer (note the /auth path segment)'
+    type: string
+    default: 'https://auth.ontoserver.csiro.au/auth/realms/aehrc'
+  - name: authClientId
+    displayName: 'Service-account client used to obtain a token'
+    type: string
+    default: 'si-rvf-client'
   - name: jobStoreAccount
     displayName: 'Storage account holding the job store share'
     type: string
@@ -208,10 +225,56 @@ stages:
                 echo "staged at ${{ parameters.jobStorePrefix }}/$NAME"
 
           - task: Bash@3
+            displayName: 'Get an access token from Keycloak'
+            condition: eq(variables['bundle.haveBundle'], 'true')
+            env:
+              CLIENT_SECRET: $(rvf.si.client.secret)
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+
+                # client_credentials, because a pipeline cannot follow a login
+                # redirect. The gateway's SecurityPolicy accepts this token via
+                # its `jwt` provider and authorises on the `groups` claim, so the
+                # service-account user for this client MUST be a member of the
+                # required group or every request 403s with a valid token.
+                ISSUER='${{ parameters.keycloakIssuer }}'
+                HTTP="$(curl -sS -m 60 -o token.json -w '%{http_code}' \
+                  -X POST "$ISSUER/protocol/openid-connect/token" \
+                  -d grant_type=client_credentials \
+                  -d client_id='${{ parameters.authClientId }}' \
+                  --data-urlencode "client_secret=$CLIENT_SECRET")"
+
+                if [ "$HTTP" != "200" ]; then
+                  echo "##vso[task.logissue type=error]token request returned HTTP $HTTP"
+                  # The body names the cause - invalid_client for a bad secret,
+                  # unauthorized_client if service accounts are not enabled -
+                  # and contains no token, so it is safe to print.
+                  head -c 400 token.json || true
+                  exit 1
+                fi
+
+                TOKEN="$(python3 -c "import json;print(json.load(open('token.json'))['access_token'])")"
+                [ -n "$TOKEN" ] || { echo "##vso[task.logissue type=error]no access_token in response"; exit 1; }
+
+                # issersecret so it never appears in a log, even if a later step
+                # echoes the command it ran.
+                echo "##vso[task.setvariable variable=accessToken;issecret=true]$TOKEN"
+
+                # Expiry is worth logging: a validation can outlast a short-lived
+                # token, and the poll loop would then start 401ing mid-run.
+                python3 -c "
+                import json
+                d = json.load(open('token.json'))
+                print(f\"  token acquired, expires_in {d.get('expires_in')}s\")
+                "
+
+          - task: Bash@3
             displayName: 'Submit the validation'
             condition: eq(variables['bundle.haveBundle'], 'true')
             env:
-              RVF_TOKEN: $(rvf.auth.token)
+              ACCESS_TOKEN: $(accessToken)
             inputs:
               targetType: 'inline'
               script: |
@@ -226,9 +289,11 @@ stages:
                 # command - so it goes in a bash array.
                 ARGS=(
                   -X POST '${{ parameters.rvfBaseUrl }}/run-post-via-s3'
-                  -H "X-AUTH-username: $(Build.RequestedForEmail)"
-                  -H 'X-AUTH-roles: ROLE_ihtsdo-ops-admin'
-                  -H "X-AUTH-token: $RVF_TOKEN"
+                  # A Bearer token, NOT X-AUTH-*. The gateway authenticates the
+                  # JWT and injects the X-AUTH-* headers itself, stripping any
+                  # the client sent - so sending them here would at best be
+                  # ignored and at worst look like a spoofing attempt.
+                  -H "Authorization: Bearer $ACCESS_TOKEN"
                   -F "runId=$RUN_ID"
                   -F "storageLocation=$STORAGE_LOCATION"
                   -F "releaseFileS3Path=$(releasePath)"
@@ -272,7 +337,7 @@ stages:
             displayName: 'Wait for the validation to finish'
             condition: eq(variables['bundle.haveBundle'], 'true')
             env:
-              RVF_TOKEN: $(rvf.auth.token)
+              ACCESS_TOKEN: $(accessToken)
             inputs:
               targetType: 'inline'
               script: |
@@ -303,9 +368,7 @@ stages:
 
                 while [ "$(date +%s)" -lt "$DEADLINE" ]; do
                   HTTP="$(curl -sS -m 120 -o report.json -w '%{http_code}' \
-                    -H "X-AUTH-username: $(Build.RequestedForEmail)" \
-                    -H 'X-AUTH-roles: ROLE_ihtsdo-ops-admin' \
-                    -H "X-AUTH-token: $RVF_TOKEN" "$URL" || true)"
+                    -H "Authorization: Bearer $ACCESS_TOKEN" "$URL" || true)"
 
                   if [ "$HTTP" = "200" ]; then
                     set +e
