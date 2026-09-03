@@ -64,14 +64,47 @@ stages:
     displayName: 'Build and push the RVF server image'
     jobs:
       - job: Push
+        # HOSTED, not ncts-k8s-dedicated-pool. Build 16149 failed on the
+        # self-hosted pool with:
+        #
+        #   Non-resolvable parent POM for org.ihtsdo.drools:snomed-drools:
+        #   Cannot access ihtsdo-releases (https://nexus3.ihtsdotools.org/...)
+        #
+        # That agent reaches Maven Central fine - it fetched plexus artifacts in
+        # the same step - but not SI's Nexus, and `org.snomed:snomed-parent-bom`
+        # is ONLY there: Central 404s it. Every SI parent POM this project and
+        # its three forks inherit from has the same problem, so nothing Java
+        # builds on that pool without an egress change.
+        #
+        # This job needs internet and ACR, not the cluster, so a hosted agent
+        # sidesteps the whole question. Every other Maven pipeline in this
+        # project already uses the hosted queue.
         pool:
-          name: ncts-k8s-dedicated-pool
+          vmImage: ubuntu-latest
         timeoutInMinutes: 90
         steps:
           - checkout: self
             # The version and the forks come from the tree, and the commit is
             # baked in as a tag, so a shallow checkout is fine.
             fetchDepth: 1
+
+          - task: Bash@3
+            displayName: 'Install JDK 25'
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                # Hosted images ship 8/11/17/21, and the parent BOM sets
+                # java.version=25, so the toolchain has to come down explicitly.
+                # Adoptium's API resolves the current GA build for a feature
+                # version, which avoids pinning a patch that later disappears.
+                URL='https://api.adoptium.net/v3/binary/latest/25/ga/linux/x64/jdk/hotspot/normal/eclipse'
+                curl -fsSL -o /tmp/jdk25.tar.gz "$URL"
+                sudo mkdir -p /opt/jdk25
+                sudo tar -xzf /tmp/jdk25.tar.gz -C /opt/jdk25 --strip-components=1
+                echo "##vso[task.setvariable variable=JAVA_HOME]/opt/jdk25"
+                echo "##vso[task.prependpath]/opt/jdk25/bin"
+                /opt/jdk25/bin/java -version
 
           - task: Bash@3
             name: coords
