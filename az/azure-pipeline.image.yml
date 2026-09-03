@@ -11,7 +11,7 @@
 #   * ADO definition 63 `rvf-duck-image` DOES push, but it builds the **Python**
 #     DuckDB engine from `aehrc/rvf@rvf-duck` - a different codebase - and it
 #     pushes `aehrc-rvf/rvf-duck`. This image is the Java RVF server, so it is
-#     `aehrc-rvf/rvf-server`. Sharing a repository name between two unrelated
+#     `aehrc-rvf/release-validation-framework` with the engine in the TAG. Sharing a repository name between two unrelated
 #     artefacts is how a cluster ends up running the wrong one.
 #
 # NOT VERIFIED. Written 2026-09-03 on a host with no `az`, no Docker and no

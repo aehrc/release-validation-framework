@@ -8,6 +8,40 @@ Written 2026-09-03 against `catchup-upgraded`.
 
 ---
 
+## 0. What is done, and what is yours
+
+**Done, nothing to set up:**
+
+* The image is built, tested and pushed by CI - ADO definition **65
+  `rvf-duckdb-server-image`**. A run with default parameters builds the three
+  pinned libraries, runs 340 tests, and pushes. See §2.
+* The nightly pipeline is written and wired as ADO definition **66
+  `rvf-duckdb-nightly`**, created **disabled** on purpose: it triggers off
+  `daily-rvf`'s `RvfStage`, so enabling it before the API exists would fail
+  every night. Enable it once §8's answers are in.
+* Every manifest references the image tag CI produces, so no YAML needs editing
+  before you apply it.
+
+**Yours, in order:**
+
+| # | do | detail |
+|---|---|---|
+| 1 | decide **split or single container** | §1 and `k8s/README.md`. Single needs no broker or shared volume and is the honest choice if only the nightly runs |
+| 2 | create secret `activemq-credentials`, confirm KEDA | §3 |
+| 3 | `kubectl apply -f k8s/rvf-aks.yaml` | §3 |
+| 4 | run the **cross-node** smoke test | §5. Pass condition is a report written by a worker being served by an API replica that never ran it |
+| 5 | set up Keycloak, fill 5 placeholders, apply `k8s/rvf-auth-ingress.yaml` | §6 |
+| 6 | run all three acceptance tests | §6. **Do not skip the header-spoofing one** |
+| 7 | send back the six answers | §8 |
+
+**The five placeholders**, all in `k8s/rvf-auth-ingress.yaml`:
+`client-secret`, `cookie-secret`, `KEYCLOAK_HOST`, `REALM`, `RVF_PUBLIC_HOST`.
+
+**Nothing here has been applied to a cluster**, because there was no cluster
+access from where it was written. Everything checkable without one has been
+checked, and where something is unverified it says so rather than implying
+otherwise.
+
 ## 1. What this deployment is
 
 An RVF that validates a SNOMED release using **DuckDB instead of MySQL**. Same
@@ -390,7 +424,7 @@ relocating them into a `deploy/` tree would break both for tidiness alone.
 
 | file | why |
 |---|---|
-| `az/azure-pipeline.image.yml` | rebuilds and pushes the image from a committed tree; needs a definition creating |
+| `az/azure-pipeline.image.yml` | rebuilds and pushes the image; **already wired as ADO definition 65 `rvf-duckdb-server-image`** - run it, nothing to set up |
 | `az/azure-pipeline.nightly.yml` | the nightly against the deployed API. **Blocked on the two answers in §8** |
 | `az/azure-pipeline.engine-ab.yml` | PR gate, runs both engines on an agent. Nothing to do with the cluster |
 | `duck/build-pinned-forks.sh` | builds the three forked libraries the pom pins; CI calls it |
