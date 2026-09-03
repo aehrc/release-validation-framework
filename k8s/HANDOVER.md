@@ -32,13 +32,51 @@ a second concurrent consumer exists.
 
 ---
 
-## 2. Push the image
 
-**Prefer CI.** `az/azure-pipeline.image.yml` in this repo builds and pushes it,
-tagged by both version and commit, so a running pod is traceable to a tree and
-nobody's laptop is in the supply chain. Create it as a definition against this
-repo and branch and run it manually - it is `trigger: none` deliberately, since
-an image push is not something a pull request should do.
+## 2. The image
+
+Already in ACR, pushed 2026-09-03 from `catchup-upgraded@6393b937dcca`:
+
+    ontoserver.azurecr.io/aehrc-rvf/release-validation-framework:9.0.1-duckdb
+    ontoserver.azurecr.io/aehrc-rvf/release-validation-framework:9.0.1-duckdb.6393b937dcca
+
+    digest  sha256:e866fa2cad9f81762763c7fdba98f96e52e6f2fbf791aff8e697bf76a078e894
+
+Both tags are that one digest. **The manifests already reference
+`:9.0.1-duckdb`, so nothing needs editing** - though pinning the
+`.6393b937dcca` tag makes the deployed image immutable, which is the better
+choice for anything long-lived.
+
+Nothing else in that repository was disturbed. It already held nine tags
+(`production-20260818`, `known-good-*`, `drools-*`, `latest`). `latest` still
+points at its 2023-05-03 image and was deliberately left alone: the repository
+is shared with other RVF builds, so `latest` there does not mean "the DuckDB
+engine". The registry has no webhooks - checked before pushing - so the push
+could not have redeployed anything.
+
+**What is inside:** the jar, the Drools rules at `/app/snomed-drools-rules`, the
+assertion corpus at `/app/snomed-release-validation-assertions`, and the
+precompiled assertion store at `/app/resources/duck/store.json`. Nothing needs
+provisioning afterwards — on the first run the log says
+`Assertion store bundled /duck/store.json verified against 360 corpus files`.
+
+---
+
+### Rebuilding it
+
+**That first push was by hand, and that is the last one that should be.** The
+image must be rebuildable from a committed tree by CI, or the thing running in
+production is whatever happened to be on somebody's machine that afternoon.
+
+`az/azure-pipeline.image.yml` does it: it resolves the version from the pom,
+builds the three pinned forks, runs the test suite, and pushes tagged by both
+version and commit. It needs a pipeline definition creating against this repo
+and branch. `trigger: none` is deliberate - an image push is not something a
+pull request should do - so it is run manually or from a release process.
+
+Everything it needs is committed: the patches in `duck/`, the build scripts, and
+`checkout-resources.sh` pinned to explicit corpus and rules commits so two
+builds of one tree produce the same image.
 
 Two other places build an image and neither publishes THIS one, which is worth
 knowing before assuming CI already covers it:
@@ -50,169 +88,8 @@ knowing before assuming CI already covers it:
   DuckDB engine from `aehrc/rvf@rvf-duck`, a different codebase, and it pushes
   `aehrc-rvf/rvf-duck`.
 
-**That last point mattered.** The manifests here used to pull
-`aehrc-rvf/rvf-duck:latest`, which is definition 63's Python engine image, not
-this Java server. Applying them would have deployed the wrong artefact, or
-whichever of the two pushed last.
-
-Now they pull **`aehrc-rvf/release-validation-framework:9.0.1-duckdb`** - the
-repository the pom's own coordinates produce, which is also where MySQL-engine
-builds of RVF live. **The engine is therefore in the TAG**, and a bare `9.0.1`
-must never be pushed here: it would be ambiguous at best and would shadow an
-existing build at worst. `latest` is left alone for the same reason.
-
-Every push also gets an immutable `9.0.1-duckdb.<sha12>` companion, so a running
-pod is traceable to a tree after the primary tag moves. Because the primary tag
-moves, both manifests set `imagePullPolicy: Always` - the default for any tag
-other than `latest` is `IfNotPresent`, which would quietly keep an old layer set
-after a re-push.
-
-### Doing it by hand instead
-
-    ./duck/push-image.sh              # resolves the subscription, pushes both tags
-    DRY_RUN=1 ./duck/push-image.sh    # resolve and report, push nothing
-
-The script exists because three things here are easy to get wrong: `az acr
-login` wants a Docker daemon while `--expose-token` does not; the registry may
-not be in the subscription you are defaulted to; and the repository is shared
-with MySQL-engine builds, so it refuses to push a tag that does not name the
-engine. It prints the tags that already exist before pushing, and fails if the
-immutable tag for the current commit is already there.
-
-Note that a tenant named for the registry is not the same thing as a
-subscription named similarly, and the two can differ in whether MFA or
-conditional access blocks token issuance. The script says which subscription it
-found the registry in, and what to do if it finds none.
-
-
-
-Built with jib, so **no Docker daemon is required** — it assembles and pushes
-layers itself. Verified: a 480 MB amd64 tarball builds from a clean tree.
-
-Note two things the command has to override, because the defaults are wrong for
-us: the pom's coordinates produce `.../release-validation-framework`, while the
-manifests pull `.../rvf-server`, and the default registry is Docker Hub.
-
-    # daemon-free: ACR issues a token, jib uses it directly
-    TOKEN=$(az acr login --name ontoserver --expose-token \
-              --output tsv --query accessToken)
-
-    mvn -B -ntp package -DskipTests jib:build \
-        -Djib.from.platforms=linux/amd64 \
-        -Djib.to.image=ontoserver.azurecr.io/aehrc-rvf/release-validation-framework:9.0.1-duckdb \
-        -Djib.to.tags=latest \
-        -Djib.to.auth.username=00000000-0000-0000-0000-000000000000 \
-        -Djib.to.auth.password="$TOKEN"
-
-If you have a daemon and prefer it, `az acr login --name ontoserver` then the
-same command without the two `auth` flags.
-
-`linux/amd64` only, deliberately. The pom declares arm64 as well for local Macs;
-building both doubles push time for a platform no node runs.
-
-**What is inside:** the jar, the Drools rules at `/app/snomed-drools-rules`, the
-assertion corpus at `/app/snomed-release-validation-assertions`, and the
-precompiled assertion store at `/app/resources/duck/store.json`. Nothing needs
-provisioning afterwards — on the first run the log says
-`Assertion store bundled /duck/store.json verified against 360 corpus files`.
-
----
-
-## 2. DONE — the image is in ACR
-
-Pushed 2026-09-03 from `catchup-upgraded@6393b937dcca`:
-
-    ontoserver.azurecr.io/aehrc-rvf/release-validation-framework:9.0.1-duckdb
-    ontoserver.azurecr.io/aehrc-rvf/release-validation-framework:9.0.1-duckdb.6393b937dcca
-
-    digest  sha256:e866fa2cad9f81762763c7fdba98f96e52e6f2fbf791aff8e697bf76a078e894
-
-Both tags point at that one digest. `k8s/rvf-aks.yaml` and
-`k8s/rvf-scaledjob.yaml` already reference `:9.0.1-duckdb`, so **the manifests
-need no editing** — but pin the `.6393b937dcca` tag instead if you want the
-deployed image immutable.
-
-**Nothing else in that repository was disturbed.** It already held nine tags
-(`production-20260818`, `known-good-*`, `drools-*`, `latest` and others).
-`latest` still points at its 2023-05-03 image and was deliberately left alone:
-this repository is shared, and `latest` here does not mean "the DuckDB engine".
-The registry has **no webhooks**, checked before pushing, so the push could not
-trigger a redeploy of anything.
-
-Re-push a newer commit with `./duck/push-image.sh`. It refuses to overwrite the
-immutable tag for a commit already pushed.
-
-## 2a. Building it on a different machine first
-
-**A fresh checkout cannot build.** The pom pins three libraries to
-`-aehrc-perf` versions that exist in **no remote repository** - they are built
-from IHTSDO sources plus the patches in `duck/` and installed into the local
-Maven repo. `mvn package` on a clean laptop fails to resolve them.
-
-One command fixes that, from the repo root:
-
-    ./duck/build-pinned-forks.sh
-
-It reads the three versions out of the pom, clones each upstream at a pinned
-commit, applies the patch, installs, and then gates on the artefacts actually
-resolving. Verified from clean clones: about 30 seconds with a warm Maven repo.
-
-It exists because the individual scripts each carry their own default version
-and those had drifted behind the pom - 6.1.1 against 6.1.3, 4.0.3 against 4.0.4
-- so running them with no argument installs artefacts the pom does not want and
-the build still fails, one version number away from working. The wrapper takes
-the pom as the single source of truth.
-
-Needs JDK 25, maven, git, and network to github.com and Maven Central. Honours
-`MAVEN_REPO_LOCAL` and `FORKS_BUILD_DIR`; defaults to `~/.m2/repository` and a
-temporary directory.
-
-**The corpus and rules are fetched, not committed.** `snomed-drools-rules/` and
-`snomed-release-validation-assertions/` are gitignored and cloned by
-`checkout-resources.sh`, which the pom runs during the build. That script is
-**pinned to explicit commits**, deliberately: upstream's version clones a branch
-with no ref, and on 2026-08-07 the first rebuild in two years picked up two
-years of drift and RVF failed to start - IHTSDO had removed the `_EDITION` SQL
-variants while the manifest still referenced four of them, and the k8s job was
-killed after 12 minutes having produced no report. Because it is pinned, a
-laptop build gets the same corpus this repo's baked assertion store was compiled
-against, and the image's startup check
-(`verified against 360 corpus files`) passes.
-
-So the whole sequence on a laptop is:
-
-    git clone -b catchup-upgraded <this repo> && cd release-validation-framework
-    ./duck/build-pinned-forks.sh
-    TOKEN=$(az acr login --name ontoserver --expose-token --output tsv --query accessToken)
-    mvn -B -ntp package -DskipTests jib:build \
-        -Djib.from.platforms=linux/amd64 \
-        -Djib.to.image=ontoserver.azurecr.io/aehrc-rvf/release-validation-framework:9.0.1-duckdb \
-        -Djib.to.tags=latest \
-        -Djib.to.auth.username=00000000-0000-0000-0000-000000000000 \
-        -Djib.to.auth.password="$TOKEN"
-
-## 2b. Registry coordinates, confirmed
-
-    registry        ontoserver.azurecr.io
-    repository      aehrc-rvf/release-validation-framework
-    subscription    4407201c-ec5b-4324-8190-643fd3b0d49a
-                    "CSIRO EA Dev_Test - ontoserver dev"
-    tenant          0fe05593-19ac-4f98-adbf-0375fce7f160  (CSIRO)
-
-Confirmed 2026-09-03. Two things about this are worth writing down because they
-cost a round of failed logins:
-
-* That is a CSIRO **subscription** named "ontoserver dev". There is also a
-  separate **tenant** named `Ontoserver`
-  (`2c78fe1e-6ae0-4f69-ada0-b39b4f6ffa30`) which is NOT where the registry is,
-  and which rejects a plain `az login` with `AADSTS50076` - MFA required. Do not
-  chase it.
-* A plain `az login` lands in the CSIRO tenant, which is the right one, even
-  though it emits conditional-access warnings for the ADHA, Ontoserver and DXC
-  tenants on the way. Those warnings are noise for this purpose.
-
-`duck/push-image.sh` tries this subscription first and falls back to scanning
-every visible one, so it keeps working if the registry moves.
+`duck/push-image.sh` remains for break-glass use and documents the
+subscription, the token dance and the tagging rules, but prefer the pipeline.
 
 ## 3. What `rvf-aks.yaml` is, object by object
 
@@ -343,58 +220,176 @@ inferred:
 | no `X-AUTH-*` headers | 401 |
 | `X-AUTH-username` only | 401 |
 
-`RequestHeaderAuthenticationDecorator` builds a `PreAuthenticatedAuthentication‐
-Token` out of `X-AUTH-username` / `-roles` / `-token` and **validates none of
-them**. `SecurityConfig` is `.anyRequest().authenticated()` with **zero**
-`@PreAuthorize`, `@Secured` or `hasRole` anywhere in the codebase — so
-`X-AUTH-roles` is decorative. The roles you send gate nothing.
+`RequestHeaderAuthenticationDecorator` builds a
+`PreAuthenticatedAuthenticationToken` out of `X-AUTH-username` / `-roles` /
+`-token` and **validates none of them**. `SecurityConfig` is
+`.anyRequest().authenticated()` with **zero** `@PreAuthorize`, `@Secured` or
+`hasRole` anywhere in the codebase - so `X-AUTH-roles` gates nothing inside RVF.
+
+That is not a defect to work around: it is the design. SI runs RVF behind an
+identity service that sets those headers, and what follows is that service's
+replacement.
 
 Unauthenticated by design: `/version`, `/swagger-ui.html`, `/swagger-ui/**`,
-`/v3/api-docs/**`.
+`/v3/api-docs/**`. Everything else needs the three headers and nothing more.
 
-So the security model is simply: **anyone who can reach port 8080 can do
-anything** — submit runs, read every report, delete releases. There is no
-authorisation layer to harden, only reachability.
+### Decision: Keycloak in front, via oauth2-proxy
 
-### The options
+RVF is to be **internet-facing so SI can run releases against it**, which rules
+out the cheap options. `k8s/rvf-auth-ingress.yaml` implements it.
 
-**A. Cluster-internal only. No ingress.** Leave the Service as `ClusterIP`. The
-only caller is the nightly pipeline, and its agents already run in this cluster
-(`ncts-k8s-dedicated-pool`), so nothing needs to be exposed. Cost: nothing.
-Humans read results in the Azure DevOps test tab, which is already built.
+    internet -> ingress-nginx (TLS) -> oauth2-proxy -> rvf-api (ClusterIP)
+                                          |
+                                      Keycloak (OIDC)
 
-**B. Ingress with an identity-aware proxy.** Put OAuth2 Proxy or equivalent in
-front, authenticate against Entra, and have the proxy **inject** the `X-AUTH-*`
-headers and — critically — **strip any the client supplied**. Needed only when
-humans need the RVF UI or the Release Dashboard directly.
+**oauth2-proxy sits IN the request path, not beside it.** ingress-nginx's
+`auth-url` pattern would leave nginx forwarding the original request, so
+translating oauth2-proxy's `X-Auth-Request-*` response headers into RVF's
+`X-AUTH-*` needs a `configuration-snippet` - and snippet annotations have been
+disabled by default since ingress-nginx 1.9 (CVE-2021-25742). Proxying instead
+lets oauth2-proxy inject the exact header names RVF wants, with no snippet and
+no cluster-wide policy change.
 
-**C. Ingress with the headers accepted as-is.** **Do not.** It makes every
-reader an administrator, and the 200s in the table above are why.
+**Header mapping**, via oauth2-proxy's alpha config, which is the only form that
+can inject arbitrary header names:
 
-**D. Make RVF validate the token.** A real fix and upstream-worthy, but it is a
-change to `ihtsdo-spring-sso`'s contract and blocks the deployment on a code
-change nobody has scoped.
+| RVF header | source | note |
+|---|---|---|
+| `X-AUTH-username` | `preferred_username` | |
+| `X-AUTH-roles` | a `rvf_roles` claim | **must be comma separated** - RVF passes it straight to `AuthorityUtils.commaSeparatedStringToAuthorityList` |
+| `X-AUTH-token` | the access token | RVF ignores it but FORWARDS it to the traceability and acceptance-gateway clients |
 
-### Recommendation
+**Both a browser flow and a machine flow**, because SI submitting a release from
+their CI cannot follow a login redirect. `--skip-jwt-bearer-tokens=true` (badly
+named: it *enables* Bearer validation) accepts a Keycloak-issued JWT on the
+`Authorization` header, while browsers get the ordinary OIDC cookie flow.
+`--bearer-token-login-fallback=false` makes a bad token a 401 rather than a 302
+to a page an API client cannot use. If SI's service-account tokens carry a
+different audience, `--extra-jwt-issuers` is the flag.
 
-**Start with A, and treat B as the trigger for exposing anything.**
+**`--allowed-group=rvf-users` is not optional.** It is the *entire*
+authorisation model: RVF checks no roles, so every authenticated realm user
+would otherwise be able to submit runs, read every report and delete releases.
+Authorisation lives at the proxy or it does not exist.
 
-The parallel run needs no ingress at all: the pipeline is the only client and it
-is in-cluster. That gets the nightly running against zero new attack surface,
-and defers the identity work to the point where a human actually needs a URL.
+**Two things that make an 853MB upload work**, and are 413s or timeouts
+otherwise: `proxy-body-size: 2g` (the nginx default is 1m, and it fails *after*
+the client has sent the whole body) and `proxy-request-buffering: off`, so the
+ingress does not spool hundreds of megabytes to disk before forwarding a byte.
+Better still, have SI stage releases into the job store and use
+`/run-post-via-s3`, which moves no body through the ingress at all.
 
-If B becomes necessary, the non-negotiable part is the **stripping**, not the
-injecting. An ingress that adds `X-AUTH-username` while passing through a
-client-supplied one is option C wearing a hat.
+**A NetworkPolicy** restricts `rvf-api` to the proxy, so an Ingress later
+pointed at `rvf-api` by mistake does not become an open door. Note it has
+deliberately no second rule: an ingress rule with `from: []` means "from
+anywhere" and would silently negate the first, which looks like a policy and is
+not one. If your CNI blocks kubelet probes, add the node CIDR rather than
+widening it.
 
-Two things to write down whichever way you go: `/version` is unauthenticated and
-will answer to anyone who can route to the pod, and network policy is doing all
-the work here, so treat namespace-level egress/ingress rules as part of the
-security control rather than as tidiness.
+### What to create in Keycloak
 
----
+1. A confidential client `rvf` with the redirect URI
+   `https://RVF_PUBLIC_HOST/oauth2/callback`.
+2. A group `rvf-users`, and a `groups` claim mapper so membership reaches the
+   token.
+3. A `rvf_roles` claim mapper emitting a **comma-separated** string. If a
+   multi-valued mapper is used instead, verify how oauth2-proxy joins it before
+   trusting the result - see the acceptance tests.
+4. For SI: a service-account client with the `rvf-users` group, so their CI can
+   fetch a token by client credentials.
 
-## 7. What comes back to us
+### The acceptance tests that matter
+
+Three, and the third is the one people skip:
+
+    # 1. anonymous is refused
+    curl -si https://RVF_PUBLIC_HOST/releases | head -1
+    # expect 302 to Keycloak (browser flow) or 401
+
+    # 2. a service-account token works
+    TOKEN=$(curl -s -X POST \
+      https://KEYCLOAK_HOST/realms/REALM/protocol/openid-connect/token \
+      -d grant_type=client_credentials -d client_id=si-rvf-client \
+      -d client_secret=... | python3 -c 'import json,sys;print(json.load(sys.stdin)["access_token"])')
+    curl -si -H "Authorization: Bearer $TOKEN" https://RVF_PUBLIC_HOST/releases | head -1
+    # expect 200
+
+    # 3. HEADER SPOOFING IS REFUSED - the one that decides whether any of this works
+    curl -si https://RVF_PUBLIC_HOST/releases \
+      -H 'X-AUTH-username: attacker' \
+      -H 'X-AUTH-roles: ROLE_ihtsdo-ops-admin' \
+      -H 'X-AUTH-token: anything' | head -1
+    # expect 302/401. A 200 means the proxy passed the client's own headers
+    # through and the whole deployment is wide open, because those three headers
+    # are all RVF has ever required.
+
+Test 3 is not paranoia: `X-AUTH-token: totally-made-up-token` returns 200
+against RVF directly, measured. oauth2-proxy strips headers it sets itself, but
+these are custom names, so prove it rather than assume it.
+
+### Rejected, and why
+
+* **ClusterIP with no ingress.** What I would recommend for the nightly alone,
+  and it is what the pipeline needs - but it cannot serve SI, who are the point
+  of exposing this.
+* **Ingress passing `X-AUTH-*` straight through.** Every reader becomes an
+  administrator.
+* **Keycloak Gatekeeper / Louketo.** Archived upstream.
+* **Making RVF validate the token itself.** The right long-term answer and worth
+  raising with SI, since it would close the gap for every RVF deployment rather
+  than ours. It is a change to `ihtsdo-spring-sso`'s contract, so it does not
+  block this. Until then the proxy is a single point of failure for
+  authentication, and that is worth stating plainly to whoever signs off.
+
+## 7. The file set, and where it lives
+
+Everything is on `catchup-upgraded` in this repository. **Nothing has been moved
+for this handover, deliberately**: the ADO pipeline definitions reference
+`az/azure-pipeline.*.yml` by path, and the docs cross-reference each other, so
+relocating them into a `deploy/` tree would break both for tidiness alone.
+
+### Yours to apply
+
+| file | what it is |
+|---|---|
+| `k8s/HANDOVER.md` | this document - start here |
+| `k8s/rvf-aks.yaml` | the deployment: PVCs, ActiveMQ, API, worker pool, KEDA |
+| `k8s/rvf-auth-ingress.yaml` | Keycloak via oauth2-proxy, ingress, TLS, NetworkPolicy |
+| `k8s/rvf-scaledjob.yaml` | job-per-run alternative to the worker Deployment; pick one |
+
+### Read before deciding, do not apply
+
+| file | why it matters to you |
+|---|---|
+| `k8s/README.md` | the **single-container** option: no broker, no shared volume, zero configuration. Honestly the better choice if only the nightly runs; the split earns its keep with concurrent consumers |
+| `k8s/HOSTING.md` | why listener-claims-work was chosen over job-per-run, and what was rejected |
+| `k8s/SCALING.md` | sizing rationale. **Superseded on memory by §4 here** - it predates the MRCM measurement and says 10Gi where 16Gi is needed |
+| `k8s/rvf.yaml` | the Docker Desktop proof. Uses `hostPath`, so it cannot span nodes - reference only |
+
+### Ours, not yours, but you will be asked about them
+
+| file | why |
+|---|---|
+| `az/azure-pipeline.image.yml` | rebuilds and pushes the image from a committed tree; needs a definition creating |
+| `az/azure-pipeline.nightly.yml` | the nightly against the deployed API. **Blocked on the two answers in §8** |
+| `az/azure-pipeline.engine-ab.yml` | PR gate, runs both engines on an agent. Nothing to do with the cluster |
+| `duck/build-pinned-forks.sh` | builds the three forked libraries the pom pins; CI calls it |
+| `duck/push-image.sh` | break-glass manual push; documents the subscription and tagging rules |
+| `duck/ROADMAP.md` | the whole plan this deployment is phase 2 and 3 of |
+| `duck/NIGHTLY-PLAN.md` | where the runtime went and what is left; the source of the 16Gi figure |
+
+### Suggested order
+
+1. Read §1 and `k8s/README.md`, and decide **split or single container**. If
+   single, most of `rvf-aks.yaml` stops being relevant and the auth layer still
+   applies.
+2. Create the `activemq-credentials` secret and confirm KEDA is installed.
+3. Apply `k8s/rvf-aks.yaml`. Run the §5 smoke test - the cross-node one.
+4. Set up Keycloak per §6, apply `k8s/rvf-auth-ingress.yaml`, run all three
+   acceptance tests. **Do not skip the spoofing test.**
+5. Send back the two answers in §8.
+
+## 8. What comes back to us
 
 1. **The `rvf-jobs` share name** (or confirmation of a static share) — this
    unblocks `az/azure-pipeline.nightly.yml`, which cannot run without it.
@@ -406,6 +401,12 @@ security control rather than as tidiness.
    `terminationGracePeriodSeconds: 600` — which covers a 13-minute DuckDB run
    but would not have covered a 23-minute MySQL one.
 4. **Whether the node SKU can back a 40Gi `emptyDir`** per worker.
+5. **The public hostname** you give it, and the Keycloak realm and issuer URL,
+   so `k8s/rvf-auth-ingress.yaml`'s placeholders can be filled in and the SI
+   service-account client can be described to them.
+6. **The result of acceptance test 3** - the header-spoofing one. That single
+   result is the difference between an internet-facing RVF that is secured and
+   one that is wide open, and it is not something we can test from here.
 
 Once 1 and 2 are back, the nightly can run alongside `daily-rvf` and the two
 reports can be compared night by night with `ci/compare_reports.py --gate`.
