@@ -42,6 +42,24 @@ access from where it was written. Everything checkable without one has been
 checked, and where something is unverified it says so rather than implying
 otherwise.
 
+## 0-PR. The Argo PR is raised
+
+**https://github.com/aehrc/ncts-argo/pull/32** - `feat/rvf-duckdb-nightly`,
+adding `ncts-apps/rvf-duckdb.yaml`.
+
+That is the mechanism for steps 2-5 below: this cluster is ArgoCD-managed, so
+`kubectl apply` is not the house pattern. Reviewing and merging that PR is what
+deploys this.
+
+The Application is **pinned to commit `7ccad415`** rather than tracking
+`catchup-upgraded`, because that branch is active and automated sync would
+deploy every push. Bumping the SHA in a PR is the upgrade path.
+
+Keycloak and Vault are already done - clients `rvf` and `si-rvf-client`, group
+`rvf-users`, `acl_vlt_od225632/kv/data/rvf`, and the `si-rvf-client` secret as
+the ADO variable `rvf.si.client.secret`. So nothing in section 6 is outstanding
+except applying it and running the acceptance tests.
+
 ## 0a. Which cluster, and why
 
 There is no cluster called `ncts-dev-k8s`. The estate is:
