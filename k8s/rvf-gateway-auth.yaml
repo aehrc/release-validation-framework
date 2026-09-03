@@ -1,0 +1,264 @@
+# Internet-facing RVF on ncts-k8s-cluster: Envoy Gateway, Keycloak, and the
+# X-AUTH-* headers RVF actually reads.
+#
+# WHY ENVOY GATEWAY AND NOT NGINX + oauth2-proxy
+#
+# `ncts-argo/CLAUDE.md` states "Envoy Gateway is primary ingress (three
+# GatewayClasses); NGINX ingress used for specific apps (LLM2Apps, Ontoserver
+# instances)". So Envoy is the house default and RVF is not one of the
+# exceptions. It also removes a component: Envoy's SecurityPolicy does the OIDC
+# flow, validates Bearer JWTs, injects headers from claims and enforces
+# authorisation, all of which oauth2-proxy would otherwise have done.
+#
+# The shape here follows the existing in-house template at
+# aehrc/snowstorm-logs-importer/charts/snowstorm-logs-importer/templates/
+# envoy-gateway-resources.yaml, and the Gateway/HTTPRoute shape follows
+# grafana-gw on this cluster.
+#
+# WHAT RVF NEEDS, AND WHY THIS IS THE WHOLE SECURITY MODEL
+#
+# RVF has no authentication and no authorisation of its own. Measured:
+#
+#     X-AUTH-token: local                  -> 200
+#     X-AUTH-token: totally-made-up-token  -> 200
+#     X-AUTH-token: '' (empty)             -> 200
+#     no X-AUTH-* headers                  -> 401
+#
+# It builds a PreAuthenticatedAuthenticationToken from three headers and
+# validates none of them, and there is no @PreAuthorize, @Secured or hasRole
+# anywhere in the codebase. So:
+#
+#   * `authorization.defaultAction: Deny` plus the `groups` rule below IS the
+#     access control list. Anything Envoy admits can do everything RVF can do.
+#   * the API Service stays ClusterIP and only the gateway may reach it - see
+#     the NetworkPolicy at the bottom.
+#
+# NOT YET APPLIED. Written 2026-09-03 against facts read from the live cluster,
+# but nothing here has been deployed. The acceptance tests in k8s/HANDOVER.md
+# section 6 are what proves it, and the third one - header spoofing - is the one
+# that decides whether this is secure or wide open.
+---
+# Client secret for the `rvf` Keycloak client. Vault holds it; Envoy requires
+# the k8s Secret key to be named exactly `client-secret`.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: rvf-oidc
+  namespace: rvf
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: vault-backend
+    kind: ClusterSecretStore
+  target:
+    name: rvf-oidc
+    creationPolicy: Owner
+  data:
+    - secretKey: client-secret
+      remoteRef:
+        conversionStrategy: Default
+        decodingStrategy: None
+        metadataPolicy: None
+        key: acl_vlt_od225632/kv/data/rvf
+        # NOTE the property name. snowstorm-logs-importer uses
+        # OIDC_CLIENT_SECRET; this path was populated as `client_secret`,
+        # matching ncts-grafana-auth-client. If the value does not appear,
+        # this line is the first thing to check.
+        property: client_secret
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: rvf-gw
+  namespace: rvf
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    cert-manager.io/issue-temporary-certificate: "true"
+    acme.cert-manager.io/http01-edit-in-place: "true"
+spec:
+  gatewayClassName: envoy-gateway-class
+  listeners:
+    # HTTP:80 exists for the ACME http01 challenge; real traffic is 443.
+    - name: public-http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: Same
+    - name: websecure
+      protocol: HTTPS
+      port: 443
+      hostname: ncts-rvf.australiaeast.cloudapp.azure.com
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: rvf-tls
+      allowedRoutes:
+        namespaces:
+          from: Same
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: rvf-route
+  namespace: rvf
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: rvf-gw
+      sectionName: websecure
+  hostnames:
+    - ncts-rvf.australiaeast.cloudapp.azure.com
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - kind: Service
+          name: rvf-api
+          port: 8080
+---
+# A validation POST returns 201 quickly, but the request that carries an 853MB
+# release does not. The Gateway API default route timeout would cut it off long
+# before the body finished arriving.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: rvf-timeouts
+  namespace: rvf
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: rvf-route
+  timeout:
+    http:
+      requestTimeout: 600s
+      connectionIdleTimeout: 120s
+---
+# Envoy streams request bodies, so there is no max-body-size to raise the way
+# nginx needs - but the per-connection buffer default is small for a
+# hundreds-of-megabytes upload over one connection.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: ClientTrafficPolicy
+metadata:
+  name: rvf-client
+  namespace: rvf
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: rvf-gw
+  connection:
+    bufferLimit: 32Mi
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: rvf-auth-policy
+  namespace: rvf
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: rvf-route
+
+  # Browser flow, for humans reaching the API or a UI in front of it.
+  oidc:
+    provider:
+      issuer: "https://auth.ontoserver.csiro.au/auth/realms/aehrc"
+    clientID: "rvf"
+    clientSecret:
+      name: rvf-oidc
+    redirectURL: "https://ncts-rvf.australiaeast.cloudapp.azure.com/oauth2/callback"
+    scopes:
+      - openid
+      - profile
+      - email
+    forwardAccessToken: true
+
+  # Machine flow. SI's CI and our own nightly present a Keycloak
+  # client_credentials token as `Authorization: Bearer`, which cannot follow a
+  # login redirect. Declaring a jwt provider alongside oidc is what makes both
+  # work - and it is what the in-house snowstorm-logs-importer template does.
+  jwt:
+    providers:
+      - name: oidc
+        issuer: "https://auth.ontoserver.csiro.au/auth/realms/aehrc"
+        remoteJWKS:
+          cacheDuration: 300s
+          uri: "https://auth.ontoserver.csiro.au/auth/realms/aehrc/protocol/openid-connect/certs"
+        # This is the bridge to RVF. It reads exactly three headers and 401s if
+        # any is missing, so all three are injected from claims - and because
+        # Envoy sets them, anything a client sent under the same names is
+        # replaced rather than passed through. That replacement is the entire
+        # reason this is safe; acceptance test 3 in HANDOVER.md verifies it.
+        claimToHeaders:
+          - header: X-AUTH-username
+            claim: preferred_username
+          # MUST be a single comma-separated string: RVF passes this straight to
+          # Spring's commaSeparatedStringToAuthorityList. Keycloak's role and
+          # group mappers emit JSON arrays, so `rvf_roles` is a Hardcoded claim
+          # of type String. RVF enforces no roles at all, so the value only has
+          # to be present and well-formed.
+          - header: X-AUTH-roles
+            claim: rvf_roles
+          # RVF does not validate this. It forwards it to the traceability and
+          # acceptance-gateway clients, neither of which is deployed here, so
+          # the token identifier satisfies the presence requirement honestly.
+          # If those services are ever deployed, this must become the real
+          # access token instead.
+          - header: X-AUTH-token
+            claim: jti
+
+  # THE access control list. Without this every authenticated user in the aehrc
+  # realm could submit runs, read every report and delete releases, because RVF
+  # itself checks nothing. Note the house template sets no `audiences` on the
+  # jwt provider either, so any token from this realm authenticates - group
+  # membership is what actually restricts access.
+  authorization:
+    defaultAction: Deny
+    rules:
+      - action: Allow
+        principal:
+          jwt:
+            provider: oidc
+            claims:
+              - name: groups
+                valueType: StringArray
+                values:
+                  - rvf-users
+---
+# Defence in depth: even if an HTTPRoute is later pointed at rvf-api directly,
+# only the gateway's proxies can reach it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: rvf-api-gateway-only
+  namespace: rvf
+spec:
+  podSelector:
+    matchLabels:
+      app: rvf-api
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        # Envoy Gateway runs its proxies in its own namespace, not in ours.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: envoy-gateway-system
+      ports:
+        - port: 8080
+  # Deliberately no second rule: an ingress rule with `from: []` means "from
+  # anywhere" and would silently negate the one above.
+  #
+  # Kubelet readiness probes come from the node rather than a pod and most CNIs
+  # exempt them. If yours does not, the API pods go NotReady on apply - add the
+  # node CIDR rather than widening the rule:
+  #
+  #   - from:
+  #       - ipBlock: { cidr: <node-subnet>/24 }
+  #     ports: [{ port: 8080 }]

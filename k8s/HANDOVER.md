@@ -30,11 +30,11 @@ Written 2026-09-03 against `catchup-upgraded`.
 | 2 | create secret `activemq-credentials`, confirm KEDA | §3 |
 | 3 | `kubectl apply -f k8s/rvf-aks.yaml` | §3 |
 | 4 | run the **cross-node** smoke test | §5. Pass condition is a report written by a worker being served by an API replica that never ran it |
-| 5 | set up Keycloak, fill 5 placeholders, apply `k8s/rvf-auth-ingress.yaml` | §6 |
+| 5 | apply `k8s/rvf-gateway-auth.yaml` (Keycloak and Vault are already done) | §6 |
 | 6 | run all three acceptance tests | §6. **Do not skip the header-spoofing one** |
 | 7 | send back the six answers | §8 |
 
-**The five placeholders**, all in `k8s/rvf-auth-ingress.yaml`:
+**The five placeholders**, all in `k8s/rvf-gateway-auth.yaml`:
 `client-secret`, `cookie-secret`, `KEYCLOAK_HOST`, `REALM`, `RVF_PUBLIC_HOST`.
 
 **Nothing here has been applied to a cluster**, because there was no cluster
@@ -380,7 +380,7 @@ Unauthenticated by design: `/version`, `/swagger-ui.html`, `/swagger-ui/**`,
 ### Decision: Keycloak in front, via oauth2-proxy
 
 RVF is to be **internet-facing so SI can run releases against it**, which rules
-out the cheap options. `k8s/rvf-auth-ingress.yaml` implements it.
+out the cheap options. `k8s/rvf-gateway-auth.yaml` implements it.
 
     internet -> ingress-nginx (TLS) -> oauth2-proxy -> rvf-api (ClusterIP)
                                           |
@@ -558,7 +558,7 @@ relocating them into a `deploy/` tree would break both for tidiness alone.
 |---|---|
 | `k8s/HANDOVER.md` | this document - start here |
 | `k8s/rvf-aks.yaml` | the deployment: PVCs, ActiveMQ, API, worker pool, KEDA |
-| `k8s/rvf-auth-ingress.yaml` | Keycloak via oauth2-proxy, ingress, TLS, NetworkPolicy |
+| `k8s/rvf-gateway-auth.yaml` | Keycloak via **Envoy Gateway SecurityPolicy**, TLS, traffic policy, NetworkPolicy |
 | `k8s/rvf-scaledjob.yaml` | job-per-run alternative to the worker Deployment; pick one |
 
 ### Read before deciding, do not apply
@@ -589,7 +589,7 @@ relocating them into a `deploy/` tree would break both for tidiness alone.
    applies.
 2. Create the `activemq-credentials` secret and confirm KEDA is installed.
 3. Apply `k8s/rvf-aks.yaml`. Run the §5 smoke test - the cross-node one.
-4. Set up Keycloak per §6, apply `k8s/rvf-auth-ingress.yaml`, run all three
+4. Set up Keycloak per §6, apply `k8s/rvf-gateway-auth.yaml`, run all three
    acceptance tests. **Do not skip the spoofing test.**
 5. Send back the two answers in §8.
 
@@ -607,7 +607,7 @@ relocating them into a `deploy/` tree would break both for tidiness alone.
 4. ~~Whether the node SKU can back a 40Gi `emptyDir`~~ - **answered**: 124GB
    on the small pools, 248GB on `large`, 992GB on `largespot`. See §0b.
 5. **The public hostname** you give it, and the Keycloak realm and issuer URL,
-   so `k8s/rvf-auth-ingress.yaml`'s placeholders can be filled in and the SI
+   so `k8s/rvf-gateway-auth.yaml`'s placeholders can be filled in and the SI
    service-account client can be described to them.
 6. **The result of acceptance test 3** - the header-spoofing one. That single
    result is the difference between an internet-facing RVF that is secured and

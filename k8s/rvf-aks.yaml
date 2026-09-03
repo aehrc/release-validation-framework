@@ -250,11 +250,34 @@ kind: ScaledObject
 metadata: { name: rvf-worker, namespace: rvf }
 spec:
   scaleTargetRef: { name: rvf-worker }
-  minReplicaCount: 1
+  # minReplicaCount 0, not 1, and that choice is what makes the two settings
+  # below mean anything. A server-side dry-run against this cluster warned:
+  #
+  #   PollingInterval is only relevant when minReplicaCount = 0 ...
+  #   CooldownPeriod is only relevant when minReplicaCount = 0 ...
+  #
+  # At minReplicaCount 1 the scale-down from N to 1 is plain HPA behaviour and
+  # cooldownPeriod is inert - so the comment that used to sit here, claiming it
+  # stopped a busy worker being scaled away, was simply false.
+  #
+  # Zero is also the right answer on its own merits: one nightly is a 0.24% duty
+  # cycle, so a permanently idle 16Gi worker costs a node for nothing, and cold
+  # start is about 9 s against a 13-minute run. The API stays warm and holds the
+  # queue either way.
+  minReplicaCount: 0
   maxReplicaCount: 6
-  # Long enough that a worker finishing a full edition is not scaled away.
+  # Now load-bearing: long enough that a worker finishing a full edition is not
+  # scaled back to zero underneath itself. Pairs with
+  # terminationGracePeriodSeconds: 600 on the Deployment.
   cooldownPeriod: 900
   pollingInterval: 30
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          # Scale-in between 1 and maxReplicaCount is HPA's, not KEDA's, so it
+          # needs its own stabilisation or a lull mid-run can retire a busy pod.
+          stabilizationWindowSeconds: 900
   triggers:
     - type: activemq
       metadata:
