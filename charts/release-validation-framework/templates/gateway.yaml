@@ -11,7 +11,11 @@ metadata:
     {{- toYaml . | nindent 4 }}
     {{- end }}
     {{- if .Values.certmanager.enabled }}
+    {{- if or .Values.certmanager.issuer.create (not (empty .Values.certmanager.issuerName)) }}
+    cert-manager.io/issuer: {{ include "release-validation-framework.issuerName" . | quote }}
+    {{- else if .Values.certmanager.clusterIssuerName }}
     cert-manager.io/cluster-issuer: {{ .Values.certmanager.clusterIssuerName | quote }}
+    {{- end }}
     cert-manager.io/issue-temporary-certificate: "true"
     acme.cert-manager.io/http01-edit-in-place: "true"
     {{- end }}

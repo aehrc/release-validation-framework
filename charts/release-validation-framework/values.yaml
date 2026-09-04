@@ -15,9 +15,22 @@ namespace:
 certmanager:
   # -- Enable cert-manager integration on the Gateway
   enabled: true
-  # -- Name of the ClusterIssuer to reference on the Gateway (defaults to 'letsencrypt' as present on ncts-k8s-cluster)
-  clusterIssuerName: "letsencrypt"
-
+  # -- Name of a ClusterIssuer to reference on the Gateway (used when issuer.create is false and issuerName is empty)
+  clusterIssuerName: ""
+  # -- Custom name for the Issuer resource or reference (defaults to letsencrypt-<fullname>)
+  issuerName: ""
+  # -- Configuration for a namespaced ACME Issuer hooked into the Gateway's port-80 HTTP listener
+  issuer:
+    # -- Whether to create a namespaced ACME Issuer resource with gatewayHTTPRoute HTTP-01 solver
+    create: true
+    # -- Email address to register with Let's Encrypt for certificate expiry notices (required when issuer.create is true)
+    email: ""
+    # -- ACME server directory URL
+    server: "https://acme-v02.api.letsencrypt.org/directory"
+    # -- Name of secret to store ACME account private key (defaults to <issuerName>-key)
+    privateKeySecretRef: ""
+    # -- Optional annotations for the Issuer resource
+    annotations: {}
 # -- Common container image settings for RVF (API and Worker)
 image:
   # -- Image repository

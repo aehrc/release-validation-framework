@@ -227,3 +227,10 @@ NetworkPolicy name
 {{- define "release-validation-framework.networkPolicyName" -}}
 {{- .Values.networkPolicy.nameOverride | default (printf "%s-api-gateway-only" (include "release-validation-framework.fullname" .)) }}
 {{- end }}
+
+{{/*
+cert-manager Issuer name
+*/}}
+{{- define "release-validation-framework.issuerName" -}}
+{{- .Values.certmanager.issuerName | default (printf "letsencrypt-%s" (include "release-validation-framework.fullname" .)) }}
+{{- end }}

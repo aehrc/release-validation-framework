@@ -1,6 +1,7 @@
 suite: test gateway, routing, policies and networkpolicy
 templates:
   - gateway.yaml
+  - issuer.yaml
   - httproute.yaml
   - backend-traffic-policy.yaml
   - client-traffic-policy.yaml
@@ -11,6 +12,7 @@ tests:
   - it: should render all gateway and auth resources with default values
     set:
       fullnameOverride: "rvf"
+      certmanager.issuer.email: "test@example.com"
     asserts:
       - isKind:
           of: Gateway
@@ -24,8 +26,8 @@ tests:
           value: envoy-gateway-class
         template: gateway.yaml
       - equal:
-          path: metadata.annotations["cert-manager.io/cluster-issuer"]
-          value: letsencrypt
+          path: metadata.annotations["cert-manager.io/issuer"]
+          value: letsencrypt-rvf
         template: gateway.yaml
       - equal:
           path: metadata.annotations["cert-manager.io/issue-temporary-certificate"]
@@ -149,6 +151,21 @@ tests:
           path: spec.ingress[0].from[0].namespaceSelector.matchLabels["kubernetes.io/metadata.name"]
           value: envoy-gateway-system
         template: networkpolicy.yaml
+      - isKind:
+          of: Issuer
+        template: issuer.yaml
+      - equal:
+          path: metadata.name
+          value: letsencrypt-rvf
+        template: issuer.yaml
+      - equal:
+          path: spec.acme.email
+          value: test@example.com
+        template: issuer.yaml
+      - equal:
+          path: spec.acme.solvers[0].http01.gatewayHTTPRoute.parentRefs[0].name
+          value: rvf-gw
+        template: issuer.yaml
 
   - it: should not render gateway or traffic policies when disabled
     set:
@@ -161,6 +178,9 @@ tests:
       - hasDocuments:
           count: 0
         template: gateway.yaml
+      - hasDocuments:
+          count: 0
+        template: issuer.yaml
       - hasDocuments:
           count: 0
         template: httproute.yaml
@@ -180,11 +200,43 @@ tests:
           count: 0
         template: networkpolicy.yaml
 
-  - it: should support custom cert-manager ClusterIssuer
+  - it: should support custom cert-manager ClusterIssuer when issuer.create is false
     set:
+      certmanager.issuer.create: false
       certmanager.clusterIssuerName: "custom-issuer"
     asserts:
       - equal:
           path: metadata.annotations["cert-manager.io/cluster-issuer"]
           value: "custom-issuer"
         template: gateway.yaml
+      - hasDocuments:
+          count: 0
+        template: issuer.yaml
+
+  - it: should support custom cert-manager Issuer name and privateKeySecretRef
+    set:
+      fullnameOverride: "rvf"
+      certmanager.issuerName: "my-custom-issuer"
+      certmanager.issuer.email: "admin@example.com"
+      certmanager.issuer.privateKeySecretRef: "my-custom-key"
+    asserts:
+      - equal:
+          path: metadata.annotations["cert-manager.io/issuer"]
+          value: "my-custom-issuer"
+        template: gateway.yaml
+      - equal:
+          path: metadata.name
+          value: "my-custom-issuer"
+        template: issuer.yaml
+      - equal:
+          path: spec.acme.email
+          value: "admin@example.com"
+        template: issuer.yaml
+      - equal:
+          path: spec.acme.privateKeySecretRef.name
+          value: "my-custom-key"
+        template: issuer.yaml
+      - equal:
+          path: spec.acme.solvers[0].http01.gatewayHTTPRoute.parentRefs[0].name
+          value: "rvf-gw"
+        template: issuer.yaml

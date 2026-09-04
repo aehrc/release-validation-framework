@@ -1,0 +1,25 @@
+{{- if and .Values.gateway.enabled .Values.certmanager.enabled .Values.certmanager.issuer.create }}
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ include "release-validation-framework.issuerName" . }}
+  labels:
+    {{- include "release-validation-framework.labels" . | nindent 4 }}
+  {{- with .Values.certmanager.issuer.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  acme:
+    server: {{ .Values.certmanager.issuer.server | default "https://acme-v02.api.letsencrypt.org/directory" }}
+    email: {{ required "A valid certmanager.issuer.email is required when certmanager.issuer.create is true" .Values.certmanager.issuer.email }}
+    privateKeySecretRef:
+      name: {{ .Values.certmanager.issuer.privateKeySecretRef | default (printf "%s-key" (include "release-validation-framework.issuerName" .)) }}
+    solvers:
+      - http01:
+          gatewayHTTPRoute:
+            parentRefs:
+              - name: {{ include "release-validation-framework.gatewayName" . }}
+                namespace: {{ .Release.Namespace }}
+                kind: Gateway
+{{- end }}

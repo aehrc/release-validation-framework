@@ -36,10 +36,45 @@
         },
         "clusterIssuerName": {
           "type": "string",
-          "description": "Name of the ClusterIssuer to reference on the Gateway"
+          "description": "Name of a ClusterIssuer to reference on the Gateway (used when issuer.create is false and issuerName is empty)"
+        },
+        "issuerName": {
+          "type": "string",
+          "description": "Custom name for the Issuer resource or reference (defaults to letsencrypt-<fullname>)"
+        },
+        "issuer": {
+          "type": "object",
+          "description": "Configuration for a namespaced ACME Issuer hooked into the Gateway's port-80 HTTP listener",
+          "properties": {
+            "create": {
+              "type": "boolean",
+              "description": "Whether to create a namespaced ACME Issuer resource with gatewayHTTPRoute HTTP-01 solver"
+            },
+            "email": {
+              "type": "string",
+              "description": "Email address to register with Let's Encrypt for certificate expiry notices (required when issuer.create is true)"
+            },
+            "server": {
+              "type": "string",
+              "description": "ACME server directory URL"
+            },
+            "privateKeySecretRef": {
+              "type": "string",
+              "description": "Name of secret to store ACME account private key"
+            },
+            "annotations": {
+              "type": "object",
+              "description": "Annotations to add to the Issuer resource",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "required": ["create", "email"],
+          "additionalProperties": false
         }
       },
-      "required": ["enabled", "clusterIssuerName"],
+      "required": ["enabled", "issuer"],
       "additionalProperties": false
     },
     "image": {
