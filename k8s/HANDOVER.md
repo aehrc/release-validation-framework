@@ -178,20 +178,37 @@ a second concurrent consumer exists.
 ## 2. The image
 
 Built and pushed **by CI**, ADO definition **65 `rvf-duckdb-server-image`**,
-build 16157:
+build 16177:
 
     ontoserver.azurecr.io/aehrc-rvf/release-validation-framework:9.0.1-duckdb
-    ontoserver.azurecr.io/aehrc-rvf/release-validation-framework:9.0.1-duckdb.f405b6f2036e
+    ontoserver.azurecr.io/aehrc-rvf/release-validation-framework:9.0.1-duckdb-16177
 
-    digest  sha256:3a9a4a04e2b99e9db5ba49cae0623e6f69a0f96650b72dadb0b9e3f1ae3fef75
+`9.0.1-duckdb` is the moving tag within this version. The Helm chart defaults
+`image.tag` to its `appVersion`, which is that moving tag, so **nothing needs
+editing** to get the current build.
 
-`9.0.1-duckdb` is the moving tag within this version and is what the manifests
-reference, so **nothing needs editing**. The `.f405b6f2036e` tag is the same
-image pinned to the commit it was built from - use that if you want the deployed
-image immutable, which for anything long-lived is the better choice.
+`9.0.1-duckdb-16177` is the same image, tagged with the **ADO build id**. Use it
+to pin a deployment:
 
-An earlier tag `9.0.1-duckdb.6393b937dcca` exists from a manual push and is
-superseded. Ignore it.
+    helm upgrade --install rvf charts/release-validation-framework \
+        -n rvf --create-namespace --set image.tag=9.0.1-duckdb-16177
+
+The build id beats a commit SHA in a tag because it links to the run that
+produced the image - which shows the commit, the 340 passing tests and the full
+log:
+
+    https://dev.azure.com/OD225632-NCTS-ContentAndTooling/
+      OD225632-NCTS-ContentAndTooling/_build/results?buildId=16177
+
+The commit is not lost, because the image carries OCI labels -
+`org.opencontainers.image.revision`, `.version`, `.source`, and
+`au.csiro.rvf.{engine,build-id,branch}`. So `docker inspect` or `crane config`
+answers "what is running, and from which tree" with no tag-to-commit mapping to
+maintain. Verified by inspecting the image config: all five labels are present.
+
+Two earlier tags, `9.0.1-duckdb.6393b937dcca` (manual push) and
+`9.0.1-duckdb.f405b6f2036e` (the previous CI scheme), are superseded. Ignore
+them.
 
 Nothing else in that repository was disturbed. It already held nine tags
 (`production-20260818`, `known-good-*`, `drools-*`, `latest`). `latest` still
