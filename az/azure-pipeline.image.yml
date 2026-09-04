@@ -242,7 +242,6 @@ stages:
               script: |
                 set -euo pipefail
                 IMAGE='$(registryHost)/${{ parameters.imageRepository }}'
-                echo "##vso[task.uploadsummary]$(Build.ArtifactStagingDirectory)/image.md"
                 mkdir -p '$(Build.ArtifactStagingDirectory)'
                 cat > '$(Build.ArtifactStagingDirectory)/image.md' <<EOF
                 ## RVF server image pushed
@@ -273,4 +272,5 @@ stages:
                 \`.version\`, \`.source\`, and \`au.csiro.rvf.{engine,build-id,branch}\`.
                 Read them with \`docker inspect\` or \`crane config\`.
                 EOF
+                echo "##vso[task.uploadsummary]$(Build.ArtifactStagingDirectory)/image.md"
                 cat '$(Build.ArtifactStagingDirectory)/image.md'
