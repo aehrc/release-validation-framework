@@ -233,6 +233,8 @@ stages:
                 # chart's `image.tag` value want, without the registry and repo.
                 echo "##vso[task.setvariable variable=pushedImmutableTag]$IMMUTABLE"
                 echo "##vso[task.setvariable variable=buildTag]$IMMUTABLE"
+                # The build-id-only tag, which ArgoCD Image Updater sorts on.
+                echo "##vso[task.setvariable variable=pushedSortable]$IMAGE:$PRIMARY-$BUILD_ID"
           - task: Bash@3
             displayName: 'State what to deploy'
             inputs:
@@ -249,6 +251,7 @@ stages:
                 |---|---|
                 | moving tag | \`$(pushedImage)\` |
                 | immutable tag | \`$(pushedImmutable)\` |
+                | sortable tag | \`$(pushedSortable)\` |
                 | commit | \`$(coords.sha)\` |
                 | branch | \`$(Build.SourceBranchName)\` |
 
@@ -257,8 +260,8 @@ stages:
                 immutable one to deploy exactly this build:
 
                 \`\`\`
-                helm upgrade --install rvf charts/release-validation-framework \
-                    -n rvf --create-namespace \
+                helm upgrade --install rvf charts/release-validation-framework \\
+                    -n rvf --create-namespace \\
                     --set image.tag=$(pushedImmutableTag)
                 \`\`\`
 

@@ -177,34 +177,35 @@ a second concurrent consumer exists.
 
 ## 2. The image
 
-Built and pushed **by CI**, ADO definition **65 `rvf-duckdb-server-image`**,
-build 16177:
+Built and pushed **by CI**, ADO definition **65 `rvf-duckdb-server-image`**.
+Every build writes three tags:
 
-    ontoserver.azurecr.io/aehrc-rvf/release-validation-framework:9.0.1-duckdb
-    ontoserver.azurecr.io/aehrc-rvf/release-validation-framework:9.0.1-duckdb-16177
+    :9.0.1-duckdb                     moving, within this version
+    :9.0.1-duckdb-<buildId>           sortable
+    :9.0.1-duckdb-<buildId>-<sha>     immutable, fully traceable
 
-`9.0.1-duckdb` is the moving tag within this version. The Helm chart defaults
-`image.tag` to its `appVersion`, which is that moving tag, so **nothing needs
-editing** to get the current build.
+`9.0.1-duckdb` is what the Helm chart resolves to by default, because
+`image.tag` falls back to the chart's `appVersion`. So **nothing needs editing**
+to get the current build.
 
-`9.0.1-duckdb-16177` is the same image, tagged with the **ADO build id**. Use it
-to pin a deployment:
+The two suffixed tags are the same image. Pin one to deploy exactly one build:
 
     helm upgrade --install rvf charts/release-validation-framework \
-        -n rvf --create-namespace --set image.tag=9.0.1-duckdb-16177
+        -n rvf --create-namespace --set image.tag=9.0.1-duckdb-<buildId>-<sha>
 
-The build id beats a commit SHA in a tag because it links to the run that
-produced the image - which shows the commit, the 340 passing tests and the full
-log:
+The **build id** leads the suffix for two reasons. It increases with every
+build, so ArgoCD Image Updater can order tags chronologically - a SHA cannot be
+sorted. And it links to the run that produced the image, which shows the commit,
+the 340 passing tests and the full log:
 
     https://dev.azure.com/OD225632-NCTS-ContentAndTooling/
-      OD225632-NCTS-ContentAndTooling/_build/results?buildId=16177
+      OD225632-NCTS-ContentAndTooling/_build/results?buildId=<buildId>
 
-The commit is not lost, because the image carries OCI labels -
-`org.opencontainers.image.revision`, `.version`, `.source`, and
-`au.csiro.rvf.{engine,build-id,branch}`. So `docker inspect` or `crane config`
-answers "what is running, and from which tree" with no tag-to-commit mapping to
-maintain. Verified by inspecting the image config: all five labels are present.
+The image also carries OCI labels - `org.opencontainers.image.revision`,
+`.version`, `.source`, and `au.csiro.rvf.{engine,build-id,branch}`. So
+`docker inspect` or `crane config` answers "what is running, and from which
+tree" even for the moving tag, with no tag-to-commit mapping to maintain.
+Checked by inspecting the built image config: all five labels are present.
 
 Two earlier tags, `9.0.1-duckdb.6393b937dcca` (manual push) and
 `9.0.1-duckdb.f405b6f2036e` (the previous CI scheme), are superseded. Ignore
