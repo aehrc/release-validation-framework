@@ -189,6 +189,7 @@ stages:
 
                 VERSION='$(coords.version)'
                 SHA='$(coords.sha)'
+                BUILD_ID='$(Build.BuildId)'
                 SUFFIX='${{ parameters.engineSuffix }}'
                 IMAGE='$(registryHost)/${{ parameters.imageRepository }}'
 
@@ -197,9 +198,19 @@ stages:
                 # at best and would shadow an existing build at worst - never
                 # push one.
                 PRIMARY="$VERSION-$SUFFIX"
-                # Immutable companion, so a running pod is traceable to a tree
-                # even after the primary tag moves.
-                TAGS="$PRIMARY.$SHA"
+
+                # Immutable companion, tagged with the ADO build id rather than
+                # the commit. The build id is short, always increases, and links
+                # straight to the run - which shows the commit, the test result
+                # and the logs - so it gives more than a bare SHA does:
+                #
+                #   https://dev.azure.com/OD225632-NCTS-ContentAndTooling/
+                #     OD225632-NCTS-ContentAndTooling/_build/results?buildId=<id>
+                #
+                # The commit is still recorded, in the image label below and in
+                # the build summary.
+                IMMUTABLE="$PRIMARY-$BUILD_ID"
+                TAGS="$IMMUTABLE"
                 if [ '${{ parameters.alsoTagLatest }}' = 'True' ]; then
                   # Deliberately NOT `latest`: that would claim to be the
                   # canonical RVF for a repository shared with MySQL builds.
@@ -213,12 +224,18 @@ stages:
                 #
                 # jib pushes registry layers itself and reads the credentials
                 # Docker@2 just wrote, so no daemon is involved.
+                # Labels carry the provenance the tag no longer states: which
+                # commit, which build, which branch. `docker inspect` or
+                # `az acr manifest show-metadata` then answers "what is running"
+                # without anyone having to keep a tag-to-commit mapping.
                 mvn -B -ntp -s "$(Build.SourcesDirectory)/duck/maven-settings.xml" -Dmaven.repo.local=$(Pipeline.Workspace)/.m2 -Ddependency-check.skip=true jib:build -DskipTests \
                     -Djib.from.platforms=linux/amd64 \
                     -Djib.to.image="$IMAGE:$PRIMARY" \
-                    -Djib.to.tags="$TAGS"
+                    -Djib.to.tags="$TAGS" \
+                    -Djib.container.labels="org.opencontainers.image.revision=$SHA,org.opencontainers.image.version=$VERSION,org.opencontainers.image.source=https://github.com/aehrc/release-validation-framework,au.csiro.rvf.engine=$SUFFIX,au.csiro.rvf.build-id=$BUILD_ID,au.csiro.rvf.branch=$(Build.SourceBranchName)"
 
                 echo "##vso[task.setvariable variable=pushedImage]$IMAGE:$PRIMARY"
+                echo "##vso[task.setvariable variable=pushedImmutable]$IMAGE:$IMMUTABLE"
 
           - task: Bash@3
             displayName: 'State what to deploy'
@@ -235,7 +252,7 @@ stages:
                 | | |
                 |---|---|
                 | image | \`$(pushedImage)\` |
-                | immutable tag | \`$(pushedImage).$(coords.sha)\` |
+                | immutable tag | \`$(pushedImmutable)\` |
                 | branch | \`$(Build.SourceBranchName)\` |
 
                 \`k8s/rvf-aks.yaml\` references the version tag. Deploy with:
