@@ -236,6 +236,9 @@ stages:
 
                 echo "##vso[task.setvariable variable=pushedImage]$IMAGE:$PRIMARY"
                 echo "##vso[task.setvariable variable=pushedImmutable]$IMAGE:$IMMUTABLE"
+                # The bare tag too: that is what `helm --set image.tag=` and the
+                # chart's `image.tag` value want, without the registry and repo.
+                echo "##vso[task.setvariable variable=pushedImmutableTag]$IMMUTABLE"
 
           - task: Bash@3
             displayName: 'State what to deploy'
@@ -251,15 +254,27 @@ stages:
 
                 | | |
                 |---|---|
-                | image | \`$(pushedImage)\` |
+                | moving tag | \`$(pushedImage)\` |
                 | immutable tag | \`$(pushedImmutable)\` |
+                | commit | \`$(coords.sha)\` |
                 | branch | \`$(Build.SourceBranchName)\` |
 
-                \`k8s/rvf-aks.yaml\` references the version tag. Deploy with:
+                The chart in \`charts/release-validation-framework\` defaults
+                \`image.tag\` to its \`appVersion\`, which is the moving tag. Pin the
+                immutable one to deploy exactly this build:
 
                 \`\`\`
-                kubectl -n rvf set image deploy/rvf-api    rvf=$(pushedImage)
-                kubectl -n rvf set image deploy/rvf-worker rvf=$(pushedImage)
+                helm upgrade --install rvf charts/release-validation-framework \\
+                    -n rvf --create-namespace \\
+                    --set image.tag=$(pushedImmutableTag)
                 \`\`\`
+
+                Or, under ArgoCD, set that value in the Application and let it sync.
+
+                The image also carries its provenance as OCI labels, so what is
+                deployed stays traceable without a tag-to-commit mapping:
+                \`org.opencontainers.image.revision\` (the commit),
+                \`.version\`, \`.source\`, and \`au.csiro.rvf.{engine,build-id,branch}\`.
+                Read them with \`docker inspect\` or \`crane config\`.
                 EOF
                 cat '$(Build.ArtifactStagingDirectory)/image.md'
