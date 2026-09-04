@@ -1,0 +1,186 @@
+# Build, test, and release the Helm chart to Azure Container Registry (nctsacr).
+#
+# Pushes to oci://nctsacr.azurecr.io/helm/release-validation-framework:<version>
+# Authenticates via the `ncts-acr` DockerRegistry service connection.
+
+name: 'rvf-helm-$(Date:yyyyMMdd)$(Rev:.r)'
+
+trigger:
+  branches:
+    include:
+      - main
+      - catchup-upgraded
+  paths:
+    include:
+      - charts/release-validation-framework/**
+      - az/azure-pipeline.helm.yml
+
+pr:
+  branches:
+    include:
+      - main
+      - catchup-upgraded
+  paths:
+    include:
+      - charts/release-validation-framework/**
+      - az/azure-pipeline.helm.yml
+
+parameters:
+  - name: forcePush
+    displayName: 'Force release push even if not on main'
+    type: boolean
+    default: false
+
+variables:
+  - name: acrServiceConnection
+    value: 'ncts-acr'
+  - name: acrRegistry
+    value: 'nctsacr.azurecr.io'
+  - name: registryPath
+    value: 'helm'
+  - name: chartDirectory
+    value: 'charts/release-validation-framework'
+
+stages:
+  - stage: Test
+    displayName: 'Lint & Test Chart'
+    pool:
+      vmImage: ubuntu-latest
+    jobs:
+      - job: LintAndTest
+        displayName: 'Lint and Unit Test'
+        steps:
+          - checkout: self
+            fetchDepth: 1
+
+          - task: Bash@3
+            displayName: 'Install Helm and unittest plugin'
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+                helm version
+                helm plugin install https://github.com/helm-unittest/helm-unittest.git
+                helm plugin list
+
+          - task: Bash@3
+            displayName: 'Lint Helm chart'
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                helm lint $(chartDirectory)
+
+          - task: Bash@3
+            displayName: 'Run helm unittest suite'
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                helm unittest $(chartDirectory)
+
+          - task: Bash@3
+            displayName: 'Dry-run template render'
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                helm template rvf $(chartDirectory) --namespace rvf > /dev/null
+                echo "Helm template dry-run rendered successfully"
+
+  - stage: Release
+    displayName: 'Package & Push to ACR'
+    dependsOn: Test
+    condition: and(succeeded(), or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), eq('${{ parameters.forcePush }}', true)))
+    pool:
+      vmImage: ubuntu-latest
+    jobs:
+      - job: PackageAndPush
+        displayName: 'Package and Push to OCI Registry'
+        steps:
+          - checkout: self
+            fetchDepth: 1
+
+          - task: Bash@3
+            displayName: 'Install Helm'
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+                helm version
+
+          - task: Docker@2
+            displayName: 'Log in to ACR (ncts-acr)'
+            inputs:
+              command: login
+              containerRegistry: '$(acrServiceConnection)'
+
+          - task: Bash@3
+            name: publish
+            displayName: 'Package and Push Helm Chart'
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+
+                CHART_DIR='$(chartDirectory)'
+                REGISTRY='$(acrRegistry)'
+                REG_PATH='$(registryPath)'
+                OCI_URL="oci://$REGISTRY/$REG_PATH"
+
+                # Read version from Chart.yaml
+                VERSION="$(python3 -c "import yaml; print(yaml.safe_load(open('$CHART_DIR/Chart.yaml'))['version'])")"
+                NAME="$(python3 -c "import yaml; print(yaml.safe_load(open('$CHART_DIR/Chart.yaml'))['name'])")"
+                echo "Packaging $NAME version $VERSION..."
+
+                PACKAGE_DIR="$(Agent.TempDirectory)/helm-package"
+                mkdir -p "$PACKAGE_DIR"
+
+                helm package "$CHART_DIR" --destination "$PACKAGE_DIR"
+                PACKAGE_FILE="$PACKAGE_DIR/$NAME-$VERSION.tgz"
+
+                if [ ! -f "$PACKAGE_FILE" ]; then
+                  echo "##vso[task.logissue type=error]Expected package file $PACKAGE_FILE not found"
+                  exit 1
+                fi
+
+                echo "Pushing $PACKAGE_FILE to $OCI_URL..."
+                helm push "$PACKAGE_FILE" "$OCI_URL"
+
+                CHART_REF="$REGISTRY/$REG_PATH/$NAME:$VERSION"
+                echo "Successfully published $CHART_REF"
+                echo "##vso[task.setvariable variable=chartRef;isOutput=true]$CHART_REF"
+                echo "##vso[task.setvariable variable=chartVersion;isOutput=true]$VERSION"
+                echo "##vso[task.setvariable variable=chartName;isOutput=true]$NAME"
+
+          - task: Bash@3
+            displayName: 'Publish Release Summary'
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                mkdir -p '$(Build.ArtifactStagingDirectory)'
+                cat > '$(Build.ArtifactStagingDirectory)/helm-release.md' <<EOF
+                ## Helm Chart Released to ACR
+
+                | | |
+                |---|---|
+                | Chart Name | \`$(publish.chartName)\` |
+                | Chart Version | \`$(publish.chartVersion)\` |
+                | OCI Reference | \`oci://$(publish.chartRef)\` |
+                | Target Registry | \`$(acrRegistry)\` |
+                | Commit | \`$(Build.SourceVersion)\` |
+
+                ### Deploy with ArgoCD or Helm:
+
+                \`\`\`yaml
+                sources:
+                  - chart: $(publish.chartName)
+                    repoURL: $(acrRegistry)/$(registryPath)
+                    targetRevision: $(publish.chartVersion)
+                \`\`\`
+                EOF
+                echo "##vso[task.uploadsummary]$(Build.ArtifactStagingDirectory)/helm-release.md"
+                cat '$(Build.ArtifactStagingDirectory)/helm-release.md'

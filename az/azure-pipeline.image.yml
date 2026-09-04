@@ -199,18 +199,11 @@ stages:
                 # push one.
                 PRIMARY="$VERSION-$SUFFIX"
 
-                # Immutable companion, tagged with the ADO build id rather than
-                # the commit. The build id is short, always increases, and links
-                # straight to the run - which shows the commit, the test result
-                # and the logs - so it gives more than a bare SHA does:
-                #
-                #   https://dev.azure.com/OD225632-NCTS-ContentAndTooling/
-                #     OD225632-NCTS-ContentAndTooling/_build/results?buildId=<id>
-                #
-                # The commit is still recorded, in the image label below and in
-                # the build summary.
-                IMMUTABLE="$PRIMARY-$BUILD_ID"
-                TAGS="$IMMUTABLE"
+                # Immutable companion, tagged with the ADO build id and git commit SHA.
+                # The build id is monotonic and allows ArgoCD Image Updater to sort chronologically;
+                # the commit SHA gives immediate traceability to the git tree:
+                IMMUTABLE="$PRIMARY-$BUILD_ID-$SHA"
+                TAGS="$IMMUTABLE,$PRIMARY-$BUILD_ID"
                 if [ '${{ parameters.alsoTagLatest }}' = 'True' ]; then
                   # Deliberately NOT `latest`: that would claim to be the
                   # canonical RVF for a repository shared with MySQL builds.
@@ -239,7 +232,7 @@ stages:
                 # The bare tag too: that is what `helm --set image.tag=` and the
                 # chart's `image.tag` value want, without the registry and repo.
                 echo "##vso[task.setvariable variable=pushedImmutableTag]$IMMUTABLE"
-
+                echo "##vso[task.setvariable variable=buildTag]$IMMUTABLE"
           - task: Bash@3
             displayName: 'State what to deploy'
             inputs:
@@ -264,8 +257,8 @@ stages:
                 immutable one to deploy exactly this build:
 
                 \`\`\`
-                helm upgrade --install rvf charts/release-validation-framework \\
-                    -n rvf --create-namespace \\
+                helm upgrade --install rvf charts/release-validation-framework \
+                    -n rvf --create-namespace \
                     --set image.tag=$(pushedImmutableTag)
                 \`\`\`
 
