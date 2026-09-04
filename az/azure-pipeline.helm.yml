@@ -146,9 +146,21 @@ stages:
                   exit 1
                 fi
 
+                # Check if this exact chart version already exists in ACR
+                ALREADY_EXISTS=false
+                if helm show chart "$OCI_URL/$NAME" --version "$VERSION" >/dev/null 2>&1; then
+                  ALREADY_EXISTS=true
+                  echo "Chart $NAME version $VERSION already exists in $OCI_URL"
+                fi
+
+                if [ "$ALREADY_EXISTS" = "true" ] && [ '${{ parameters.forcePush }}' != 'True' ]; then
+                  echo "Skipping push: version $VERSION already released. Bump version in Chart.yaml or queue with forcePush: true."
+                  echo "##vso[task.logissue type=warning]Chart $NAME version $VERSION already exists in ACR. Skipped push."
+                  exit 0
+                fi
+
                 echo "Pushing $PACKAGE_FILE to $OCI_URL..."
                 helm push "$PACKAGE_FILE" "$OCI_URL"
-
                 CHART_REF="$REGISTRY/$REG_PATH/$NAME:$VERSION"
                 echo "Successfully published $CHART_REF"
                 echo "##vso[task.setvariable variable=chartRef;isOutput=true]$CHART_REF"
