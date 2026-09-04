@@ -551,6 +551,21 @@
         "nameOverride": { "type": "string" },
         "gatewayClassName": { "type": "string" },
         "annotations": { "type": "object" },
+        "infrastructure": {
+          "type": "object",
+          "description": "Infrastructure settings for Envoy Gateway data plane",
+          "properties": {
+            "annotations": {
+              "type": "object",
+              "description": "Annotations placed on the Gateway infrastructure (e.g. Envoy proxy Service / LoadBalancer)"
+            }
+          },
+          "additionalProperties": false
+        },
+        "infrastructureAnnotations": {
+          "type": "object",
+          "description": "Direct annotations placed on the Gateway infrastructure (convenience alias for infrastructure.annotations)"
+        },
         "tls": {
           "type": "object",
           "properties": {

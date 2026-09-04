@@ -326,6 +326,11 @@ gateway:
   gatewayClassName: "envoy-gateway-class"
   # -- Additional annotations on the Gateway
   annotations: {}
+  # -- Infrastructure settings for Envoy Gateway data plane (e.g. cloud LoadBalancer annotations)
+  infrastructure:
+    # -- Annotations placed on the Gateway infrastructure (Envoy proxy Service / LoadBalancer)
+    annotations:
+      service.beta.kubernetes.io/azure-dns-label-name: "ncts-rvf"
   # -- TLS configuration for HTTPS listener
   tls:
     # -- Enable TLS termination on port 443

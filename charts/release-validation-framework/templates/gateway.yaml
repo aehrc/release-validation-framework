@@ -22,6 +22,12 @@ metadata:
   {{- end }}
 spec:
   gatewayClassName: {{ .Values.gateway.gatewayClassName }}
+  {{- $infraAnnotations := or .Values.gateway.infrastructureAnnotations (and .Values.gateway.infrastructure .Values.gateway.infrastructure.annotations) }}
+  {{- with $infraAnnotations }}
+  infrastructure:
+    annotations:
+      {{- toYaml . | nindent 6 }}
+  {{- end }}
   listeners:
     {{- if or .Values.certmanager.enabled .Values.gateway.listeners.http.enabled }}
     - name: {{ .Values.gateway.listeners.http.name }}

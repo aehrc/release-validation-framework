@@ -25,6 +25,10 @@ tests:
           value: envoy-gateway-class
         template: gateway.yaml
       - equal:
+          path: spec.infrastructure.annotations["service.beta.kubernetes.io/azure-dns-label-name"]
+          value: "ncts-rvf"
+        template: gateway.yaml
+      - equal:
           path: metadata.annotations["cert-manager.io/issuer"]
           value: letsencrypt-rvf
         template: gateway.yaml

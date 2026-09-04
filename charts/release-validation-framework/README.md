@@ -1,6 +1,6 @@
 # release-validation-framework
 
-![Version: 0.2.1](https://img.shields.io/badge/Version-0.2.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 9.0.1-duckdb](https://img.shields.io/badge/AppVersion-9.0.1--duckdb-informational?style=flat-square)
+![Version: 0.2.2](https://img.shields.io/badge/Version-0.2.2-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 9.0.1-duckdb](https://img.shields.io/badge/AppVersion-9.0.1--duckdb-informational?style=flat-square)
 
 A Helm chart for Release Validation Framework (RVF) on AKS
 
@@ -92,7 +92,7 @@ RVF validates SNOMED CT release packages using an embedded DuckDB execution engi
 | externalSecret.syncWave | string | `"-1"` | ArgoCD sync-wave annotation (ensures secret is materialized before deployment) |
 | externalSecret.target | object | `{"creationPolicy":"Owner","name":"rvf-oidc"}` | Target Secret creation options |
 | fullnameOverride | string | `"rvf"` | String to fully override release-validation-framework.fullname template |
-| gateway | object | `{"annotations":{},"clientTrafficPolicy":{"bufferLimit":"32Mi","enabled":true,"nameOverride":"rvf-client"},"enabled":true,"gatewayClassName":"envoy-gateway-class","listeners":{"http":{"allowedRoutes":{"namespaces":{"from":"Same"}},"enabled":true,"name":"public-http","port":80,"protocol":"HTTP"},"https":{"allowedRoutes":{"namespaces":{"from":"Same"}},"enabled":true,"hostname":"ncts-rvf.australiaeast.cloudapp.azure.com","name":"websecure","port":443}},"nameOverride":"rvf-gw","tls":{"certificateSecret":"rvf-tls","enabled":true,"mode":"Terminate"}}` | Envoy Gateway configuration |
+| gateway | object | `{"annotations":{},"clientTrafficPolicy":{"bufferLimit":"32Mi","enabled":true,"nameOverride":"rvf-client"},"enabled":true,"gatewayClassName":"envoy-gateway-class","infrastructure":{"annotations":{"service.beta.kubernetes.io/azure-dns-label-name":"ncts-rvf"}},"listeners":{"http":{"allowedRoutes":{"namespaces":{"from":"Same"}},"enabled":true,"name":"public-http","port":80,"protocol":"HTTP"},"https":{"allowedRoutes":{"namespaces":{"from":"Same"}},"enabled":true,"hostname":"ncts-rvf.australiaeast.cloudapp.azure.com","name":"websecure","port":443}},"nameOverride":"rvf-gw","tls":{"certificateSecret":"rvf-tls","enabled":true,"mode":"Terminate"}}` | Envoy Gateway configuration |
 | gateway.annotations | object | `{}` | Additional annotations on the Gateway |
 | gateway.clientTrafficPolicy | object | `{"bufferLimit":"32Mi","enabled":true,"nameOverride":"rvf-client"}` | ClientTrafficPolicy for Gateway connection settings |
 | gateway.clientTrafficPolicy.bufferLimit | string | `"32Mi"` | Per-connection buffer limit for large uploads |
@@ -100,6 +100,8 @@ RVF validates SNOMED CT release packages using an embedded DuckDB execution engi
 | gateway.clientTrafficPolicy.nameOverride | string | `"rvf-client"` | Override name for ClientTrafficPolicy |
 | gateway.enabled | bool | `true` | Enable Gateway resource creation |
 | gateway.gatewayClassName | string | `"envoy-gateway-class"` | GatewayClass name (must match installed Envoy Gateway class) |
+| gateway.infrastructure | object | `{"annotations":{"service.beta.kubernetes.io/azure-dns-label-name":"ncts-rvf"}}` | Infrastructure settings for Envoy Gateway data plane (e.g. cloud LoadBalancer annotations) |
+| gateway.infrastructure.annotations | object | `{"service.beta.kubernetes.io/azure-dns-label-name":"ncts-rvf"}` | Annotations placed on the Gateway infrastructure (Envoy proxy Service / LoadBalancer) |
 | gateway.listeners | object | `{"http":{"allowedRoutes":{"namespaces":{"from":"Same"}},"enabled":true,"name":"public-http","port":80,"protocol":"HTTP"},"https":{"allowedRoutes":{"namespaces":{"from":"Same"}},"enabled":true,"hostname":"ncts-rvf.australiaeast.cloudapp.azure.com","name":"websecure","port":443}}` | Listener configurations |
 | gateway.listeners.http | object | `{"allowedRoutes":{"namespaces":{"from":"Same"}},"enabled":true,"name":"public-http","port":80,"protocol":"HTTP"}` | Plaintext HTTP listener (used by ACME http-01 challenge) |
 | gateway.listeners.https | object | `{"allowedRoutes":{"namespaces":{"from":"Same"}},"enabled":true,"hostname":"ncts-rvf.australiaeast.cloudapp.azure.com","name":"websecure","port":443}` | Secure HTTPS listener |
