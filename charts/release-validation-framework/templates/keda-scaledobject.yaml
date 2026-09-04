@@ -1,0 +1,28 @@
+{{- if and .Values.keda.enabled .Values.keda.scaledObject.enabled }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "release-validation-framework.scaledObjectName" . }}
+  labels:
+    {{- include "release-validation-framework.worker.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    name: {{ include "release-validation-framework.worker.fullname" . }}
+  minReplicaCount: {{ .Values.keda.scaledObject.minReplicaCount }}
+  maxReplicaCount: {{ .Values.keda.scaledObject.maxReplicaCount }}
+  cooldownPeriod: {{ .Values.keda.scaledObject.cooldownPeriod }}
+  pollingInterval: {{ .Values.keda.scaledObject.pollingInterval }}
+  {{- with .Values.keda.scaledObject.advanced }}
+  advanced:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  triggers:
+    - type: activemq
+      metadata:
+        managementEndpoint: {{ printf "%s.%s.svc:%d" (include "release-validation-framework.activemq.fullname" .) .Release.Namespace (int .Values.activemq.service.consolePort) | quote }}
+        destinationName: {{ .Values.keda.scaledObject.triggers.destinationName | quote }}
+        brokerName: {{ .Values.keda.scaledObject.triggers.brokerName | quote }}
+        targetQueueSize: {{ .Values.keda.scaledObject.triggers.targetQueueSize | quote }}
+      authenticationRef:
+        name: {{ include "release-validation-framework.triggerAuthName" . }}
+{{- end }}

@@ -1,0 +1,114 @@
+suite: test api deployment
+templates:
+  - api-deployment.yaml
+  - api-service.yaml
+tests:
+  - it: should render API deployment with default values
+    set:
+      fullnameOverride: "rvf"
+    asserts:
+      - isKind:
+          of: Deployment
+        template: api-deployment.yaml
+      - equal:
+          path: metadata.name
+          value: rvf-api
+        template: api-deployment.yaml
+      - equal:
+          path: spec.replicas
+          value: 2
+        template: api-deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: rvf
+        template: api-deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ontoserver.azurecr.io/aehrc-rvf/release-validation-framework:9.0.1-duckdb
+        template: api-deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: Always
+        template: api-deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /version
+        template: api-deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.port
+          value: 8080
+        template: api-deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 250m
+        template: api-deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 1Gi
+        template: api-deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 2Gi
+        template: api-deployment.yaml
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: RVF_EXECUTION_ENGINE
+            value: "duckdb"
+        template: api-deployment.yaml
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: RVF_EXECUTION_ISWORKER
+            value: "false"
+        template: api-deployment.yaml
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: RVF_VALIDATION_JOB_RETENTION_DAYS
+            value: "7"
+        template: api-deployment.yaml
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SPRING_ACTIVEMQ_BROKER_URL
+            value: "tcp://activemq:61616"
+        template: api-deployment.yaml
+
+  - it: should render API service with default values
+    set:
+      fullnameOverride: "rvf"
+    asserts:
+      - isKind:
+          of: Service
+        template: api-service.yaml
+      - equal:
+          path: metadata.name
+          value: rvf-api
+        template: api-service.yaml
+      - equal:
+          path: spec.type
+          value: ClusterIP
+        template: api-service.yaml
+      - equal:
+          path: spec.ports[0].port
+          value: 8080
+        template: api-service.yaml
+
+  - it: should support custom replica count and extraEnv
+    set:
+      api.replicaCount: 3
+      api.extraEnv:
+        - name: CUSTOM_VAR
+          value: "custom-value"
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 3
+        template: api-deployment.yaml
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CUSTOM_VAR
+            value: "custom-value"
+        template: api-deployment.yaml

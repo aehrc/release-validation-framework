@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "release-validation-framework.api.fullname" . }}
+  labels:
+    {{- include "release-validation-framework.api.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.api.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "release-validation-framework.api.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.api.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "release-validation-framework.api.selectorLabels" . | nindent 8 }}
+        {{- with .Values.api.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: rvf
+          image: {{ include "release-validation-framework.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.api.service.port }}
+              name: http
+          env:
+            - name: RVF_EXECUTION_ENGINE
+              value: {{ .Values.env.executionEngine | quote }}
+            - name: RVF_EXECUTION_ISWORKER
+              value: "false"
+            - name: RVF_ASSERTION_RESOURCE_LOCAL_PATH
+              value: {{ .Values.env.assertionResourceLocalPath | quote }}
+            - name: RVF_DROOLS_RULE_DIRECTORY
+              value: {{ .Values.env.droolsRuleDirectory | quote }}
+            - name: SPRING_ACTIVEMQ_BROKER_URL
+              value: {{ include "release-validation-framework.brokerUrl" . | quote }}
+            - name: AWS_REGION
+              value: {{ .Values.env.awsRegion | quote }}
+            - name: RVF_VALIDATION_JOB_STORAGE_LOCAL_PATH
+              value: {{ .Values.env.jobStorageLocalPath | quote }}
+            - name: RVF_RELEASE_STORAGE_LOCAL_PATH
+              value: {{ .Values.env.releaseStorageLocalPath | quote }}
+            - name: RVF_RELEASE_STORAGE_USECLOUD
+              value: {{ .Values.env.releaseStorageUseCloud | quote }}
+            - name: RVF_VALIDATION_JOB_RETENTION_DAYS
+              value: {{ .Values.api.retentionDays | quote }}
+            {{- with .Values.api.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          volumeMounts:
+            - name: jobs
+              mountPath: {{ .Values.persistence.jobs.mountPath }}
+            - name: releases
+              mountPath: {{ .Values.persistence.releases.mountPath }}
+          {{- if .Values.api.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.api.readinessProbe.path }}
+              port: {{ .Values.api.readinessProbe.port }}
+            initialDelaySeconds: {{ .Values.api.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.api.readinessProbe.periodSeconds }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}
+      volumes:
+        - name: jobs
+          persistentVolumeClaim:
+            claimName: {{ include "release-validation-framework.jobsPvcName" . }}
+        - name: releases
+          persistentVolumeClaim:
+            claimName: {{ include "release-validation-framework.releasesPvcName" . }}
+      {{- with .Values.api.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

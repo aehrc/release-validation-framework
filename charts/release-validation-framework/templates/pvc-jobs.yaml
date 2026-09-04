@@ -1,0 +1,15 @@
+{{- if .Values.persistence.jobs.create }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "release-validation-framework.jobsPvcName" . }}
+  labels:
+    {{- include "release-validation-framework.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    {{- toYaml .Values.persistence.jobs.accessModes | nindent 4 }}
+  storageClassName: {{ .Values.persistence.jobs.storageClassName | quote }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.jobs.size | quote }}
+{{- end }}

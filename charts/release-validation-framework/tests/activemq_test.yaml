@@ -1,0 +1,66 @@
+suite: test activemq deployment and service
+templates:
+  - activemq-deployment.yaml
+  - activemq-service.yaml
+tests:
+  - it: should render activemq deployment and service with default values
+    set:
+      fullnameOverride: "rvf"
+    asserts:
+      - isKind:
+          of: Deployment
+        template: activemq-deployment.yaml
+      - equal:
+          path: metadata.name
+          value: activemq
+        template: activemq-deployment.yaml
+      - equal:
+          path: spec.replicas
+          value: 1
+        template: activemq-deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: apache/activemq-classic:6.1.4
+        template: activemq-deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].containerPort
+          value: 61616
+        template: activemq-deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[0].ports[1].containerPort
+          value: 8161
+        template: activemq-deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 200m
+        template: activemq-deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 1Gi
+        template: activemq-deployment.yaml
+      - isKind:
+          of: Service
+        template: activemq-service.yaml
+      - equal:
+          path: metadata.name
+          value: activemq
+        template: activemq-service.yaml
+      - equal:
+          path: spec.ports[0].port
+          value: 61616
+        template: activemq-service.yaml
+      - equal:
+          path: spec.ports[1].port
+          value: 8161
+        template: activemq-service.yaml
+
+  - it: should not render activemq when disabled
+    set:
+      activemq.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: activemq-deployment.yaml
+      - hasDocuments:
+          count: 0
+        template: activemq-service.yaml

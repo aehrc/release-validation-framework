@@ -1,0 +1,46 @@
+{{- if .Values.gateway.enabled }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: {{ include "release-validation-framework.gatewayName" . }}
+  labels:
+    {{- include "release-validation-framework.labels" . | nindent 4 }}
+  {{- if or .Values.gateway.annotations .Values.certmanager.enabled }}
+  annotations:
+    {{- with .Values.gateway.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- if .Values.certmanager.enabled }}
+    cert-manager.io/cluster-issuer: {{ .Values.certmanager.clusterIssuerName | quote }}
+    cert-manager.io/issue-temporary-certificate: "true"
+    acme.cert-manager.io/http01-edit-in-place: "true"
+    {{- end }}
+  {{- end }}
+spec:
+  gatewayClassName: {{ .Values.gateway.gatewayClassName }}
+  listeners:
+    {{- if or .Values.certmanager.enabled .Values.gateway.listeners.http.enabled }}
+    - name: {{ .Values.gateway.listeners.http.name }}
+      protocol: {{ .Values.gateway.listeners.http.protocol }}
+      port: {{ .Values.gateway.listeners.http.port }}
+      allowedRoutes:
+        {{- toYaml .Values.gateway.listeners.http.allowedRoutes | nindent 8 }}
+    {{- end }}
+    {{- if .Values.gateway.listeners.https.enabled }}
+    - name: {{ .Values.gateway.listeners.https.name }}
+      port: {{ .Values.gateway.listeners.https.port }}
+      hostname: {{ .Values.gateway.listeners.https.hostname }}
+      allowedRoutes:
+        {{- toYaml .Values.gateway.listeners.https.allowedRoutes | nindent 8 }}
+      {{- if .Values.gateway.tls.enabled }}
+      protocol: HTTPS
+      tls:
+        mode: {{ .Values.gateway.tls.mode }}
+        certificateRefs:
+          - kind: Secret
+            name: {{ .Values.gateway.tls.certificateSecret }}
+      {{- else }}
+      protocol: HTTP
+      {{- end }}
+    {{- end }}
+{{- end }}

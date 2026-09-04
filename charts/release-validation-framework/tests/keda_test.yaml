@@ -1,0 +1,76 @@
+suite: test keda autoscaling
+templates:
+  - keda-scaledobject.yaml
+  - keda-triggerauth.yaml
+tests:
+  - it: should render ScaledObject and TriggerAuthentication with default values
+    set:
+      fullnameOverride: "rvf"
+    release:
+      namespace: "rvf"
+    asserts:
+      - isKind:
+          of: ScaledObject
+        template: keda-scaledobject.yaml
+      - equal:
+          path: metadata.name
+          value: rvf-worker
+        template: keda-scaledobject.yaml
+      - equal:
+          path: spec.scaleTargetRef.name
+          value: rvf-worker
+        template: keda-scaledobject.yaml
+      - equal:
+          path: spec.minReplicaCount
+          value: 0
+        template: keda-scaledobject.yaml
+      - equal:
+          path: spec.maxReplicaCount
+          value: 6
+        template: keda-scaledobject.yaml
+      - equal:
+          path: spec.cooldownPeriod
+          value: 900
+        template: keda-scaledobject.yaml
+      - equal:
+          path: spec.pollingInterval
+          value: 30
+        template: keda-scaledobject.yaml
+      - equal:
+          path: spec.triggers[0].type
+          value: activemq
+        template: keda-scaledobject.yaml
+      - equal:
+          path: spec.triggers[0].metadata.managementEndpoint
+          value: "activemq.rvf.svc:8161"
+        template: keda-scaledobject.yaml
+      - equal:
+          path: spec.triggers[0].metadata.destinationName
+          value: "rvf-validation-queue"
+        template: keda-scaledobject.yaml
+      - equal:
+          path: spec.triggers[0].authenticationRef.name
+          value: "activemq-auth"
+        template: keda-scaledobject.yaml
+      - isKind:
+          of: TriggerAuthentication
+        template: keda-triggerauth.yaml
+      - equal:
+          path: metadata.name
+          value: activemq-auth
+        template: keda-triggerauth.yaml
+      - equal:
+          path: spec.secretTargetRef[0].name
+          value: activemq-credentials
+        template: keda-triggerauth.yaml
+
+  - it: should not render KEDA resources when keda is disabled
+    set:
+      keda.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: keda-scaledobject.yaml
+      - hasDocuments:
+          count: 0
+        template: keda-triggerauth.yaml

@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "release-validation-framework.worker.fullname" . }}
+  labels:
+    {{- include "release-validation-framework.worker.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.worker.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "release-validation-framework.worker.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.worker.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "release-validation-framework.worker.selectorLabels" . | nindent 8 }}
+        {{- with .Values.worker.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      terminationGracePeriodSeconds: {{ .Values.worker.terminationGracePeriodSeconds }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.worker.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.worker.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: rvf
+          image: {{ include "release-validation-framework.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: RVF_EXECUTION_ENGINE
+              value: {{ .Values.env.executionEngine | quote }}
+            - name: RVF_EXECUTION_ISWORKER
+              value: "true"
+            - name: RVF_ASSERTION_RESOURCE_LOCAL_PATH
+              value: {{ .Values.env.assertionResourceLocalPath | quote }}
+            - name: RVF_DROOLS_RULE_DIRECTORY
+              value: {{ .Values.env.droolsRuleDirectory | quote }}
+            - name: SPRING_ACTIVEMQ_BROKER_URL
+              value: {{ include "release-validation-framework.brokerUrl" . | quote }}
+            - name: AWS_REGION
+              value: {{ .Values.env.awsRegion | quote }}
+            - name: RVF_VALIDATION_JOB_STORAGE_LOCAL_PATH
+              value: {{ .Values.env.jobStorageLocalPath | quote }}
+            - name: RVF_RELEASE_STORAGE_LOCAL_PATH
+              value: {{ .Values.env.releaseStorageLocalPath | quote }}
+            - name: RVF_RELEASE_STORAGE_USECLOUD
+              value: {{ .Values.env.releaseStorageUseCloud | quote }}
+            - name: RVF_VALIDATION_JOB_RETENTION_DAYS
+              value: {{ .Values.worker.retentionDays | quote }}
+            - name: RVF_DUCK_WORK_DIRECTORY
+              value: {{ .Values.worker.duckdb.workDirectory | quote }}
+            - name: RVF_DUCK_CACHE_DIRECTORY
+              value: {{ .Values.worker.duckdb.cacheDirectory | quote }}
+            - name: RVF_DUCK_CACHE_MAX_GB
+              value: {{ .Values.worker.duckdb.cacheMaxGb | quote }}
+            - name: RVF_DUCK_THREADS
+              value: {{ .Values.worker.duckdb.threads | quote }}
+            {{- with .Values.worker.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          volumeMounts:
+            - name: jobs
+              mountPath: {{ .Values.persistence.jobs.mountPath }}
+            - name: releases
+              mountPath: {{ .Values.persistence.releases.mountPath }}
+            - name: work
+              mountPath: {{ .Values.worker.workVolume.mountPath }}
+          resources:
+            {{- toYaml .Values.worker.resources | nindent 12 }}
+      volumes:
+        - name: jobs
+          persistentVolumeClaim:
+            claimName: {{ include "release-validation-framework.jobsPvcName" . }}
+        - name: releases
+          persistentVolumeClaim:
+            claimName: {{ include "release-validation-framework.releasesPvcName" . }}
+        - name: work
+          emptyDir:
+            sizeLimit: {{ .Values.worker.workVolume.emptyDir.sizeLimit }}
+      {{- with .Values.worker.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

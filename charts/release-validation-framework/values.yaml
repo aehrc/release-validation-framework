@@ -1,0 +1,440 @@
+# -- String to partially override release-validation-framework.name template (will maintain the release name)
+nameOverride: ""
+
+# -- String to fully override release-validation-framework.fullname template
+fullnameOverride: "rvf"
+
+# -- Namespace configuration
+namespace:
+  # -- Whether to create the Namespace resource
+  create: false
+  # -- Name of the Namespace to create
+  name: "rvf"
+
+# -- cert-manager integration for automated TLS certificate provisioning via Let's Encrypt
+certmanager:
+  # -- Enable cert-manager integration on the Gateway
+  enabled: true
+  # -- Name of the ClusterIssuer to reference on the Gateway (defaults to 'letsencrypt' as present on ncts-k8s-cluster)
+  clusterIssuerName: "letsencrypt"
+
+# -- Common container image settings for RVF (API and Worker)
+image:
+  # -- Image repository
+  repository: ontoserver.azurecr.io/aehrc-rvf/release-validation-framework
+  # -- Image pull policy
+  pullPolicy: Always
+  # -- Image tag (defaults to Chart appVersion if empty)
+  tag: ""
+
+# -- References to Kubernetes Secret names for container registry credentials
+imagePullSecrets: []
+
+# -- Common environment variables shared by API and Worker
+env:
+  # -- RVF execution engine ("duckdb" or "mysql")
+  executionEngine: "duckdb"
+  # -- Path to assertion resources inside the container
+  assertionResourceLocalPath: "/app/snomed-release-validation-assertions"
+  # -- Path to Drools rule directory inside the container
+  droolsRuleDirectory: "/app/snomed-drools-rules"
+  # -- ActiveMQ broker URL. If empty, automatically computed as tcp://<activemq-service>:61616
+  brokerUrl: ""
+  # -- AWS region required by the S3 client during eager initialization
+  awsRegion: "us-east-1"
+  # -- Relative path for local validation job storage (relative to working dir /app)
+  jobStorageLocalPath: "jobs/"
+  # -- Relative path for local release storage (relative to working dir /app)
+  releaseStorageLocalPath: "releases/"
+  # -- Whether cloud storage is used for releases
+  releaseStorageUseCloud: "false"
+
+# -- Persistent Volume Claims configuration
+persistence:
+  # -- PVC for shared validation jobs (upload handover and reports)
+  jobs:
+    # -- Whether to create the jobs PVC
+    create: true
+    # -- Claim name for the jobs share
+    claimName: "rvf-jobs"
+    # -- Storage class name (azurefile-csi-premium provides ReadWriteMany)
+    storageClassName: "azurefile-csi-premium"
+    # -- Access modes for the PVC
+    accessModes:
+      - ReadWriteMany
+    # -- Storage capacity requested
+    size: 100Gi
+    # -- Container mount path for jobs storage
+    mountPath: /app/jobs
+  # -- PVC for published release archives
+  releases:
+    # -- Whether to create the releases PVC
+    create: true
+    # -- Claim name for the releases share
+    claimName: "rvf-releases"
+    # -- Storage class name (azurefile-csi-premium provides ReadWriteMany)
+    storageClassName: "azurefile-csi-premium"
+    # -- Access modes for the PVC
+    accessModes:
+      - ReadWriteMany
+    # -- Storage capacity requested
+    size: 50Gi
+    # -- Container mount path for releases storage
+    mountPath: /app/releases
+
+# -- RVF API Deployment & Service configuration
+api:
+  # -- Number of API pod replicas
+  replicaCount: 2
+  # -- Override name for API Deployment and Service
+  nameOverride: "rvf-api"
+  # -- Days to retain uploaded release files in job storage before reaping (0 disables reaping)
+  retentionDays: "7"
+  # -- Resource requests and limits for the API container
+  resources:
+    requests:
+      cpu: 250m
+      memory: 1Gi
+    limits:
+      memory: 2Gi
+  # -- Kubernetes Service configuration for the API
+  service:
+    # -- Service type
+    type: ClusterIP
+    # -- Service port
+    port: 8080
+  # -- Readiness probe configuration
+  readinessProbe:
+    # -- Enable readiness probe
+    enabled: true
+    # -- HTTP endpoint path
+    path: /version
+    # -- HTTP endpoint port
+    port: 8080
+    # -- Seconds before initial probe execution
+    initialDelaySeconds: 20
+    # -- Frequency in seconds between probes
+    periodSeconds: 10
+  # -- Pod annotations for API pods
+  podAnnotations: {}
+  # -- Pod labels for API pods
+  podLabels: {}
+  # -- Node selector for API pods
+  nodeSelector: {}
+  # -- Tolerations for API pods
+  tolerations: []
+  # -- Affinity rules for API pods
+  affinity: {}
+  # -- Extra environment variables for API container
+  extraEnv: []
+
+# -- RVF Worker Deployment configuration
+worker:
+  # -- Initial number of worker pod replicas (autoscaled by KEDA when enabled)
+  replicaCount: 1
+  # -- Override name for Worker Deployment
+  nameOverride: "rvf-worker"
+  # -- Grace period in seconds before pod termination (covers long validations)
+  terminationGracePeriodSeconds: 600
+  # -- Reaping is the API's responsibility, so retention is set to 0 on workers
+  retentionDays: "0"
+  # -- Resource requests and limits for the Worker container
+  resources:
+    requests:
+      cpu: "4"
+      memory: 12Gi
+    limits:
+      cpu: "8"
+      memory: 16Gi
+  # -- DuckDB engine performance tuning
+  duckdb:
+    # -- Scratch working directory (node-local)
+    workDirectory: "/work"
+    # -- Node-local release cache directory
+    cacheDirectory: "/work/release-cache"
+    # -- Max cache size in GB (0 disables cache)
+    cacheMaxGb: "0"
+    # -- Number of DuckDB worker threads (must match cpu limit)
+    threads: "8"
+  # -- Ephemeral work volume configuration
+  workVolume:
+    emptyDir:
+      # -- Size limit for ephemeral scratch disk
+      sizeLimit: 40Gi
+    # -- Mount path for ephemeral scratch disk
+    mountPath: /work
+  # -- Node selector for worker pods (pinned to large 8-core nodes)
+  nodeSelector:
+    agentpool: large
+  # -- Tolerations for tainted node pools
+  tolerations:
+    - key: node-type
+      operator: Equal
+      value: large-production
+      effect: NoSchedule
+  # -- Pod annotations for worker pods
+  podAnnotations: {}
+  # -- Pod labels for worker pods
+  podLabels: {}
+  # -- Affinity rules for worker pods
+  affinity: {}
+  # -- Extra environment variables for worker container
+  extraEnv: []
+
+# -- ActiveMQ broker configuration
+activemq:
+  # -- Whether to deploy ActiveMQ
+  enabled: true
+  # -- Override name for ActiveMQ Deployment and Service
+  nameOverride: "activemq"
+  # -- Number of ActiveMQ broker replicas
+  replicaCount: 1
+  # -- ActiveMQ container image
+  image:
+    repository: apache/activemq-classic
+    pullPolicy: IfNotPresent
+    tag: "6.1.4"
+  # -- ActiveMQ Service ports
+  service:
+    type: ClusterIP
+    openwirePort: 61616
+    consolePort: 8161
+  # -- Resource requests and limits for ActiveMQ
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      memory: 1Gi
+  # -- Pod annotations for ActiveMQ
+  podAnnotations: {}
+  # -- Pod labels for ActiveMQ
+  podLabels: {}
+  # -- Node selector for ActiveMQ pods
+  nodeSelector: {}
+  # -- Tolerations for ActiveMQ pods
+  tolerations: []
+  # -- Affinity rules for ActiveMQ pods
+  affinity: {}
+
+# -- KEDA Autoscaling configuration
+keda:
+  # -- Enable KEDA autoscaling resources
+  enabled: true
+  # -- ScaledObject configuration for Worker Deployment
+  scaledObject:
+    # -- Enable ScaledObject
+    enabled: true
+    # -- Override name for ScaledObject
+    nameOverride: "rvf-worker"
+    # -- Minimum replica count (0 enables scale-to-zero when idle)
+    minReplicaCount: 0
+    # -- Maximum replica count
+    maxReplicaCount: 6
+    # -- Cooldown period in seconds before scaling down
+    cooldownPeriod: 900
+    # -- Polling interval in seconds to inspect queue depth
+    pollingInterval: 30
+    # -- Advanced HPA scale down stabilization window
+    advanced:
+      horizontalPodAutoscalerConfig:
+        behavior:
+          scaleDown:
+            stabilizationWindowSeconds: 900
+    # -- ActiveMQ trigger parameters
+    triggers:
+      destinationName: "rvf-validation-queue"
+      brokerName: "localhost"
+      targetQueueSize: "1"
+  # -- TriggerAuthentication configuration
+  triggerAuthentication:
+    # -- Enable TriggerAuthentication
+    enabled: true
+    # -- Override name for TriggerAuthentication
+    nameOverride: "activemq-auth"
+    # -- Secret name containing ActiveMQ credentials
+    secretName: "activemq-credentials"
+    # -- Key within secret for ActiveMQ username
+    usernameKey: "username"
+    # -- Key within secret for ActiveMQ password
+    passwordKey: "password"
+    # -- Optional ExternalSecret to automatically create activemq-credentials from Vault
+    externalSecret:
+      # -- Enable ExternalSecret creation for ActiveMQ credentials
+      enabled: false
+      refreshInterval: "1h"
+      secretStoreRef:
+        name: "vault-backend"
+        kind: "ClusterSecretStore"
+      remoteRef:
+        key: "acl_vlt_od225632/kv/data/rvf"
+        usernameProperty: "activemq_username"
+        passwordProperty: "activemq_password"
+
+# -- ExternalSecret configuration for Keycloak OIDC client secret
+externalSecret:
+  # -- Enable ExternalSecret creation
+  enabled: true
+  # -- Override name for ExternalSecret
+  nameOverride: "rvf-oidc"
+  # -- ArgoCD sync-wave annotation (ensures secret is materialized before deployment)
+  syncWave: "-1"
+  # -- Refresh interval for syncing secret from Vault
+  refreshInterval: "1h"
+  # -- Additional custom annotations on ExternalSecret
+  annotations: {}
+  # -- Reference to the SecretStore or ClusterSecretStore
+  secretStoreRef:
+    name: "vault-backend"
+    kind: "ClusterSecretStore"
+  # -- Target Secret creation options
+  target:
+    name: "rvf-oidc"
+    creationPolicy: "Owner"
+  # -- Individual secret key mappings
+  data:
+    - secretKey: "client-secret"
+      remoteRef:
+        conversionStrategy: "Default"
+        decodingStrategy: "None"
+        metadataPolicy: "None"
+        key: "acl_vlt_od225632/kv/data/rvf"
+        property: "client_secret"
+  # -- Bulk secret mappings (optional)
+  dataFrom: []
+
+# -- Envoy Gateway configuration
+gateway:
+  # -- Enable Gateway resource creation
+  enabled: true
+  # -- Override name for Gateway resource
+  nameOverride: "rvf-gw"
+  # -- GatewayClass name (must match installed Envoy Gateway class)
+  gatewayClassName: "envoy-gateway-class"
+  # -- Additional annotations on the Gateway
+  annotations: {}
+  # -- TLS configuration for HTTPS listener
+  tls:
+    # -- Enable TLS termination on port 443
+    enabled: true
+    # -- TLS termination mode
+    mode: "Terminate"
+    # -- Secret name containing TLS certificate
+    certificateSecret: "rvf-tls"
+  # -- Listener configurations
+  listeners:
+    # -- Plaintext HTTP listener (used by ACME http-01 challenge)
+    http:
+      enabled: true
+      name: "public-http"
+      port: 80
+      protocol: "HTTP"
+      allowedRoutes:
+        namespaces:
+          from: "Same"
+    # -- Secure HTTPS listener
+    https:
+      enabled: true
+      name: "websecure"
+      port: 443
+      hostname: "ncts-rvf.australiaeast.cloudapp.azure.com"
+      allowedRoutes:
+        namespaces:
+          from: "Same"
+  # -- ClientTrafficPolicy for Gateway connection settings
+  clientTrafficPolicy:
+    # -- Enable ClientTrafficPolicy
+    enabled: true
+    # -- Override name for ClientTrafficPolicy
+    nameOverride: "rvf-client"
+    # -- Per-connection buffer limit for large uploads
+    bufferLimit: "32Mi"
+
+# -- Gateway API HTTPRoute configuration
+httpRoute:
+  # -- Enable HTTPRoute resource creation
+  enabled: true
+  # -- Override name for HTTPRoute
+  nameOverride: "rvf-route"
+  # -- Hostnames matched by this route
+  hostnames:
+    - "ncts-rvf.australiaeast.cloudapp.azure.com"
+  # -- Routing rules mapping to backend service
+  rules:
+    - matches:
+        - path:
+            type: "PathPrefix"
+            value: "/"
+  # -- BackendTrafficPolicy for request timeouts
+  backendTrafficPolicy:
+    # -- Enable BackendTrafficPolicy
+    enabled: true
+    # -- Override name for BackendTrafficPolicy
+    nameOverride: "rvf-timeouts"
+    # -- Request timeout duration (accommodates 850MB+ release uploads)
+    requestTimeout: "600s"
+    # -- Connection idle timeout
+    connectionIdleTimeout: "120s"
+
+# -- Envoy Gateway SecurityPolicy configuration (OIDC and JWT)
+securityPolicy:
+  # -- Enable SecurityPolicy resource creation
+  enabled: true
+  # -- Override name for SecurityPolicy
+  nameOverride: "rvf-auth-policy"
+  # -- OIDC configuration for browser login flow
+  oidc:
+    provider:
+      issuer: "https://auth.ontoserver.csiro.au/auth/realms/aehrc"
+    clientID: "rvf"
+    clientSecret:
+      name: "rvf-oidc"
+    redirectURL: "https://ncts-rvf.australiaeast.cloudapp.azure.com/oauth2/callback"
+    scopes:
+      - "openid"
+      - "profile"
+      - "email"
+    forwardAccessToken: true
+  # -- JWT configuration for machine/Bearer token flow
+  jwt:
+    providers:
+      - name: "oidc"
+        issuer: "https://auth.ontoserver.csiro.au/auth/realms/aehrc"
+        remoteJWKS:
+          cacheDuration: "300s"
+          uri: "https://auth.ontoserver.csiro.au/auth/realms/aehrc/protocol/openid-connect/certs"
+        claimToHeaders:
+          - header: "X-AUTH-username"
+            claim: "preferred_username"
+          - header: "X-AUTH-roles"
+            claim: "rvf_roles"
+          - header: "X-AUTH-token"
+            claim: "jti"
+  # -- Authorization policy (default deny, allow rvf-users)
+  authorization:
+    defaultAction: "Deny"
+    rules:
+      - action: "Allow"
+        principal:
+          jwt:
+            provider: "oidc"
+            claims:
+              - name: "groups"
+                valueType: "StringArray"
+                values:
+                  - "rvf-users"
+
+# -- NetworkPolicy restricting direct access to API pods
+networkPolicy:
+  # -- Enable NetworkPolicy
+  enabled: true
+  # -- Override name for NetworkPolicy
+  nameOverride: "rvf-api-gateway-only"
+  # -- Ingress rules allowing traffic exclusively from Envoy Gateway proxies
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: "envoy-gateway-system"
+      ports:
+        - port: 8080

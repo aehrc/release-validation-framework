@@ -1,0 +1,52 @@
+{{- if .Values.activemq.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "release-validation-framework.activemq.fullname" . }}
+  labels:
+    {{- include "release-validation-framework.activemq.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.activemq.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "release-validation-framework.activemq.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.activemq.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "release-validation-framework.activemq.selectorLabels" . | nindent 8 }}
+        {{- with .Values.activemq.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: activemq
+          image: {{ include "release-validation-framework.activemq.image" . }}
+          imagePullPolicy: {{ .Values.activemq.image.pullPolicy }}
+          ports:
+            - name: openwire
+              containerPort: {{ .Values.activemq.service.openwirePort }}
+            - name: console
+              containerPort: {{ .Values.activemq.service.consolePort }}
+          resources:
+            {{- toYaml .Values.activemq.resources | nindent 12 }}
+      {{- with .Values.activemq.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.activemq.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.activemq.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

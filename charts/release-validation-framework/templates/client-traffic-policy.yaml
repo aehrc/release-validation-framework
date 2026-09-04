@@ -1,0 +1,15 @@
+{{- if and .Values.gateway.enabled .Values.gateway.clientTrafficPolicy.enabled }}
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: ClientTrafficPolicy
+metadata:
+  name: {{ include "release-validation-framework.clientTrafficPolicyName" . }}
+  labels:
+    {{- include "release-validation-framework.labels" . | nindent 4 }}
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: {{ include "release-validation-framework.gatewayName" . }}
+  connection:
+    bufferLimit: {{ .Values.gateway.clientTrafficPolicy.bufferLimit }}
+{{- end }}

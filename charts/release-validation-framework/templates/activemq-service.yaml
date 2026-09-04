@@ -1,0 +1,19 @@
+{{- if .Values.activemq.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "release-validation-framework.activemq.fullname" . }}
+  labels:
+    {{- include "release-validation-framework.activemq.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.activemq.service.type }}
+  selector:
+    {{- include "release-validation-framework.activemq.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: openwire
+      port: {{ .Values.activemq.service.openwirePort }}
+      targetPort: {{ .Values.activemq.service.openwirePort }}
+    - name: console
+      port: {{ .Values.activemq.service.consolePort }}
+      targetPort: {{ .Values.activemq.service.consolePort }}
+{{- end }}

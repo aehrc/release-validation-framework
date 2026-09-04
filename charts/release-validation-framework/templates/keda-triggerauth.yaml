@@ -1,0 +1,16 @@
+{{- if and .Values.keda.enabled .Values.keda.triggerAuthentication.enabled }}
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: {{ include "release-validation-framework.triggerAuthName" . }}
+  labels:
+    {{- include "release-validation-framework.labels" . | nindent 4 }}
+spec:
+  secretTargetRef:
+    - parameter: username
+      name: {{ .Values.keda.triggerAuthentication.secretName }}
+      key: {{ .Values.keda.triggerAuthentication.usernameKey }}
+    - parameter: password
+      name: {{ .Values.keda.triggerAuthentication.secretName }}
+      key: {{ .Values.keda.triggerAuthentication.passwordKey }}
+{{- end }}

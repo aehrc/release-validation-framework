@@ -1,0 +1,55 @@
+suite: test persistent volume claims
+templates:
+  - pvc-jobs.yaml
+  - pvc-releases.yaml
+tests:
+  - it: should render jobs and releases PVCs with default values
+    set:
+      fullnameOverride: "rvf"
+    asserts:
+      - isKind:
+          of: PersistentVolumeClaim
+        template: pvc-jobs.yaml
+      - equal:
+          path: metadata.name
+          value: rvf-jobs
+        template: pvc-jobs.yaml
+      - equal:
+          path: spec.storageClassName
+          value: azurefile-csi-premium
+        template: pvc-jobs.yaml
+      - equal:
+          path: spec.accessModes[0]
+          value: ReadWriteMany
+        template: pvc-jobs.yaml
+      - equal:
+          path: spec.resources.requests.storage
+          value: 100Gi
+        template: pvc-jobs.yaml
+      - isKind:
+          of: PersistentVolumeClaim
+        template: pvc-releases.yaml
+      - equal:
+          path: metadata.name
+          value: rvf-releases
+        template: pvc-releases.yaml
+      - equal:
+          path: spec.storageClassName
+          value: azurefile-csi-premium
+        template: pvc-releases.yaml
+      - equal:
+          path: spec.resources.requests.storage
+          value: 50Gi
+        template: pvc-releases.yaml
+
+  - it: should not render PVCs when create is false
+    set:
+      persistence.jobs.create: false
+      persistence.releases.create: false
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: pvc-jobs.yaml
+      - hasDocuments:
+          count: 0
+        template: pvc-releases.yaml

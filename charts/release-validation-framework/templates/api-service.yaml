@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "release-validation-framework.api.fullname" . }}
+  labels:
+    {{- include "release-validation-framework.api.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.api.service.type }}
+  selector:
+    {{- include "release-validation-framework.api.selectorLabels" . | nindent 4 }}
+  ports:
+    - port: {{ .Values.api.service.port }}
+      targetPort: {{ .Values.api.service.port }}
+      protocol: TCP
+      name: http

@@ -1,0 +1,15 @@
+{{- if .Values.persistence.releases.create }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "release-validation-framework.releasesPvcName" . }}
+  labels:
+    {{- include "release-validation-framework.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    {{- toYaml .Values.persistence.releases.accessModes | nindent 4 }}
+  storageClassName: {{ .Values.persistence.releases.storageClassName | quote }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.releases.size | quote }}
+{{- end }}

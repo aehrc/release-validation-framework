@@ -1,0 +1,16 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "release-validation-framework.networkPolicyName" . }}
+  labels:
+    {{- include "release-validation-framework.api.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ include "release-validation-framework.api.fullname" . }}
+  policyTypes:
+    - Ingress
+  ingress:
+    {{- toYaml .Values.networkPolicy.ingress | nindent 4 }}
+{{- end }}

@@ -1,0 +1,17 @@
+apiVersion: v2
+name: release-validation-framework
+description: A Helm chart for Release Validation Framework (RVF) on AKS
+type: application
+version: 0.1.0
+appVersion: "9.0.1-duckdb"
+icon: https://raw.githubusercontent.com/aehrc/release-validation-framework/main/docs/icon.png
+keywords:
+  - rvf
+  - snomed
+  - duckdb
+  - validation
+home: https://github.com/aehrc/release-validation-framework
+sources:
+  - https://github.com/aehrc/release-validation-framework
+maintainers:
+  - name: AEHRC

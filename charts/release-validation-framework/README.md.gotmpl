@@ -1,0 +1,26 @@
+{{ template "chart.header" . }}
+{{ template "chart.deprecationWarning" . }}
+
+{{ template "chart.badgesSection" . }}
+
+{{ template "chart.description" . }}
+
+{{ template "chart.homepageLine" . }}
+
+{{ template "chart.maintainersSection" . }}
+
+{{ template "chart.sourcesSection" . }}
+
+{{ template "chart.requirementsSection" . }}
+
+## Architecture
+
+RVF validates SNOMED CT release packages using an embedded DuckDB execution engine, splitting execution across an API layer and auto-scaled workers:
+
+- **RVF API (`rvf-api`)**: Accepts validation job submissions and serves generated validation reports. Does not execute validations.
+- **RVF Worker (`rvf-worker`)**: Headless worker pods scaled by KEDA based on ActiveMQ queue depth. Materialises DuckDB schemas, runs SQL assertions, structural checks, and MRCM validations.
+- **ActiveMQ (`activemq`)**: Message broker queueing validation jobs between API and worker pods.
+- **Shared Storage (`azurefile-csi-premium`)**: ReadWriteMany Azure Files share mounted at `/app/jobs` for release handover and `/app/releases` for prior release comparison.
+- **Envoy Gateway & SecurityPolicy**: Ingress gateway handling TLS termination via cert-manager, OIDC authentication, Bearer JWT validation, and claim-to-header mapping (`X-AUTH-username`, `X-AUTH-roles`, `X-AUTH-token`).
+
+{{ template "chart.valuesSection" . }}
