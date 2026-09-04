@@ -23,7 +23,7 @@ certmanager:
   issuer:
     # -- Whether to create a namespaced ACME Issuer resource with gatewayHTTPRoute HTTP-01 solver
     create: true
-    # -- Email address to register with Let's Encrypt for certificate expiry notices (required when issuer.create is true)
+    # -- Email address to register with Let's Encrypt for certificate expiry notices
     email: ""
     # -- ACME server directory URL
     server: "https://acme-v02.api.letsencrypt.org/directory"

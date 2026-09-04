@@ -52,7 +52,7 @@
             },
             "email": {
               "type": "string",
-              "description": "Email address to register with Let's Encrypt for certificate expiry notices (required when issuer.create is true)"
+              "description": "Email address to register with Let's Encrypt for certificate expiry notices"
             },
             "server": {
               "type": "string",

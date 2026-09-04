@@ -12,7 +12,9 @@ metadata:
 spec:
   acme:
     server: {{ .Values.certmanager.issuer.server | default "https://acme-v02.api.letsencrypt.org/directory" }}
-    email: {{ required "A valid certmanager.issuer.email is required when certmanager.issuer.create is true" .Values.certmanager.issuer.email }}
+    {{- if .Values.certmanager.issuer.email }}
+    email: {{ .Values.certmanager.issuer.email | quote }}
+    {{- end }}
     privateKeySecretRef:
       name: {{ .Values.certmanager.issuer.privateKeySecretRef | default (printf "%s-key" (include "release-validation-framework.issuerName" .)) }}
     solvers:

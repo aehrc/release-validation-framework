@@ -12,7 +12,6 @@ tests:
   - it: should render all gateway and auth resources with default values
     set:
       fullnameOverride: "rvf"
-      certmanager.issuer.email: "test@example.com"
     asserts:
       - isKind:
           of: Gateway
@@ -158,9 +157,8 @@ tests:
           path: metadata.name
           value: letsencrypt-rvf
         template: issuer.yaml
-      - equal:
+      - isNull:
           path: spec.acme.email
-          value: test@example.com
         template: issuer.yaml
       - equal:
           path: spec.acme.solvers[0].http01.gatewayHTTPRoute.parentRefs[0].name
@@ -239,4 +237,17 @@ tests:
       - equal:
           path: spec.acme.solvers[0].http01.gatewayHTTPRoute.parentRefs[0].name
           value: "rvf-gw"
+        template: issuer.yaml
+
+  - it: should include email in issuer when certmanager.issuer.email is configured
+    set:
+      fullnameOverride: "rvf"
+      certmanager.issuer.email: "test@example.com"
+    asserts:
+      - isKind:
+          of: Issuer
+        template: issuer.yaml
+      - equal:
+          path: spec.acme.email
+          value: test@example.com
         template: issuer.yaml

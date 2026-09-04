@@ -1,6 +1,6 @@
 # release-validation-framework
 
-![Version: 0.1.0](https://img.shields.io/badge/Version-0.1.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 9.0.1-duckdb](https://img.shields.io/badge/AppVersion-9.0.1--duckdb-informational?style=flat-square)
+![Version: 0.2.1](https://img.shields.io/badge/Version-0.2.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 9.0.1-duckdb](https://img.shields.io/badge/AppVersion-9.0.1--duckdb-informational?style=flat-square)
 
 A Helm chart for Release Validation Framework (RVF) on AKS
 
@@ -62,9 +62,16 @@ RVF validates SNOMED CT release packages using an embedded DuckDB execution engi
 | api.service.port | int | `8080` | Service port |
 | api.service.type | string | `"ClusterIP"` | Service type |
 | api.tolerations | list | `[]` | Tolerations for API pods |
-| certmanager | object | `{"clusterIssuerName":"letsencrypt","enabled":true}` | cert-manager integration for automated TLS certificate provisioning via Let's Encrypt |
-| certmanager.clusterIssuerName | string | `"letsencrypt"` | Name of the ClusterIssuer to reference on the Gateway (defaults to 'letsencrypt' as present on ncts-k8s-cluster) |
+| certmanager | object | `{"clusterIssuerName":"","enabled":true,"issuer":{"annotations":{},"create":true,"email":"","privateKeySecretRef":"","server":"https://acme-v02.api.letsencrypt.org/directory"},"issuerName":""}` | cert-manager integration for automated TLS certificate provisioning via Let's Encrypt |
+| certmanager.clusterIssuerName | string | `""` | Name of a ClusterIssuer to reference on the Gateway (used when issuer.create is false and issuerName is empty) |
 | certmanager.enabled | bool | `true` | Enable cert-manager integration on the Gateway |
+| certmanager.issuer | object | `{"annotations":{},"create":true,"email":"","privateKeySecretRef":"","server":"https://acme-v02.api.letsencrypt.org/directory"}` | Configuration for a namespaced ACME Issuer hooked into the Gateway's port-80 HTTP listener |
+| certmanager.issuer.annotations | object | `{}` | Optional annotations for the Issuer resource |
+| certmanager.issuer.create | bool | `true` | Whether to create a namespaced ACME Issuer resource with gatewayHTTPRoute HTTP-01 solver |
+| certmanager.issuer.email | string | `""` | Email address to register with Let's Encrypt for certificate expiry notices |
+| certmanager.issuer.privateKeySecretRef | string | `""` | Name of secret to store ACME account private key (defaults to <issuerName>-key) |
+| certmanager.issuer.server | string | `"https://acme-v02.api.letsencrypt.org/directory"` | ACME server directory URL |
+| certmanager.issuerName | string | `""` | Custom name for the Issuer resource or reference (defaults to letsencrypt-<fullname>) |
 | env | object | `{"assertionResourceLocalPath":"/app/snomed-release-validation-assertions","awsRegion":"us-east-1","brokerUrl":"","droolsRuleDirectory":"/app/snomed-drools-rules","executionEngine":"duckdb","jobStorageLocalPath":"jobs/","releaseStorageLocalPath":"releases/","releaseStorageUseCloud":"false"}` | Common environment variables shared by API and Worker |
 | env.assertionResourceLocalPath | string | `"/app/snomed-release-validation-assertions"` | Path to assertion resources inside the container |
 | env.awsRegion | string | `"us-east-1"` | AWS region required by the S3 client during eager initialization |
