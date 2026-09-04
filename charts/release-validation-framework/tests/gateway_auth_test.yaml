@@ -3,6 +3,7 @@ templates:
   - gateway.yaml
   - issuer.yaml
   - httproute.yaml
+  - httproute-redirect.yaml
   - backend-traffic-policy.yaml
   - client-traffic-policy.yaml
   - security-policy.yaml
@@ -83,6 +84,17 @@ tests:
           path: spec.rules[0].backendRefs[0].port
           value: 8080
         template: httproute.yaml
+      - isKind:
+          of: HTTPRoute
+        template: httproute-redirect.yaml
+      - equal:
+          path: spec.parentRefs[0].sectionName
+          value: public-http
+        template: httproute-redirect.yaml
+      - equal:
+          path: spec.rules[0].filters[0].requestRedirect.statusCode
+          value: 301
+        template: httproute-redirect.yaml
       - isKind:
           of: BackendTrafficPolicy
         template: backend-traffic-policy.yaml
@@ -189,6 +201,9 @@ tests:
       - hasDocuments:
           count: 0
         template: backend-traffic-policy.yaml
+      - hasDocuments:
+          count: 0
+        template: httproute-redirect.yaml
       - hasDocuments:
           count: 0
         template: client-traffic-policy.yaml
