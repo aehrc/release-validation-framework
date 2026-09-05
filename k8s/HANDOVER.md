@@ -8,39 +8,63 @@ Written 2026-09-03 against `catchup-upgraded`.
 
 ---
 
-## 0. What is done, and what is yours
+## 0. It is deployed and running
 
-**Done, nothing to set up:**
+**As of 5 September 2026 this is live on `ncts-k8s-cluster`.** The sections
+below were written before there was cluster access and describe steps that have
+since been carried out; they are kept because they explain *why* each piece is
+shaped as it is.
 
-* The image is built, tested and pushed by CI - ADO definition **65
-  `rvf-duckdb-server-image`**. A run with default parameters builds the three
-  pinned libraries, runs 340 tests, and pushes. See §2.
-* The nightly pipeline is written and wired as ADO definition **66
-  `rvf-duckdb-nightly`**, created **disabled** on purpose: it triggers off
-  `daily-rvf`'s `RvfStage`, so enabling it before the API exists would fail
-  every night. Enable it once §8's answers are in.
-* Every manifest references the image tag CI produces, so no YAML needs editing
-  before you apply it.
+    console      https://ncts-rvf.australiaeast.cloudapp.azure.com/
+    swagger      https://ncts-rvf.australiaeast.cloudapp.azure.com/swagger-ui.html
+    namespace    rvf on ncts-k8s-cluster
+    deployed by  ArgoCD application `rvf-duckdb`, chart 0.2.6 from nctsacr
+    image        nctsacr.azurecr.io/aehrc-rvf/release-validation-framework
 
-**Yours, in order:**
+**Proven end to end**, not inferred. A validation submitted through the console
+returned 62 assertions run, 1 failure, 1 warning, 2 incomplete. The same run via
+`ci/smoke_test.sh` exercises Keycloak, the gateway, ActiveMQ, KEDA starting a
+worker from zero, and DuckDB. See §5.
+
+**Authentication works in both modes**, which took two corrections. A browser
+gets the Keycloak login. A machine sends `Authorization: Bearer` from
+`client_credentials`. Forged `X-AUTH-*` headers are refused - checked again
+after every change, because RVF trusts those headers absolutely. See §6.
+
+### What is still open
 
 | # | do | detail |
 |---|---|---|
-| 1 | decide **split or single container** | §1 and `k8s/README.md`. Single needs no broker or shared volume and is the honest choice if only the nightly runs |
-| 2 | create secret `activemq-credentials`, confirm KEDA | §3 |
-| 3 | `kubectl apply -f k8s/rvf-aks.yaml` | §3 |
-| 4 | run the **cross-node** smoke test | §5. Pass condition is a report written by a worker being served by an API replica that never ran it |
-| 5 | apply `k8s/rvf-gateway-auth.yaml` (Keycloak and Vault are already done) | §6 |
-| 6 | run all three acceptance tests | §6. **Do not skip the header-spoofing one** |
-| 7 | send back the six answers | §8 |
+| 1 | enable ADO definition **66 `rvf-duckdb-nightly`** | created **disabled** on purpose, because it triggers off `daily-rvf`'s `RvfStage` and would have failed nightly before the API existed. Its two storage parameters are now known - see below - so this is a UI toggle plus those values |
+| 2 | decide **split or single container** | §1 and `k8s/README.md`. A single container needs no broker and no shared volume, and is the honest choice while only the nightly runs |
+| 3 | run the **cross-node** check | §5a. Everything else is proven; this one needs a deliberate look at which node each pod is on |
 
-**The five placeholders**, all in `k8s/rvf-gateway-auth.yaml`:
-`client-secret`, `cookie-secret`, `KEYCLOAK_HOST`, `REALM`, `RVF_PUBLIC_HOST`.
+**The job store coordinates**, which were the last unknown. The PVC is
+dynamically provisioned, so Azure generated the share name; it is readable from
+the volume handle, which encodes
+`<resourceGroup>#<storageAccount>#<shareName>###<namespace>`:
 
-**Nothing here has been applied to a cluster**, because there was no cluster
-access from where it was written. Everything checkable without one has been
-checked, and where something is unverified it says so rather than implying
-otherwise.
+    kubectl get pv $(kubectl -n rvf get pvc rvf-jobs -o jsonpath='{.spec.volumeName}') \
+        -o jsonpath='{.spec.csi.volumeHandle}'
+
+    jobStoreAccount   f850afa0f5ef24e93856ca4
+    jobStoreShare     pvc-1a50b744-5fc6-47f7-a4cc-e69b2a95dd01
+    resource group    MC_ncts_ncts-k8s-cluster_australiaeast
+
+Both differ from the pipeline's defaults (`ontoserverdevelop` / `rvf-jobs`), so
+set them when enabling definition 66. Re-read them if the PVC is ever deleted
+and recreated: the name is generated, not chosen.
+
+### Things worth knowing about how it got here
+
+* **The worker scales to zero.** A submission waits about three minutes while
+  KEDA notices the queue and starts a pod. That is the autoscaler working.
+* **`k8s/rvf-aks.yaml` and `k8s/rvf-gateway-auth.yaml` are superseded** by the
+  Helm chart in `charts/release-validation-framework`, which is what ArgoCD
+  deploys. They are kept as the readable object-by-object reference that §3
+  walks through.
+* **The five placeholders are filled.** Keycloak, Vault and the gateway are
+  configured and working.
 
 ## 0-PR. The Argo PR is raised
 
@@ -159,9 +183,30 @@ scope — SQL, structural, Drools and MRCM — takes about **13 minutes**, again
 
 Two pods, because the two halves want very different machines:
 
-    rvf-api      2 replicas    accepts validations, serves reports, never executes
-    rvf-worker   1..6 (KEDA)   executes validations, needs 16Gi
+    rvf-api      1 replica     accepts validations, serves reports, never executes
+    rvf-worker   0..6 (KEDA)   executes validations, needs 16Gi
     activemq     1 replica     the queue between them
+
+### How a person uses it
+
+**https://ncts-rvf.australiaeast.cloudapp.azure.com/** — the console. `/`
+redirects there, and it is the front door rather than Swagger.
+
+Upload an RF2 zip, choose assertion groups (the list comes from the server, 48
+of them), watch the run, and read the findings: totals, per-phase results, and
+every assertion grouped as failed, warning, skipped or passed with its message
+and its first failing instances. There is a text filter and a JSON download.
+
+It is plain HTML, CSS and JavaScript inside the same image, on the same origin
+as the API, so there is no second deployment, no CORS, and nothing extra to
+authenticate: the gateway has already signed the browser in and injects the
+`X-AUTH-*` headers. Swagger remains at `/swagger-ui.html` and is linked from
+the console's Reference tab, which also documents what the phases and the
+counts mean.
+
+Proven on 5 September by driving a browser against the deployed service: 48
+groups loaded, a validation submitted, and its report rendered - 62 assertions,
+1 failure, 1 warning, 2 incomplete.
 
 The split needs no code: `rvf.execution.isWorker` is RVF's own pre-existing
 property and gates the JMS listener. `false` gives an API that enqueues and
@@ -177,12 +222,34 @@ a second concurrent consumer exists.
 
 ## 2. The image
 
-Built and pushed **by CI**, ADO definition **65 `rvf-duckdb-server-image`**.
+Built and pushed **by CI**, ADO definition **65 `rvf-duckdb-server-image`**,
+into **`nctsacr.azurecr.io/aehrc-rvf/release-validation-framework`**.
+
+**The registry changed on 5 September**, from `ontoserver.azurecr.io`. ArgoCD
+Image Updater is authenticated to `nctsacr` and to nothing else - its
+`registries.conf` has a single entry - so it read `ontoserver` anonymously and
+logged `unauthorized` on every two-minute cycle from the day the Application
+was created. Three images were built and none was ever deployed. Publishing
+where the cluster is already authenticated fixed it with no new
+cross-subscription credential to hold and rotate. The `ontoserver` images are
+untouched, so this is reversible.
+
+A second gain: the `ontoserver` repository is shared with MySQL builds of RVF,
+which is the only reason the engine has to appear in the tag at all. This
+repository holds DuckDB builds of RVF and nothing else. The chart already
+publishes to `nctsacr.azurecr.io/helm`, so the image and the chart that deploys
+it now sit in one registry.
+
 Every build writes three tags:
 
     :9.0.1-duckdb                     moving, within this version
     :9.0.1-duckdb-<buildId>           sortable
-    :9.0.1-duckdb-<buildId>-<sha>     immutable, fully traceable
+    :9.0.1-duckdb-<buildId>-<sha>     immutable, and what Image Updater picks
+
+**Only the deploy branch produces those shapes.** Any other branch carries a
+slug of its name - `9.0.1-duckdb-main-<buildId>-<sha>` - which cannot match
+Image Updater's `allowTags` expression. Without that, a build of any branch was
+a candidate to be deployed and nothing in the tag said which tree it came from.
 
 `9.0.1-duckdb` is what the Helm chart resolves to by default, because
 `image.tag` falls back to the chart's `appVersion`. So **nothing needs editing**
@@ -357,7 +424,42 @@ which is what the old 10Gi limit was measured against. MRCM holds the whole
 
 ---
 
-## 5. The smoke test that actually proves something
+## 5. The smoke test, which is now a script and has been run
+
+`ci/smoke_test.sh` in the RVF repository proves the whole chain against the
+deployed service in one run, with no cluster access and no staged release:
+
+    RVF_CLIENT_SECRET=... ./ci/smoke_test.sh
+
+It sends `api-demo/SnomedCT_test1_INT_20140131.zip` - 59 KB, already in the
+repository - to `/run-post`, so it needs no Azure Files share name. It checks
+that forged `X-AUTH-*` headers are still refused, gets a token as
+`si-rvf-client`, prints the `groups` claim, submits, waits, and reports.
+
+Run against the live deployment on 5 September:
+
+    1. forged headers            302   refused
+    2. client_credentials        groups ['Consumers','rvf-users']
+    3. /version                  {"version":"9.0.1", ...}
+    4. POST /run-post            201
+    5. QUEUED ... 3m30s ... COMPLETE
+    6. 62 assertions run, 1 failure
+
+That single run exercises Keycloak, the Envoy SecurityPolicy, the API pod,
+ActiveMQ, **KEDA starting a worker from zero**, DuckDB, and reading the report
+back through the gateway. The three and a half minutes of `QUEUED` is the
+autoscaler working, not a stall.
+
+**In CI**, map the secret from the `ncts-release` variable group rather than
+passing it as an argument, which would put it in `ps` and in the log:
+
+    env:
+      RVF_CLIENT_SECRET: $(rvf.si.client.secret)
+
+---
+
+## 5a. The cross-node check, for when the cluster changes
+
 
 Cross-node handoff is the only thing Docker Desktop could not prove, because
 `hostPath` forced both pods onto one node. So test exactly that:
