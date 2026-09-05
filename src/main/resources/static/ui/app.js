@@ -56,6 +56,10 @@ $$('.tab').forEach((tab) => {
     tab.classList.add('active');
     tab.setAttribute('aria-selected', 'true');
     $('#' + tab.dataset.panel).classList.add('active');
+    // Load on first view rather than at start-up: it is a directory walk on a
+    // network file share, so it should not be paid for by someone who only
+    // wants to submit a run.
+    if (tab.dataset.panel === 'panel-open' && !loadRuns.done) loadRuns();
   });
 });
 
@@ -175,6 +179,8 @@ $('#runForm').addEventListener('submit', async (e) => {
   try {
     await api('/run-post', { method: 'POST', body });
     toast('Validation submitted.', true);
+    // The list is now stale, so make the next visit to that tab reload it.
+    loadRuns.done = false;
     watch(runId, storageLocation);
     defaults();                       // so a second run cannot reuse the id
   } catch (err) {
@@ -189,6 +195,100 @@ $('#openForm').addEventListener('submit', (e) => {
   e.preventDefault();
   watch($('#openRunId').value.trim(), $('#openStorage').value.trim(), true);
 });
+
+/* ----------------------------------------------------------- the run list */
+
+let allRuns = [];
+
+const AGO = [[86400000, 'd'], [3600000, 'h'], [60000, 'm']];
+function ago(ms) {
+  if (!ms) return '';
+  const d = Date.now() - ms;
+  if (d < 60000) return 'just now';
+  for (const [unit, label] of AGO) {
+    if (d >= unit) return `${Math.floor(d / unit)}${label} ago`;
+  }
+  return '';
+}
+
+function statePill(state, failures) {
+  if (state === 'COMPLETE') {
+    return failures > 0
+      ? `<span class="pill bad">${num(failures)} failed</span>`
+      : '<span class="pill ok">clean</span>';
+  }
+  if (state === 'FAILED') return '<span class="pill bad">run failed</span>';
+  if (state === 'QUEUED' || state === 'READY') return '<span class="pill warn">queued</span>';
+  if (state === 'RUNNING') return '<span class="pill warn">running</span>';
+  return `<span class="pill off">${esc(state || 'unknown')}</span>`;
+}
+
+async function loadRuns() {
+  loadRuns.done = true;
+  const box = $('#runList');
+  box.innerHTML = '<p class="muted">loading&hellip;</p>';
+  try {
+    allRuns = await api('/result?limit=200');
+    drawRuns();
+  } catch (e) {
+    // A server without the listing endpoint answers 404. Say what to do rather
+    // than leave the panel blank.
+    box.innerHTML = /404/.test(e.message)
+      ? '<p class="muted">This server does not support listing runs. Use the run id below.</p>'
+      : `<p class="muted">Could not list runs: ${esc(e.message)}</p>`;
+  }
+}
+
+function drawRuns() {
+  const needle = $('#runFilter').value.trim().toLowerCase();
+  const onlyFailures = $('#onlyFailures').checked;
+
+  const rows = allRuns.filter((r) => {
+    if (onlyFailures && !(r.totalFailures > 0)) return false;
+    if (!needle) return true;
+    return [r.storageLocation, r.testFileName, r.groups, r.runId]
+      .some((v) => String(v ?? '').toLowerCase().includes(needle));
+  });
+
+  if (!rows.length) {
+    $('#runList').innerHTML = `<p class="empty">${allRuns.length ? 'No run matches that filter.' : 'No runs on this server yet.'}</p>`;
+    return;
+  }
+
+  $('#runList').innerHTML = `
+    <table class="runs">
+      <thead>
+        <tr><th>when</th><th>package</th><th>groups</th><th>result</th><th>run id</th><th></th></tr>
+      </thead>
+      <tbody>
+        ${rows.map((r, i) => `
+          <tr data-i="${i}"${r.runId ? ' class="openable" tabindex="0" role="button"' : ''}>
+            <td>${esc(ago(r.lastModified))}</td>
+            <td>${esc(r.testFileName || r.storageLocation)}</td>
+            <td class="dim">${esc(r.groups || '')}</td>
+            <td>${statePill(r.state, r.totalFailures)}${
+              r.totalTestsRun ? ` <span class="dim">${num(r.totalTestsRun)} assertions</span>` : ''}</td>
+            <td class="dim">${esc(r.runId ?? '')}</td>
+            <td>${r.runId ? '<span class="dim">open &rarr;</span>' : ''}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+
+  const open = (i) => {
+    const r = rows[i];
+    if (r?.runId) watch(String(r.runId), r.storageLocation, true);
+  };
+  $$('#runList tr.openable').forEach((tr) => {
+    tr.addEventListener('click', () => open(Number(tr.dataset.i)));
+    tr.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(Number(tr.dataset.i)); }
+    });
+  });
+}
+
+$('#refreshRuns').addEventListener('click', loadRuns);
+$('#runFilter').addEventListener('input', drawRuns);
+$('#onlyFailures').addEventListener('change', drawRuns);
 
 /* ------------------------------------------------------------- the polling */
 
@@ -231,6 +331,7 @@ function watch(runId, storageLocation, once = false) {
     if (state === 'COMPLETE') {
       $('#statusTitle').textContent = 'Validation complete';
       $('#progress').classList.add('done');
+      $('#statusHint').textContent = '';
       render(data, runId, storageLocation);
       return;
     }
@@ -240,7 +341,9 @@ function watch(runId, storageLocation, once = false) {
       render(data, runId, storageLocation);
       return;
     }
-    if (once) { toast('That validation is still running.'); }
+    // Opened from the list and not finished yet: the status panel already says
+    // so, and a toast that is contradicted five seconds later reads as an error.
+    if (once) { $('#statusTitle').textContent = 'Validation running'; }
     schedule();
   };
 

@@ -124,20 +124,40 @@
 
 <!-- --------------------------------------------------------- open a report -->
 <section id="panel-open" class="panel" role="tabpanel">
-  <form id="openForm" class="card narrow" autocomplete="off">
-    <legend>Open a report that already exists</legend>
-    <label class="field">
-      <span>Run id</span>
-      <input type="text" id="openRunId" required placeholder="1788085692">
-    </label>
-    <label class="field">
-      <span>Storage location</span>
-      <input type="text" id="openStorage" required placeholder="amtv4-mysql-b">
-    </label>
-    <div class="actions">
-      <button type="submit" class="primary">Open</button>
+  <div class="card">
+    <div class="status-head">
+      <legend style="padding:0">Runs on this server</legend>
+      <button type="button" class="ghost" id="refreshRuns">Refresh</button>
     </div>
-  </form>
+    <div class="filters">
+      <input type="text" id="runFilter" placeholder="Filter by package, group or storage&hellip;">
+      <label class="check" style="margin:0"><input type="checkbox" id="onlyFailures"> <span>Only runs with failures</span></label>
+    </div>
+    <div id="runList"><p class="muted">loading&hellip;</p></div>
+  </div>
+
+  <details class="card">
+    <summary style="cursor:pointer">Open one by run id instead</summary>
+    <form id="openForm" autocomplete="off">
+      <p class="hint">
+        Only needed for a run this server cannot list - one written to a
+        different job store, or by another instance.
+      </p>
+      <div class="row">
+        <label class="field">
+          <span>Run id</span>
+          <input type="text" id="openRunId" required placeholder="1788085692">
+        </label>
+        <label class="field">
+          <span>Storage location</span>
+          <input type="text" id="openStorage" required placeholder="amtv4-mysql-b">
+        </label>
+      </div>
+      <div class="actions">
+        <button type="submit" class="primary">Open</button>
+      </div>
+    </form>
+  </details>
 </section>
 
 <!-- ------------------------------------------------------------- reference -->

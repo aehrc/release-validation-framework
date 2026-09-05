@@ -6,6 +6,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.apache.commons.io.IOUtils;
 import org.ihtsdo.rvf.core.service.ValidationReportService;
 import org.ihtsdo.rvf.core.service.ValidationReportService.State;
+import org.ihtsdo.rvf.core.service.ValidationRunCatalogue;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.HttpStatus;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.io.*;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -24,6 +26,21 @@ public class ResultController {
 	private static final String MESSAGE = "Message";
 	@Autowired
 	private ValidationReportService reportService;
+
+	@Autowired
+	private ValidationRunCatalogue runCatalogue;
+
+	@GetMapping
+	@Operation(summary = "List the validation runs held in the job store, newest first.",
+			description = "Returns the run id, storage location, state and headline counts for each run, "
+					+ "which is what is needed to open a report. Without this a caller has to have kept a "
+					+ "note of the run id and storage location from when the validation was submitted. "
+					+ "The report itself is not included: fetch it from /result/{runId}.")
+	public ResponseEntity<List<ValidationRunCatalogue.RunSummary>> listResults(
+			@Parameter(description = "How many runs to return, newest first. Defaults to 50.")
+			@RequestParam(value = "limit", required = false, defaultValue = "50") final int limit) {
+		return ResponseEntity.ok(runCatalogue.list(Math.clamp(limit, 1, 500)));
+	}
 
 	@RequestMapping(value = "{runId}", method = RequestMethod.GET)
 	@Operation(summary = "Retrieve the validation report for a given run id and storage location.", description = "Retrieves the validation report specified by the runId and storageLocation.")
