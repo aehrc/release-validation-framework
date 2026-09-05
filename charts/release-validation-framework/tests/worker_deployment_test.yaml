@@ -34,7 +34,7 @@ tests:
           value: rvf
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ontoserver.azurecr.io/aehrc-rvf/release-validation-framework:9.0.1-duckdb
+          value: nctsacr.azurecr.io/aehrc-rvf/release-validation-framework:9.0.1-duckdb
       - equal:
           path: spec.template.spec.containers[0].resources.requests.cpu
           value: "4"

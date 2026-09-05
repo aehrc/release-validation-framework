@@ -34,7 +34,7 @@ certmanager:
 # -- Common container image settings for RVF (API and Worker)
 image:
   # -- Image repository
-  repository: ontoserver.azurecr.io/aehrc-rvf/release-validation-framework
+  repository: nctsacr.azurecr.io/aehrc-rvf/release-validation-framework
   # -- Image pull policy
   pullPolicy: Always
   # -- Image tag (defaults to Chart appVersion if empty)

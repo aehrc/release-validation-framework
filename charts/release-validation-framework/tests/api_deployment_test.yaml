@@ -27,7 +27,7 @@ tests:
         template: api-deployment.yaml
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ontoserver.azurecr.io/aehrc-rvf/release-validation-framework:9.0.1-duckdb
+          value: nctsacr.azurecr.io/aehrc-rvf/release-validation-framework:9.0.1-duckdb
         template: api-deployment.yaml
       - equal:
           path: spec.template.spec.containers[0].imagePullPolicy

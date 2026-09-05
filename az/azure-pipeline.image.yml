@@ -60,7 +60,7 @@ pr: none
 
 parameters:
   - name: imageRepository
-    displayName: 'ACR repository (NOT rvf-duck - that is the Python engine)'
+    displayName: 'Repository within nctsacr for the DuckDB RVF server image'
     type: string
     default: 'aehrc-rvf/release-validation-framework'
   - name: engineSuffix
@@ -88,13 +88,30 @@ variables:
   # the agent's default ~/.m2 and reported all four artefacts missing.
   - name: MAVEN_OPTS
     value: '-Dmaven.repo.local=$(Pipeline.Workspace)/.m2'
-  # `ontoserver` is the dockerregistry service connection for
-  # ontoserver.azurecr.io. Its login writes ~/.docker/config.json, which jib
-  # reads directly - so this needs no Docker daemon.
+  # `ncts-acr` is the dockerregistry service connection for nctsacr.azurecr.io.
+  # Its login writes ~/.docker/config.json, which jib reads directly - so this
+  # needs no Docker daemon.
+  #
+  # This was ontoserver.azurecr.io, which is where every RVF image had always
+  # gone. Two things make nctsacr the right home now.
+  #
+  # The cluster that runs this image is in the NCTS subscription and its
+  # tooling is authenticated to nctsacr, not to ontoserver. ArgoCD Image
+  # Updater proved it: its registries.conf declares nctsacr alone, so it read
+  # ontoserver anonymously and logged `unauthorized` on every cycle, considering
+  # the image and updating nothing. Moving the image needs no new
+  # cross-subscription credential to hold and rotate.
+  #
+  # And the ontoserver repository is shared with MySQL-engine builds of RVF,
+  # which is why the engine has to be in the tag at all. Its own repository
+  # here holds these builds and nothing else.
+  #
+  # The chart already publishes to nctsacr.azurecr.io/helm, so the image and
+  # the chart that deploys it now live in one registry.
   - name: registryConnection
-    value: 'ontoserver'
+    value: 'ncts-acr'
   - name: registryHost
-    value: 'ontoserver.azurecr.io'
+    value: 'nctsacr.azurecr.io'
 
 stages:
   - stage: Image
