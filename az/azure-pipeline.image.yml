@@ -41,19 +41,23 @@ trigger:
     include:
       - main
       - catchup-upgraded
+  # Prefix matches, NOT globs. Azure DevOps path filters compare path prefixes;
+  # they do not accept wildcards. `src/**` therefore matched nothing, which is
+  # why commit e915f7fd - a change under src/ and nothing else - did not build,
+  # while ec8f8052 and 6db5b0cf did: those touched this file, which was listed
+  # as an exact path and so matched as a prefix of itself.
+  #
+  # No `exclude` list is needed. The includes are specific paths, so anything
+  # outside them - charts/, k8s/, ci/, the markdown at the root - already fails
+  # to match and cannot start a build.
   paths:
     include:
-      - src/**
+      - src
       - pom.xml
       - checkout-resources.sh
       - duck/build-pinned-forks.sh
       - duck/maven-settings.xml
       - az/azure-pipeline.image.yml
-    exclude:
-      - charts/**
-      - k8s/**
-      - ci/**
-      - '**/*.md'
 
 # Still never on a pull request: a PR must not push to a shared registry.
 pr: none
