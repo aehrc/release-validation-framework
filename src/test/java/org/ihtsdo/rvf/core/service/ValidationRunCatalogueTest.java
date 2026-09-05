@@ -56,39 +56,51 @@ class ValidationRunCatalogueTest {
 		}
 	}
 
-	/** The shape ValidationReportService writes, including the arrays to skip. */
-	private static String report(long runId, String file, int run, int failures) {
+	/**
+	 * The shape actually written to disk by ValidationReportService: the status
+	 * report serialised directly, with NO rvfValidationResult wrapper. Verified
+	 * against /app/jobs on the deployed service.
+	 */
+	private static String storedReport(long runId, String file, int run, int failures) {
 		return """
 				{
-				  "status": "COMPLETE",
-				  "rvfValidationResult": {
-				    "validationConfig": {
-				      "testFileName": "%s",
-				      "runId": %d,
-				      "groupsList": ["file-centric-validation", "amtv4"],
-				      "storageLocation": "ignored"
-				    },
-				    "reportSummary": { "SQL": "Validations executed. Failures count: %d" },
-				    "failureMessages": [],
-				    "TestResult": {
-				      "executionId": %d,
-				      "totalTestsRun": %d,
-				      "totalFailures": %d,
-				      "totalWarnings": 1,
-				      "assertionsFailed": [
-				        { "assertionText": "a", "firstNInstances": [ { "id": "1" }, { "id": "2" } ] }
-				      ],
-				      "assertionsPassed": [ { "assertionText": "b" }, { "assertionText": "c" } ],
-				      "assertionsSkipped": [],
-				      "assertionsWarning": [ { "assertionText": "d" } ]
-				    },
-				    "startTime": "Aug 30, 2026, 8:28:18 PM",
-				    "endTime": "Aug 30, 2026, 9:28:05 PM",
-				    "totalRF2FilesLoaded": 66,
-				    "rf2Files": ["a.txt", "b.txt"]
-				  }
+				  "validationConfig": {
+				    "testFileName": "%s",
+				    "runId": %d,
+				    "groupsList": ["file-centric-validation", "amtv4"],
+				    "storageLocation": "ignored"
+				  },
+				  "reportSummary": { "SQL": "Validations executed. Failures count: %d" },
+				  "failureMessages": [],
+				  "TestResult": {
+				    "executionId": %d,
+				    "totalTestsRun": %d,
+				    "totalFailures": %d,
+				    "totalWarnings": 1,
+				    "assertionsFailed": [
+				      { "assertionText": "a", "firstNInstances": [ { "id": "1" }, { "id": "2" } ] }
+				    ],
+				    "assertionsPassed": [ { "assertionText": "b" }, { "assertionText": "c" } ],
+				    "assertionsSkipped": [],
+				    "assertionsWarning": [ { "assertionText": "d" } ]
+				  },
+				  "startTime": "Aug 30, 2026, 8:28:18 PM",
+				  "endTime": "Aug 30, 2026, 9:28:05 PM",
+				  "totalRF2FilesLoaded": 66,
+				  "rf2Files": ["a.txt", "b.txt"]
 				}
 				""".formatted(file, runId, failures, runId, run, failures);
+	}
+
+	/** The shape /result/{runId} returns: the same content, wrapped. */
+	private static String httpShapedReport(long runId, String file, int run, int failures) {
+		return """
+				{ "status": "COMPLETE", "rvfValidationResult": %s }
+				""".formatted(storedReport(runId, file, run, failures));
+	}
+
+	private static String report(long runId, String file, int run, int failures) {
+		return storedReport(runId, file, run, failures);
 	}
 
 	@Test
@@ -108,6 +120,22 @@ class ValidationRunCatalogueTest {
 		assertEquals(1, r.totalFailures());
 		assertEquals(1, r.totalWarnings());
 		assertEquals("Aug 30, 2026, 8:28:18 PM", r.startTime());
+	}
+
+	@Test
+	void alsoReadsTheWrappedShapeTheEndpointReturns() throws IOException {
+		// A report copied out of the API rather than off the store carries an
+		// rvfValidationResult wrapper. Both have to work: building this parser
+		// against the wrapped shape alone is what made every field null against
+		// the real job store while these tests passed.
+		writeRun("run_http", "COMPLETE", httpShapedReport(42L, "wrapped.zip", 7, 2));
+
+		ValidationRunCatalogue.RunSummary r = catalogue().list(50).get(0);
+
+		assertEquals(42L, r.runId());
+		assertEquals("wrapped.zip", r.testFileName());
+		assertEquals(7, r.totalTestsRun());
+		assertEquals(2, r.totalFailures());
 	}
 
 	@Test

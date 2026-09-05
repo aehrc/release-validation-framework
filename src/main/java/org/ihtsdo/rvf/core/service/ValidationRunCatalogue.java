@@ -123,6 +123,18 @@ public class ValidationRunCatalogue {
 		}
 	}
 
+	/** The handful of scalars a listing needs, filled in as the stream is walked. */
+	private static final class Fields {
+		Long runId;
+		String testFileName;
+		String groups;
+		Integer totalTestsRun;
+		Integer totalFailures;
+		Integer totalWarnings;
+		String startTime;
+		String endTime;
+	}
+
 	/**
 	 * Pulls a dozen scalars out of the report without building the object graph.
 	 *
@@ -133,62 +145,66 @@ public class ValidationRunCatalogue {
 	 * the token stream and skips every array it does not need.
 	 */
 	private RunSummary readSummary(Path file, String storageLocation, String state, long modified) throws IOException {
-		Long runId = null;
-		String testFileName = null;
-		String groups = null;
-		Integer run = null;
-		Integer failures = null;
-		Integer warnings = null;
-		String startTime = null;
-		String endTime = null;
-
+		Fields f = new Fields();
 		try (JsonReader in = new JsonReader(Files.newBufferedReader(file, StandardCharsets.UTF_8))) {
-			in.beginObject();
-			while (in.hasNext()) {
-				if (!"rvfValidationResult".equals(in.nextName())) {
-					in.skipValue();
-					continue;
-				}
-				in.beginObject();
-				while (in.hasNext()) {
-					switch (in.nextName()) {
-						case "validationConfig" -> {
-							in.beginObject();
-							while (in.hasNext()) {
-								switch (in.nextName()) {
-									case "runId" -> runId = in.nextLong();
-									case "testFileName" -> testFileName = nextStringOrNull(in);
-									case "groupsList" -> groups = String.join(", ", readStringArray(in));
-									default -> in.skipValue();
-								}
-							}
-							in.endObject();
-						}
-						case "TestResult" -> {
-							in.beginObject();
-							while (in.hasNext()) {
-								switch (in.nextName()) {
-									case "totalTestsRun" -> run = in.nextInt();
-									case "totalFailures" -> failures = in.nextInt();
-									case "totalWarnings" -> warnings = in.nextInt();
-									// assertionsFailed / Passed / Warning / Skipped fall to
-									// skipValue, which is the whole point of streaming this.
-									default -> in.skipValue();
-								}
-							}
-							in.endObject();
-						}
-						case "startTime" -> startTime = nextStringOrNull(in);
-						case "endTime" -> endTime = nextStringOrNull(in);
-						default -> in.skipValue();
-					}
-				}
-				in.endObject();
-			}
-			in.endObject();
+			readResultObject(in, f);
 		}
-		return new RunSummary(storageLocation, runId, state, testFileName, groups, run, failures, warnings,
-				startTime, endTime, modified);
+		return new RunSummary(storageLocation, f.runId, state, f.testFileName, f.groups,
+				f.totalTestsRun, f.totalFailures, f.totalWarnings, f.startTime, f.endTime, modified);
+	}
+
+	/**
+	 * Reads a result object, in either of the two shapes this data takes.
+	 *
+	 * <p>The file on disk has {@code validationConfig} and {@code TestResult} at
+	 * the top level: {@link ValidationReportService#writeResults} serialises the
+	 * status report directly. The {@code /result/{runId}} endpoint then wraps
+	 * that same content in an {@code rvfValidationResult} member before
+	 * returning it.
+	 *
+	 * <p>Both are accepted, by recursing when the wrapper is met. Handling only
+	 * the wrapped shape is exactly the mistake this method was written to
+	 * correct: it was built against a saved HTTP response rather than a stored
+	 * file, so every field came back null against the real store while the
+	 * tests passed.
+	 */
+	private void readResultObject(JsonReader in, Fields f) throws IOException {
+		in.beginObject();
+		while (in.hasNext()) {
+			switch (in.nextName()) {
+				case "rvfValidationResult" -> readResultObject(in, f);
+				case "validationConfig" -> {
+					in.beginObject();
+					while (in.hasNext()) {
+						switch (in.nextName()) {
+							case "runId" -> f.runId = in.nextLong();
+							case "testFileName" -> f.testFileName = nextStringOrNull(in);
+							case "groupsList" -> f.groups = String.join(", ", readStringArray(in));
+							default -> in.skipValue();
+						}
+					}
+					in.endObject();
+				}
+				case "TestResult" -> {
+					in.beginObject();
+					while (in.hasNext()) {
+						switch (in.nextName()) {
+							case "totalTestsRun" -> f.totalTestsRun = in.nextInt();
+							case "totalFailures" -> f.totalFailures = in.nextInt();
+							case "totalWarnings" -> f.totalWarnings = in.nextInt();
+							// assertionsFailed / Passed / Warning / Skipped fall to
+							// skipValue, which is the whole point of streaming this.
+							default -> in.skipValue();
+						}
+					}
+					in.endObject();
+				}
+				case "startTime" -> f.startTime = nextStringOrNull(in);
+				case "endTime" -> f.endTime = nextStringOrNull(in);
+				default -> in.skipValue();
+			}
+		}
+		in.endObject();
 	}
 
 	private static List<String> readStringArray(JsonReader in) throws IOException {
