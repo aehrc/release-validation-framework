@@ -25,7 +25,10 @@ set -euo pipefail
 BASE_URL="${1:-https://ncts-rvf.australiaeast.cloudapp.azure.com}"
 CLIENT_ID="${RVF_CLIENT_ID:-si-rvf-client}"
 TOKEN_URL="${RVF_TOKEN_URL:-https://auth.ontoserver.csiro.au/auth/realms/aehrc/protocol/openid-connect/token}"
-GROUPS="${RVF_GROUPS:-file-centric-validation}"
+# NOT named GROUPS: bash defines that as a builtin array of the caller's unix
+# group ids, so `${GROUPS:-default}` silently yields a gid. It did, and the
+# server answered 412 for assertion group "1103459".
+GROUP_LIST="${RVF_GROUPS:-file-centric-validation}"
 TIMEOUT="${RVF_TIMEOUT:-900}"
 PACKAGE="${RVF_PACKAGE:-$(cd "$(dirname "$0")/.." && pwd)/api-demo/SnomedCT_test1_INT_20140131.zip}"
 
@@ -87,17 +90,23 @@ esac
 # --------------------------------------------------------- 4. a real validation
 RUN_ID=$(date +%s)
 STORAGE="smoke_$RUN_ID"
-step "4. submit a validation (runId=$RUN_ID, groups=$GROUPS)"
+step "4. submit a validation (runId=$RUN_ID, groups=$GROUP_LIST)"
 SUBMIT=$(curl -s -m 300 -w '\n%{http_code}' "${AUTH[@]}" -X POST "$BASE_URL/run-post" \
     -F "file=@$PACKAGE" \
     -F "runId=$RUN_ID" \
     -F "storageLocation=$STORAGE" \
-    -F "groups=$GROUPS" \
+    -F "groups=$GROUP_LIST" \
     -F "writeSuccesses=false" \
     -F "failureExportMax=10")
 CODE=$(printf '%s' "$SUBMIT" | tail -1)
 echo "  POST /run-post -> $CODE"
-[ "$CODE" = "200" ] || fail "submit returned $CODE: $(printf '%s' "$SUBMIT" | head -3)"
+# Any 2xx. The controller is annotated 200 but returns 201 Created when it
+# enqueues, and treating that as a failure would be this script being wrong
+# about the API rather than the API being wrong.
+case "$CODE" in
+    2??) ;;
+    *) fail "submit returned $CODE: $(printf '%s' "$SUBMIT" | head -3)" ;;
+esac
 
 # ------------------------------------------------------------- 5. wait for it
 #
