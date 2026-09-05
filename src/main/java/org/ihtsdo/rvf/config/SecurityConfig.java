@@ -23,7 +23,14 @@ public class SecurityConfig {
         http.authorizeHttpRequests((authorize) -> authorize.requestMatchers("/swagger-ui.html",
 						"/version",
 						"/swagger-ui/**",
-						"/v3/api-docs/**")
+						"/v3/api-docs/**",
+						// The console's own HTML, CSS and JavaScript. These are
+						// static assets that hold nothing and read nothing; every
+						// API call the page then makes is authenticated like any
+						// other. Serving them behind the check would only mean a
+						// bare 401 body instead of a page that can explain it.
+						"/ui",
+						"/ui/**")
                 .permitAll()
                 .anyRequest().authenticated()
         );

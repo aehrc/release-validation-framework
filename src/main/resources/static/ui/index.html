@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<!--
+  RVF console.
+
+  Plain HTML, CSS and JavaScript, served by Spring Boot from the classpath. No
+  build step, no npm, no bundle: the console ships inside the same image as the
+  API, behind the same gateway, on the same origin. That means no CORS, no
+  second deployment to keep in step, and no second thing to authenticate.
+
+  Authentication is the browser's. Envoy runs the OIDC flow and injects the
+  X-AUTH-* headers from the token's claims, so fetch() from this page is
+  already an authenticated call and this file holds no credentials.
+-->
+<html lang="en" data-theme="auto">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RVF console</title>
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>&#9989;</text></svg>">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="mark" aria-hidden="true"></span>
+    <div>
+      <h1>Release Validation Framework</h1>
+      <p class="sub" id="serverInfo">connecting&hellip;</p>
+    </div>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button role="tab" class="tab active" data-panel="panel-run" aria-selected="true">Run a validation</button>
+    <button role="tab" class="tab" data-panel="panel-open" aria-selected="false">Open a report</button>
+    <button role="tab" class="tab" data-panel="panel-about" aria-selected="false">Reference</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ------------------------------------------------------------ run a job -->
+<section id="panel-run" class="panel active" role="tabpanel">
+  <form id="runForm" autocomplete="off">
+    <div class="grid">
+
+      <fieldset class="card span2">
+        <legend>Release package</legend>
+        <label class="drop" id="drop" for="file">
+          <input type="file" id="file" name="file" accept=".zip" required>
+          <span class="drop-icon" aria-hidden="true"></span>
+          <span class="drop-text"><strong>Choose an RF2 zip</strong> or drop one here</span>
+          <span class="drop-file" id="dropFile"></span>
+        </label>
+
+        <label class="field">
+          <span>Manifest <em>optional</em></span>
+          <input type="file" id="manifest" accept=".xml">
+        </label>
+      </fieldset>
+
+      <fieldset class="card">
+        <legend>Assertion groups</legend>
+        <p class="hint">Which assertions run. Loaded from this server.</p>
+        <div id="groups" class="checks" role="group" aria-label="Assertion groups">
+          <p class="muted">loading&hellip;</p>
+        </div>
+      </fieldset>
+
+      <fieldset class="card">
+        <legend>Extra validation</legend>
+        <label class="check"><input type="checkbox" id="enableDrools"> <span>Drools rules</span></label>
+        <div id="droolsGroupsWrap" class="nested" hidden>
+          <label class="field">
+            <span>Drools rule groups</span>
+            <input type="text" id="droolsRulesGroups" placeholder="common-authoring,au-authoring">
+          </label>
+        </div>
+        <label class="check"><input type="checkbox" id="enableMrcmValidation"> <span>MRCM</span></label>
+        <p class="hint warn" id="mrcmHint" hidden>MRCM holds the whole concept map in memory and needs a 16Gi worker.</p>
+        <label class="check"><input type="checkbox" id="rf2DeltaOnly"> <span>Package holds delta files only</span></label>
+        <label class="check"><input type="checkbox" id="releaseAsAnEdition"> <span>Package is a complete edition</span></label>
+        <label class="check"><input type="checkbox" id="standAloneProduct"> <span>Standalone product</span></label>
+        <label class="check"><input type="checkbox" id="writeSuccesses"> <span>Record assertions that pass</span></label>
+      </fieldset>
+
+      <fieldset class="card span2">
+        <legend>Context</legend>
+        <div class="row">
+          <label class="field">
+            <span>Previous release <em>optional</em></span>
+            <input type="text" id="previousRelease" placeholder="e.g. 20260731">
+            <small>Leave empty for a first-time release.</small>
+          </label>
+          <label class="field">
+            <span>Effective time <em>optional</em></span>
+            <input type="text" id="effectiveTime" placeholder="yyyymmdd">
+          </label>
+          <label class="field">
+            <span>Failure examples per assertion</span>
+            <input type="number" id="failureExportMax" value="10" min="1" max="1000">
+          </label>
+        </div>
+        <div class="row">
+          <label class="field">
+            <span>Run id</span>
+            <input type="text" id="runId" required>
+            <small>Must be unique. Prefilled with the current time.</small>
+          </label>
+          <label class="field">
+            <span>Storage location</span>
+            <input type="text" id="storageLocation" required>
+            <small>The folder the report is written to.</small>
+          </label>
+        </div>
+      </fieldset>
+    </div>
+
+    <div class="actions">
+      <button type="submit" class="primary" id="submitBtn">Start validation</button>
+      <span class="muted" id="submitNote">A full edition takes about 13 minutes.</span>
+    </div>
+  </form>
+</section>
+
+<!-- --------------------------------------------------------- open a report -->
+<section id="panel-open" class="panel" role="tabpanel">
+  <form id="openForm" class="card narrow" autocomplete="off">
+    <legend>Open a report that already exists</legend>
+    <label class="field">
+      <span>Run id</span>
+      <input type="text" id="openRunId" required placeholder="1788085692">
+    </label>
+    <label class="field">
+      <span>Storage location</span>
+      <input type="text" id="openStorage" required placeholder="amtv4-mysql-b">
+    </label>
+    <div class="actions">
+      <button type="submit" class="primary">Open</button>
+    </div>
+  </form>
+</section>
+
+<!-- ------------------------------------------------------------- reference -->
+<section id="panel-about" class="panel" role="tabpanel">
+  <div class="card prose">
+    <h2>What this console does</h2>
+    <p>
+      It sends a release package to this server, waits for the validation, and
+      shows the report. It is the same API that the nightly pipeline uses.
+    </p>
+
+    <h3>Who you are</h3>
+    <p>
+      The gateway authenticates you and gives the server your name, your roles
+      and your token. This page holds no password and no token. If your session
+      ends, reload the page and the gateway sends you to the login page.
+    </p>
+
+    <h3>The phases of a validation</h3>
+    <dl>
+      <dt>ARCHIVE_STRUCTURAL</dt><dd>Reads the zip. Checks file names, columns and field types.</dd>
+      <dt>SQL</dt><dd>The assertion groups. This is the largest part.</dd>
+      <dt>DROOL_RULES</dt><dd>Content rules. Switched off unless you ask for them.</dd>
+      <dt>MRCM</dt><dd>Checks attributes against the machine-readable concept model.</dd>
+      <dt>TRACEABILITY</dt><dd>Compares the content with the authoring history.</dd>
+    </dl>
+
+    <h3>Result counts</h3>
+    <p>
+      <b>Failures</b> are assertions that found content problems. An
+      <b>incomplete</b> assertion did not finish, and this is a fault in the
+      validation, not in the content. A failure count of
+      <code>-1</code> means the assertion did not run to completion, so read the
+      message.
+    </p>
+
+    <h3>Other interfaces</h3>
+    <p>
+      <a href="../swagger-ui.html">Swagger UI</a> gives every endpoint and its
+      parameters. <a href="../v3/api-docs">OpenAPI</a> gives the machine
+      description.
+    </p>
+  </div>
+</section>
+
+<!-- ------------------------------------------------------------ run status -->
+<section id="status" class="panel-block" hidden>
+  <div class="card">
+    <div class="status-head">
+      <h2 id="statusTitle">Validation running</h2>
+      <button type="button" class="ghost" id="stopPolling">Stop watching</button>
+    </div>
+    <div class="progress" id="progress"><div class="bar"></div></div>
+    <dl class="kv" id="statusMeta"></dl>
+    <p class="muted" id="statusHint">
+      The first check can take a minute. A worker is started only when there is
+      something in the queue, so it may be starting now.
+    </p>
+  </div>
+</section>
+
+<!-- ---------------------------------------------------------------- report -->
+<section id="report" class="panel-block" hidden></section>
+
+</main>
+
+<footer>
+  <span id="footVersion"></span>
+  <a href="../swagger-ui.html">Swagger</a>
+  <a href="https://github.com/aehrc/release-validation-framework">Source</a>
+</footer>
+
+<div id="toast" class="toast" hidden role="status" aria-live="polite"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
