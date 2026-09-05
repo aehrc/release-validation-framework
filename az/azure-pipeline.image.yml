@@ -24,9 +24,38 @@
 
 name: 'rvf-image-$(Build.SourceBranchName)-$(Date:yyyyMMdd)$(Rev:.r)'
 
-# Manual or explicit only. An image push is a deliberate act, and the branch
-# this lives on is not `main`.
-trigger: none
+# Build on anything that changes what is INSIDE the image.
+#
+# This was `trigger: none` when nothing consumed the image and a push was a
+# deliberate act. That is no longer true: the cluster runs this image, and
+# ArgoCD Image Updater watches the repository for new tags, so a commit that
+# never becomes an image is a commit that never reaches the cluster. Three
+# changes to src/ sat unbuilt before this was noticed.
+#
+# The path filter is the point. A chart-only or documentation-only commit must
+# not spend ~9 minutes rebuilding an identical image, and the chart has its own
+# pipeline. Note `exclude` wins over `include` in ADO, so charts/ and k8s/ are
+# listed even though they are outside the includes.
+trigger:
+  branches:
+    include:
+      - main
+      - catchup-upgraded
+  paths:
+    include:
+      - src/**
+      - pom.xml
+      - checkout-resources.sh
+      - duck/build-pinned-forks.sh
+      - duck/maven-settings.xml
+      - az/azure-pipeline.image.yml
+    exclude:
+      - charts/**
+      - k8s/**
+      - ci/**
+      - '**/*.md'
+
+# Still never on a pull request: a PR must not push to a shared registry.
 pr: none
 
 parameters:
