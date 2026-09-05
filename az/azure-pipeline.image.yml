@@ -34,22 +34,30 @@ name: 'rvf-image-$(Build.SourceBranchName)-$(Date:yyyyMMdd)$(Rev:.r)'
 #
 # The path filter is the point. A chart-only or documentation-only commit must
 # not spend ~9 minutes rebuilding an identical image, and the chart has its own
-# pipeline. Note `exclude` wins over `include` in ADO, so charts/ and k8s/ are
-# listed even though they are outside the includes.
+# pipeline.
 trigger:
   branches:
     include:
       - main
       - catchup-upgraded
-  # Prefix matches, NOT globs. Azure DevOps path filters compare path prefixes;
-  # they do not accept wildcards. `src/**` therefore matched nothing, which is
-  # why commit e915f7fd - a change under src/ and nothing else - did not build,
-  # while ec8f8052 and 6db5b0cf did: those touched this file, which was listed
-  # as an exact path and so matched as a prefix of itself.
+  # Plain directory prefixes. `src` matches everything beneath it.
+  #
+  # An earlier revision of this comment claimed that `src/**` matched nothing
+  # and that ADO does not accept wildcards here. That was wrong, and the
+  # evidence is on the record: commit e915f7fd changed one file under src/ and
+  # nothing else, the YAML at that commit read `src/**`, and build 16202 ran
+  # from it with reason `individualCI`. The trigger had simply not fired yet
+  # when it was checked - ADO can take several minutes, and it was given about
+  # five. The lesson is about the diagnosis, not the syntax: a trigger that has
+  # not fired YET looks exactly like a trigger that never will.
+  #
+  # The prefix form is kept because it is the plainer of the two and is
+  # unambiguous either way.
   #
   # No `exclude` list is needed. The includes are specific paths, so anything
   # outside them - charts/, k8s/, ci/, the markdown at the root - already fails
-  # to match and cannot start a build.
+  # to match and cannot start a build. Confirmed: the docs-only commit 5ce2bdae
+  # started nothing.
   paths:
     include:
       - src
