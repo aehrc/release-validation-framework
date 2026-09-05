@@ -67,6 +67,10 @@ parameters:
     displayName: 'Tag suffix naming the engine, so this cannot be mistaken for a MySQL build'
     type: string
     default: 'duckdb'
+  - name: deployBranch
+    displayName: 'The one branch whose tags ArgoCD Image Updater may deploy'
+    type: string
+    default: 'catchup-upgraded'
   - name: alsoTagLatest
     displayName: 'Also move the bare engine tag (e.g. :duckdb) to this build'
     type: boolean
@@ -226,14 +230,42 @@ stages:
                 # engine goes in the tag. A bare 9.0.1 here would be ambiguous
                 # at best and would shadow an existing build at worst - never
                 # push one.
-                PRIMARY="$VERSION-$SUFFIX"
+                #
+                # The engine alone is not enough, because the branch is not in
+                # the tag either. ArgoCD Image Updater selects by a regular
+                # expression over tag names, so if every branch produced
+                # `9.0.1-duckdb-<id>-<sha>` then a build of ANY branch would be
+                # a candidate for deployment - including one that does not have
+                # the console, the auth fix, or anything else assumed present.
+                # Nothing in the tag would say which tree it came from.
+                #
+                # So only the deploy branch produces the plain, selectable
+                # shape. Every other branch carries its name in the tag, which
+                # makes it unmatchable by that expression and self-describing to
+                # a human reading `docker images`.
+                BRANCH='$(Build.SourceBranchName)'
+                DEPLOY_BRANCH='${{ parameters.deployBranch }}'
 
-                # Immutable companion, tagged with the ADO build id and git commit SHA.
-                # The build id is monotonic and allows ArgoCD Image Updater to sort chronologically;
-                # the commit SHA gives immediate traceability to the git tree:
+                if [ "$BRANCH" = "$DEPLOY_BRANCH" ]; then
+                  PRIMARY="$VERSION-$SUFFIX"
+                  QUALIFIER=""
+                else
+                  # Lower-cased, and anything not a tag character folded to '-',
+                  # because branch names may hold '/' and '_'. Leading digits
+                  # cannot occur here, so the expression above stays unmatchable.
+                  SLUG=$(printf %s "$BRANCH" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]\+/-/g; s/^-//; s/-$//')
+                  PRIMARY="$VERSION-$SUFFIX-$SLUG"
+                  QUALIFIER="$SLUG-"
+                  echo "NOTE: '$BRANCH' is not the deploy branch '$DEPLOY_BRANCH'."
+                  echo "      Tags carry '$SLUG' and will NOT be deployed automatically."
+                fi
+
+                # Immutable companion: build id then commit. The build id always
+                # increases, so a name-ordered strategy resolves to the newest
+                # build; the commit gives the tree without a lookup.
                 IMMUTABLE="$PRIMARY-$BUILD_ID-$SHA"
-                TAGS="$IMMUTABLE,$PRIMARY-$BUILD_ID"
-                if [ '${{ parameters.alsoTagLatest }}' = 'True' ]; then
+                TAGS="$IMMUTABLE,$VERSION-$SUFFIX-$QUALIFIER$BUILD_ID"
+                if [ '${{ parameters.alsoTagLatest }}' = 'True' ] && [ "$BRANCH" = "$DEPLOY_BRANCH" ]; then
                   # Deliberately NOT `latest`: that would claim to be the
                   # canonical RVF for a repository shared with MySQL builds.
                   TAGS="$TAGS,$SUFFIX"
