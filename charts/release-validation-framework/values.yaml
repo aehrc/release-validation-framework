@@ -416,6 +416,23 @@ securityPolicy:
       - "profile"
       - "email"
     forwardAccessToken: true
+    # -- Let a request that already carries a Bearer token skip the OIDC
+    # redirect, so the JWT provider below can validate it.
+    #
+    # Without this the OIDC filter answers EVERY unauthenticated request with a
+    # 302 to Keycloak, including one holding a valid token, so the JWT provider
+    # is never reached and no machine client can call the API at all. Measured
+    # against the live gateway before the fix: a client_credentials token got
+    # 302, not 200, on every path.
+    #
+    # Envoy's own description: "Skips OIDC authentication when the request
+    # contains a header that will be extracted by the JWT filter ... typically
+    # used for non-browser clients that may not be able to handle OIDC
+    # redirects and wish to directly supply a token instead."
+    #
+    # Browsers are unaffected: they send no Authorization header, so they still
+    # get the redirect. This is what makes the policy genuinely dual-mode.
+    passThroughAuthHeader: true
   # -- JWT configuration for machine/Bearer token flow
   jwt:
     providers:

@@ -270,3 +270,27 @@ tests:
           path: spec.acme.email
           value: test@example.com
         template: issuer.yaml
+
+  - it: should let Bearer tokens bypass the OIDC redirect
+    set:
+      fullnameOverride: "rvf"
+    asserts:
+      # Without this the OIDC filter 302s every request that has no session
+      # cookie - including one carrying a valid machine token - so the JWT
+      # provider is unreachable and the nightly cannot authenticate at all.
+      - equal:
+          path: spec.oidc.passThroughAuthHeader
+          value: true
+        template: security-policy.yaml
+      # The JWT provider has to exist for the passthrough to have anything to
+      # hand the token to.
+      - equal:
+          path: spec.jwt.providers[0].name
+          value: oidc
+        template: security-policy.yaml
+      # And authorisation is on the groups claim, so a token without rvf-users
+      # is refused even though it is valid.
+      - equal:
+          path: spec.authorization.defaultAction
+          value: Deny
+        template: security-policy.yaml

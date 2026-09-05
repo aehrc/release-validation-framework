@@ -70,11 +70,17 @@
               }
             }
           },
-          "required": ["create", "email"],
+          "required": [
+            "create",
+            "email"
+          ],
           "additionalProperties": false
         }
       },
-      "required": ["enabled", "issuer"],
+      "required": [
+        "enabled",
+        "issuer"
+      ],
       "additionalProperties": false
     },
     "image": {
@@ -87,7 +93,11 @@
         },
         "pullPolicy": {
           "type": "string",
-          "enum": ["Always", "IfNotPresent", "Never"],
+          "enum": [
+            "Always",
+            "IfNotPresent",
+            "Never"
+          ],
           "description": "Image pull policy"
         },
         "tag": {
@@ -95,7 +105,10 @@
           "description": "Image tag (defaults to Chart appVersion if empty)"
         }
       },
-      "required": ["repository", "pullPolicy"],
+      "required": [
+        "repository",
+        "pullPolicy"
+      ],
       "additionalProperties": false
     },
     "imagePullSecrets": {
@@ -108,7 +121,9 @@
             "type": "string"
           }
         },
-        "required": ["name"],
+        "required": [
+          "name"
+        ],
         "additionalProperties": false
       }
     },
@@ -159,63 +174,117 @@
           "type": "object",
           "description": "PVC for shared validation jobs",
           "properties": {
-            "create": { "type": "boolean" },
-            "claimName": { "type": "string" },
-            "storageClassName": { "type": "string" },
+            "create": {
+              "type": "boolean"
+            },
+            "claimName": {
+              "type": "string"
+            },
+            "storageClassName": {
+              "type": "string"
+            },
             "accessModes": {
               "type": "array",
-              "items": { "type": "string" }
+              "items": {
+                "type": "string"
+              }
             },
-            "size": { "type": "string" },
-            "mountPath": { "type": "string" }
+            "size": {
+              "type": "string"
+            },
+            "mountPath": {
+              "type": "string"
+            }
           },
-          "required": ["create", "storageClassName", "accessModes", "size", "mountPath"],
+          "required": [
+            "create",
+            "storageClassName",
+            "accessModes",
+            "size",
+            "mountPath"
+          ],
           "additionalProperties": false
         },
         "releases": {
           "type": "object",
           "description": "PVC for published release archives",
           "properties": {
-            "create": { "type": "boolean" },
-            "claimName": { "type": "string" },
-            "storageClassName": { "type": "string" },
+            "create": {
+              "type": "boolean"
+            },
+            "claimName": {
+              "type": "string"
+            },
+            "storageClassName": {
+              "type": "string"
+            },
             "accessModes": {
               "type": "array",
-              "items": { "type": "string" }
+              "items": {
+                "type": "string"
+              }
             },
-            "size": { "type": "string" },
-            "mountPath": { "type": "string" }
+            "size": {
+              "type": "string"
+            },
+            "mountPath": {
+              "type": "string"
+            }
           },
-          "required": ["create", "storageClassName", "accessModes", "size", "mountPath"],
+          "required": [
+            "create",
+            "storageClassName",
+            "accessModes",
+            "size",
+            "mountPath"
+          ],
           "additionalProperties": false
         }
       },
-      "required": ["jobs", "releases"],
+      "required": [
+        "jobs",
+        "releases"
+      ],
       "additionalProperties": false
     },
     "api": {
       "type": "object",
       "description": "RVF API deployment and service configuration",
       "properties": {
-        "replicaCount": { "type": "integer", "minimum": 1 },
-        "nameOverride": { "type": "string" },
-        "retentionDays": { "type": "string" },
+        "replicaCount": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "nameOverride": {
+          "type": "string"
+        },
+        "retentionDays": {
+          "type": "string"
+        },
         "resources": {
           "type": "object",
           "properties": {
             "requests": {
               "type": "object",
               "properties": {
-                "cpu": { "type": "string" },
-                "memory": { "type": "string" }
+                "cpu": {
+                  "type": "string"
+                },
+                "memory": {
+                  "type": "string"
+                }
               },
               "additionalProperties": false
             },
             "limits": {
               "type": "object",
               "properties": {
-                "cpu": { "type": "string" },
-                "memory": { "type": "string" }
+                "cpu": {
+                  "type": "string"
+                },
+                "memory": {
+                  "type": "string"
+                }
               },
               "additionalProperties": false
             }
@@ -227,59 +296,115 @@
           "properties": {
             "type": {
               "type": "string",
-              "enum": ["ClusterIP", "NodePort", "LoadBalancer"]
+              "enum": [
+                "ClusterIP",
+                "NodePort",
+                "LoadBalancer"
+              ]
             },
-            "port": { "type": "integer" }
+            "port": {
+              "type": "integer"
+            }
           },
-          "required": ["type", "port"],
+          "required": [
+            "type",
+            "port"
+          ],
           "additionalProperties": false
         },
         "readinessProbe": {
           "type": "object",
           "properties": {
-            "enabled": { "type": "boolean" },
-            "path": { "type": "string" },
-            "port": { "type": "integer" },
-            "initialDelaySeconds": { "type": "integer" },
-            "periodSeconds": { "type": "integer" }
+            "enabled": {
+              "type": "boolean"
+            },
+            "path": {
+              "type": "string"
+            },
+            "port": {
+              "type": "integer"
+            },
+            "initialDelaySeconds": {
+              "type": "integer"
+            },
+            "periodSeconds": {
+              "type": "integer"
+            }
           },
-          "required": ["enabled", "path", "port"],
+          "required": [
+            "enabled",
+            "path",
+            "port"
+          ],
           "additionalProperties": false
         },
-        "podAnnotations": { "type": "object" },
-        "podLabels": { "type": "object" },
-        "nodeSelector": { "type": "object" },
-        "tolerations": { "type": "array" },
-        "affinity": { "type": "object" },
-        "extraEnv": { "type": "array" }
+        "podAnnotations": {
+          "type": "object"
+        },
+        "podLabels": {
+          "type": "object"
+        },
+        "nodeSelector": {
+          "type": "object"
+        },
+        "tolerations": {
+          "type": "array"
+        },
+        "affinity": {
+          "type": "object"
+        },
+        "extraEnv": {
+          "type": "array"
+        }
       },
-      "required": ["replicaCount", "service", "resources"],
+      "required": [
+        "replicaCount",
+        "service",
+        "resources"
+      ],
       "additionalProperties": false
     },
     "worker": {
       "type": "object",
       "description": "RVF Worker deployment configuration",
       "properties": {
-        "replicaCount": { "type": "integer", "minimum": 0 },
-        "nameOverride": { "type": "string" },
-        "terminationGracePeriodSeconds": { "type": "integer" },
-        "retentionDays": { "type": "string" },
+        "replicaCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "nameOverride": {
+          "type": "string"
+        },
+        "terminationGracePeriodSeconds": {
+          "type": "integer"
+        },
+        "retentionDays": {
+          "type": "string"
+        },
         "resources": {
           "type": "object",
           "properties": {
             "requests": {
               "type": "object",
               "properties": {
-                "cpu": { "type": "string" },
-                "memory": { "type": "string" }
+                "cpu": {
+                  "type": "string"
+                },
+                "memory": {
+                  "type": "string"
+                }
               },
               "additionalProperties": false
             },
             "limits": {
               "type": "object",
               "properties": {
-                "cpu": { "type": "string" },
-                "memory": { "type": "string" }
+                "cpu": {
+                  "type": "string"
+                },
+                "memory": {
+                  "type": "string"
+                }
               },
               "additionalProperties": false
             }
@@ -289,12 +414,25 @@
         "duckdb": {
           "type": "object",
           "properties": {
-            "workDirectory": { "type": "string" },
-            "cacheDirectory": { "type": "string" },
-            "cacheMaxGb": { "type": "string" },
-            "threads": { "type": "string" }
+            "workDirectory": {
+              "type": "string"
+            },
+            "cacheDirectory": {
+              "type": "string"
+            },
+            "cacheMaxGb": {
+              "type": "string"
+            },
+            "threads": {
+              "type": "string"
+            }
           },
-          "required": ["workDirectory", "cacheDirectory", "cacheMaxGb", "threads"],
+          "required": [
+            "workDirectory",
+            "cacheDirectory",
+            "cacheMaxGb",
+            "threads"
+          ],
           "additionalProperties": false
         },
         "workVolume": {
@@ -303,44 +441,90 @@
             "emptyDir": {
               "type": "object",
               "properties": {
-                "sizeLimit": { "type": "string" }
+                "sizeLimit": {
+                  "type": "string"
+                }
               },
-              "required": ["sizeLimit"],
+              "required": [
+                "sizeLimit"
+              ],
               "additionalProperties": false
             },
-            "mountPath": { "type": "string" }
+            "mountPath": {
+              "type": "string"
+            }
           },
-          "required": ["emptyDir", "mountPath"],
+          "required": [
+            "emptyDir",
+            "mountPath"
+          ],
           "additionalProperties": false
         },
-        "nodeSelector": { "type": "object" },
-        "tolerations": { "type": "array" },
-        "affinity": { "type": "object" },
-        "podAnnotations": { "type": "object" },
-        "podLabels": { "type": "object" },
-        "extraEnv": { "type": "array" }
+        "nodeSelector": {
+          "type": "object"
+        },
+        "tolerations": {
+          "type": "array"
+        },
+        "affinity": {
+          "type": "object"
+        },
+        "podAnnotations": {
+          "type": "object"
+        },
+        "podLabels": {
+          "type": "object"
+        },
+        "extraEnv": {
+          "type": "array"
+        }
       },
-      "required": ["replicaCount", "terminationGracePeriodSeconds", "resources", "duckdb", "workVolume"],
+      "required": [
+        "replicaCount",
+        "terminationGracePeriodSeconds",
+        "resources",
+        "duckdb",
+        "workVolume"
+      ],
       "additionalProperties": false
     },
     "activemq": {
       "type": "object",
       "description": "ActiveMQ broker configuration",
       "properties": {
-        "enabled": { "type": "boolean" },
-        "nameOverride": { "type": "string" },
-        "replicaCount": { "type": "integer", "minimum": 1 },
+        "enabled": {
+          "type": "boolean"
+        },
+        "nameOverride": {
+          "type": "string"
+        },
+        "replicaCount": {
+          "type": "integer",
+          "minimum": 1
+        },
         "image": {
           "type": "object",
           "properties": {
-            "repository": { "type": "string" },
+            "repository": {
+              "type": "string"
+            },
             "pullPolicy": {
               "type": "string",
-              "enum": ["Always", "IfNotPresent", "Never"]
+              "enum": [
+                "Always",
+                "IfNotPresent",
+                "Never"
+              ]
             },
-            "tag": { "type": "string" }
+            "tag": {
+              "type": "string"
+            }
           },
-          "required": ["repository", "pullPolicy", "tag"],
+          "required": [
+            "repository",
+            "pullPolicy",
+            "tag"
+          ],
           "additionalProperties": false
         },
         "service": {
@@ -348,12 +532,24 @@
           "properties": {
             "type": {
               "type": "string",
-              "enum": ["ClusterIP", "NodePort", "LoadBalancer"]
+              "enum": [
+                "ClusterIP",
+                "NodePort",
+                "LoadBalancer"
+              ]
             },
-            "openwirePort": { "type": "integer" },
-            "consolePort": { "type": "integer" }
+            "openwirePort": {
+              "type": "integer"
+            },
+            "consolePort": {
+              "type": "integer"
+            }
           },
-          "required": ["type", "openwirePort", "consolePort"],
+          "required": [
+            "type",
+            "openwirePort",
+            "consolePort"
+          ],
           "additionalProperties": false
         },
         "resources": {
@@ -362,45 +558,85 @@
             "requests": {
               "type": "object",
               "properties": {
-                "cpu": { "type": "string" },
-                "memory": { "type": "string" }
+                "cpu": {
+                  "type": "string"
+                },
+                "memory": {
+                  "type": "string"
+                }
               },
               "additionalProperties": false
             },
             "limits": {
               "type": "object",
               "properties": {
-                "cpu": { "type": "string" },
-                "memory": { "type": "string" }
+                "cpu": {
+                  "type": "string"
+                },
+                "memory": {
+                  "type": "string"
+                }
               },
               "additionalProperties": false
             }
           },
           "additionalProperties": false
         },
-        "podAnnotations": { "type": "object" },
-        "podLabels": { "type": "object" },
-        "nodeSelector": { "type": "object" },
-        "tolerations": { "type": "array" },
-        "affinity": { "type": "object" }
+        "podAnnotations": {
+          "type": "object"
+        },
+        "podLabels": {
+          "type": "object"
+        },
+        "nodeSelector": {
+          "type": "object"
+        },
+        "tolerations": {
+          "type": "array"
+        },
+        "affinity": {
+          "type": "object"
+        }
       },
-      "required": ["enabled", "replicaCount", "image", "service", "resources"],
+      "required": [
+        "enabled",
+        "replicaCount",
+        "image",
+        "service",
+        "resources"
+      ],
       "additionalProperties": false
     },
     "keda": {
       "type": "object",
       "description": "KEDA autoscaling configuration",
       "properties": {
-        "enabled": { "type": "boolean" },
+        "enabled": {
+          "type": "boolean"
+        },
         "scaledObject": {
           "type": "object",
           "properties": {
-            "enabled": { "type": "boolean" },
-            "nameOverride": { "type": "string" },
-            "minReplicaCount": { "type": "integer", "minimum": 0 },
-            "maxReplicaCount": { "type": "integer", "minimum": 1 },
-            "cooldownPeriod": { "type": "integer" },
-            "pollingInterval": { "type": "integer" },
+            "enabled": {
+              "type": "boolean"
+            },
+            "nameOverride": {
+              "type": "string"
+            },
+            "minReplicaCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "maxReplicaCount": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "cooldownPeriod": {
+              "type": "integer"
+            },
+            "pollingInterval": {
+              "type": "integer"
+            },
             "advanced": {
               "type": "object",
               "properties": {
@@ -413,104 +649,190 @@
                         "scaleDown": {
                           "type": "object",
                           "properties": {
-                            "stabilizationWindowSeconds": { "type": "integer" }
+                            "stabilizationWindowSeconds": {
+                              "type": "integer"
+                            }
                           },
-                          "required": ["stabilizationWindowSeconds"],
+                          "required": [
+                            "stabilizationWindowSeconds"
+                          ],
                           "additionalProperties": false
                         }
                       },
-                      "required": ["scaleDown"],
+                      "required": [
+                        "scaleDown"
+                      ],
                       "additionalProperties": false
                     }
                   },
-                  "required": ["behavior"],
+                  "required": [
+                    "behavior"
+                  ],
                   "additionalProperties": false
                 }
               },
-              "required": ["horizontalPodAutoscalerConfig"],
+              "required": [
+                "horizontalPodAutoscalerConfig"
+              ],
               "additionalProperties": false
             },
             "triggers": {
               "type": "object",
               "properties": {
-                "destinationName": { "type": "string" },
-                "brokerName": { "type": "string" },
-                "targetQueueSize": { "type": "string" }
+                "destinationName": {
+                  "type": "string"
+                },
+                "brokerName": {
+                  "type": "string"
+                },
+                "targetQueueSize": {
+                  "type": "string"
+                }
               },
-              "required": ["destinationName", "brokerName", "targetQueueSize"],
+              "required": [
+                "destinationName",
+                "brokerName",
+                "targetQueueSize"
+              ],
               "additionalProperties": false
             }
           },
-          "required": ["enabled", "minReplicaCount", "maxReplicaCount", "cooldownPeriod", "pollingInterval", "triggers"],
+          "required": [
+            "enabled",
+            "minReplicaCount",
+            "maxReplicaCount",
+            "cooldownPeriod",
+            "pollingInterval",
+            "triggers"
+          ],
           "additionalProperties": false
         },
         "triggerAuthentication": {
           "type": "object",
           "properties": {
-            "enabled": { "type": "boolean" },
-            "nameOverride": { "type": "string" },
-            "secretName": { "type": "string" },
-            "usernameKey": { "type": "string" },
-            "passwordKey": { "type": "string" },
+            "enabled": {
+              "type": "boolean"
+            },
+            "nameOverride": {
+              "type": "string"
+            },
+            "secretName": {
+              "type": "string"
+            },
+            "usernameKey": {
+              "type": "string"
+            },
+            "passwordKey": {
+              "type": "string"
+            },
             "externalSecret": {
               "type": "object",
               "properties": {
-                "enabled": { "type": "boolean" },
-                "refreshInterval": { "type": "string" },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "refreshInterval": {
+                  "type": "string"
+                },
                 "secretStoreRef": {
                   "type": "object",
                   "properties": {
-                    "name": { "type": "string" },
-                    "kind": { "type": "string" }
+                    "name": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string"
+                    }
                   },
                   "additionalProperties": false
                 },
                 "remoteRef": {
                   "type": "object",
                   "properties": {
-                    "key": { "type": "string" },
-                    "usernameProperty": { "type": "string" },
-                    "passwordProperty": { "type": "string" }
+                    "key": {
+                      "type": "string"
+                    },
+                    "usernameProperty": {
+                      "type": "string"
+                    },
+                    "passwordProperty": {
+                      "type": "string"
+                    }
                   },
                   "additionalProperties": false
                 }
               },
-              "required": ["enabled"],
+              "required": [
+                "enabled"
+              ],
               "additionalProperties": false
             }
           },
-          "required": ["enabled", "secretName", "usernameKey", "passwordKey"],
+          "required": [
+            "enabled",
+            "secretName",
+            "usernameKey",
+            "passwordKey"
+          ],
           "additionalProperties": false
         }
       },
-      "required": ["enabled", "scaledObject", "triggerAuthentication"],
+      "required": [
+        "enabled",
+        "scaledObject",
+        "triggerAuthentication"
+      ],
       "additionalProperties": false
     },
     "externalSecret": {
       "type": "object",
       "description": "ExternalSecret configuration for OIDC client secret",
       "properties": {
-        "enabled": { "type": "boolean" },
-        "nameOverride": { "type": "string" },
-        "syncWave": { "type": "string" },
-        "refreshInterval": { "type": "string" },
-        "annotations": { "type": "object" },
+        "enabled": {
+          "type": "boolean"
+        },
+        "nameOverride": {
+          "type": "string"
+        },
+        "syncWave": {
+          "type": "string"
+        },
+        "refreshInterval": {
+          "type": "string"
+        },
+        "annotations": {
+          "type": "object"
+        },
         "secretStoreRef": {
           "type": "object",
           "properties": {
-            "name": { "type": "string" },
-            "kind": { "type": "string" }
+            "name": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            }
           },
-          "required": ["name", "kind"],
+          "required": [
+            "name",
+            "kind"
+          ],
           "additionalProperties": false
         },
         "target": {
           "type": "object",
           "properties": {
-            "name": { "type": "string" },
-            "creationPolicy": { "type": "string" }
+            "name": {
+              "type": "string"
+            },
+            "creationPolicy": {
+              "type": "string"
+            }
           },
-          "required": ["name", "creationPolicy"],
+          "required": [
+            "name",
+            "creationPolicy"
+          ],
           "additionalProperties": false
         },
         "data": {
@@ -518,21 +840,39 @@
           "items": {
             "type": "object",
             "properties": {
-              "secretKey": { "type": "string" },
+              "secretKey": {
+                "type": "string"
+              },
               "remoteRef": {
                 "type": "object",
                 "properties": {
-                  "conversionStrategy": { "type": "string" },
-                  "decodingStrategy": { "type": "string" },
-                  "metadataPolicy": { "type": "string" },
-                  "key": { "type": "string" },
-                  "property": { "type": "string" }
+                  "conversionStrategy": {
+                    "type": "string"
+                  },
+                  "decodingStrategy": {
+                    "type": "string"
+                  },
+                  "metadataPolicy": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": "string"
+                  },
+                  "property": {
+                    "type": "string"
+                  }
                 },
-                "required": ["key", "property"],
+                "required": [
+                  "key",
+                  "property"
+                ],
                 "additionalProperties": false
               }
             },
-            "required": ["secretKey", "remoteRef"],
+            "required": [
+              "secretKey",
+              "remoteRef"
+            ],
             "additionalProperties": false
           }
         },
@@ -540,17 +880,31 @@
           "type": "array"
         }
       },
-      "required": ["enabled", "refreshInterval", "secretStoreRef", "target", "data"],
+      "required": [
+        "enabled",
+        "refreshInterval",
+        "secretStoreRef",
+        "target",
+        "data"
+      ],
       "additionalProperties": false
     },
     "gateway": {
       "type": "object",
       "description": "Envoy Gateway configuration",
       "properties": {
-        "enabled": { "type": "boolean" },
-        "nameOverride": { "type": "string" },
-        "gatewayClassName": { "type": "string" },
-        "annotations": { "type": "object" },
+        "enabled": {
+          "type": "boolean"
+        },
+        "nameOverride": {
+          "type": "string"
+        },
+        "gatewayClassName": {
+          "type": "string"
+        },
+        "annotations": {
+          "type": "object"
+        },
         "infrastructure": {
           "type": "object",
           "description": "Infrastructure settings for Envoy Gateway data plane",
@@ -569,11 +923,21 @@
         "tls": {
           "type": "object",
           "properties": {
-            "enabled": { "type": "boolean" },
-            "mode": { "type": "string" },
-            "certificateSecret": { "type": "string" }
+            "enabled": {
+              "type": "boolean"
+            },
+            "mode": {
+              "type": "string"
+            },
+            "certificateSecret": {
+              "type": "string"
+            }
           },
-          "required": ["enabled", "mode", "certificateSecret"],
+          "required": [
+            "enabled",
+            "mode",
+            "certificateSecret"
+          ],
           "additionalProperties": false
         },
         "listeners": {
@@ -582,136 +946,248 @@
             "http": {
               "type": "object",
               "properties": {
-                "enabled": { "type": "boolean" },
-                "name": { "type": "string" },
-                "port": { "type": "integer" },
-                "protocol": { "type": "string" },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "port": {
+                  "type": "integer"
+                },
+                "protocol": {
+                  "type": "string"
+                },
                 "allowedRoutes": {
                   "type": "object",
                   "properties": {
                     "namespaces": {
                       "type": "object",
                       "properties": {
-                        "from": { "type": "string" }
+                        "from": {
+                          "type": "string"
+                        }
                       },
-                      "required": ["from"],
+                      "required": [
+                        "from"
+                      ],
                       "additionalProperties": false
                     }
                   },
-                  "required": ["namespaces"],
+                  "required": [
+                    "namespaces"
+                  ],
                   "additionalProperties": false
                 }
               },
-              "required": ["enabled", "name", "port", "protocol", "allowedRoutes"],
+              "required": [
+                "enabled",
+                "name",
+                "port",
+                "protocol",
+                "allowedRoutes"
+              ],
               "additionalProperties": false
             },
             "https": {
               "type": "object",
               "properties": {
-                "enabled": { "type": "boolean" },
-                "name": { "type": "string" },
-                "port": { "type": "integer" },
-                "hostname": { "type": "string" },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "port": {
+                  "type": "integer"
+                },
+                "hostname": {
+                  "type": "string"
+                },
                 "allowedRoutes": {
                   "type": "object",
                   "properties": {
                     "namespaces": {
                       "type": "object",
                       "properties": {
-                        "from": { "type": "string" }
+                        "from": {
+                          "type": "string"
+                        }
                       },
-                      "required": ["from"],
+                      "required": [
+                        "from"
+                      ],
                       "additionalProperties": false
                     }
                   },
-                  "required": ["namespaces"],
+                  "required": [
+                    "namespaces"
+                  ],
                   "additionalProperties": false
                 }
               },
-              "required": ["enabled", "name", "port", "hostname", "allowedRoutes"],
+              "required": [
+                "enabled",
+                "name",
+                "port",
+                "hostname",
+                "allowedRoutes"
+              ],
               "additionalProperties": false
             }
           },
-          "required": ["http", "https"],
+          "required": [
+            "http",
+            "https"
+          ],
           "additionalProperties": false
         },
         "clientTrafficPolicy": {
           "type": "object",
           "properties": {
-            "enabled": { "type": "boolean" },
-            "nameOverride": { "type": "string" },
-            "bufferLimit": { "type": "string" }
+            "enabled": {
+              "type": "boolean"
+            },
+            "nameOverride": {
+              "type": "string"
+            },
+            "bufferLimit": {
+              "type": "string"
+            }
           },
-          "required": ["enabled", "bufferLimit"],
+          "required": [
+            "enabled",
+            "bufferLimit"
+          ],
           "additionalProperties": false
         }
       },
-      "required": ["enabled", "gatewayClassName", "listeners", "tls"],
+      "required": [
+        "enabled",
+        "gatewayClassName",
+        "listeners",
+        "tls"
+      ],
       "additionalProperties": false
     },
     "httpRoute": {
       "type": "object",
       "description": "Gateway API HTTPRoute configuration",
       "properties": {
-        "enabled": { "type": "boolean" },
-        "nameOverride": { "type": "string" },
+        "enabled": {
+          "type": "boolean"
+        },
+        "nameOverride": {
+          "type": "string"
+        },
         "hostnames": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
         "rules": {
           "type": "array",
-          "items": { "type": "object" }
+          "items": {
+            "type": "object"
+          }
         },
         "backendTrafficPolicy": {
           "type": "object",
           "properties": {
-            "enabled": { "type": "boolean" },
-            "nameOverride": { "type": "string" },
-            "requestTimeout": { "type": "string" },
-            "connectionIdleTimeout": { "type": "string" }
+            "enabled": {
+              "type": "boolean"
+            },
+            "nameOverride": {
+              "type": "string"
+            },
+            "requestTimeout": {
+              "type": "string"
+            },
+            "connectionIdleTimeout": {
+              "type": "string"
+            }
           },
-          "required": ["enabled", "requestTimeout", "connectionIdleTimeout"],
+          "required": [
+            "enabled",
+            "requestTimeout",
+            "connectionIdleTimeout"
+          ],
           "additionalProperties": false
         }
       },
-      "required": ["enabled", "hostnames", "rules"],
+      "required": [
+        "enabled",
+        "hostnames",
+        "rules"
+      ],
       "additionalProperties": false
     },
     "securityPolicy": {
       "type": "object",
       "description": "Envoy Gateway SecurityPolicy configuration",
       "properties": {
-        "enabled": { "type": "boolean" },
-        "nameOverride": { "type": "string" },
+        "enabled": {
+          "type": "boolean"
+        },
+        "nameOverride": {
+          "type": "string"
+        },
         "oidc": {
           "type": "object",
           "properties": {
             "provider": {
               "type": "object",
               "properties": {
-                "issuer": { "type": "string" }
+                "issuer": {
+                  "type": "string"
+                }
               },
-              "required": ["issuer"],
+              "required": [
+                "issuer"
+              ],
               "additionalProperties": false
             },
-            "clientID": { "type": "string" },
+            "clientID": {
+              "type": "string"
+            },
             "clientSecret": {
               "type": "object",
               "properties": {
-                "name": { "type": "string" }
+                "name": {
+                  "type": "string"
+                }
               },
-              "required": ["name"],
+              "required": [
+                "name"
+              ],
               "additionalProperties": false
             },
-            "redirectURL": { "type": "string" },
+            "redirectURL": {
+              "type": "string"
+            },
             "scopes": {
               "type": "array",
-              "items": { "type": "string" }
+              "items": {
+                "type": "string"
+              }
             },
-            "forwardAccessToken": { "type": "boolean" }
+            "forwardAccessToken": {
+              "type": "boolean"
+            },
+            "passThroughAuthHeader": {
+              "type": "boolean",
+              "description": "Let a request carrying a Bearer token skip the OIDC redirect so the JWT provider can validate it. Required for any non-browser client; without it the OIDC filter answers every tokened request with a 302 to the identity provider."
+            }
           },
-          "required": ["provider", "clientID", "clientSecret", "redirectURL", "scopes", "forwardAccessToken"],
+          "required": [
+            "provider",
+            "clientID",
+            "clientSecret",
+            "redirectURL",
+            "scopes",
+            "forwardAccessToken"
+          ],
           "additionalProperties": false
         },
         "jwt": {
@@ -722,15 +1198,26 @@
               "items": {
                 "type": "object",
                 "properties": {
-                  "name": { "type": "string" },
-                  "issuer": { "type": "string" },
+                  "name": {
+                    "type": "string"
+                  },
+                  "issuer": {
+                    "type": "string"
+                  },
                   "remoteJWKS": {
                     "type": "object",
                     "properties": {
-                      "cacheDuration": { "type": "string" },
-                      "uri": { "type": "string" }
+                      "cacheDuration": {
+                        "type": "string"
+                      },
+                      "uri": {
+                        "type": "string"
+                      }
                     },
-                    "required": ["cacheDuration", "uri"],
+                    "required": [
+                      "cacheDuration",
+                      "uri"
+                    ],
                     "additionalProperties": false
                   },
                   "claimToHeaders": {
@@ -738,20 +1225,34 @@
                     "items": {
                       "type": "object",
                       "properties": {
-                        "header": { "type": "string" },
-                        "claim": { "type": "string" }
+                        "header": {
+                          "type": "string"
+                        },
+                        "claim": {
+                          "type": "string"
+                        }
                       },
-                      "required": ["header", "claim"],
+                      "required": [
+                        "header",
+                        "claim"
+                      ],
                       "additionalProperties": false
                     }
                   }
                 },
-                "required": ["name", "issuer", "remoteJWKS", "claimToHeaders"],
+                "required": [
+                  "name",
+                  "issuer",
+                  "remoteJWKS",
+                  "claimToHeaders"
+                ],
                 "additionalProperties": false
               }
             }
           },
-          "required": ["providers"],
+          "required": [
+            "providers"
+          ],
           "additionalProperties": false
         },
         "authorization": {
@@ -759,7 +1260,10 @@
           "properties": {
             "defaultAction": {
               "type": "string",
-              "enum": ["Allow", "Deny"]
+              "enum": [
+                "Allow",
+                "Deny"
+              ]
             },
             "rules": {
               "type": "array",
@@ -768,34 +1272,59 @@
                 "properties": {
                   "action": {
                     "type": "string",
-                    "enum": ["Allow", "Deny"]
+                    "enum": [
+                      "Allow",
+                      "Deny"
+                    ]
                   },
-                  "principal": { "type": "object" }
+                  "principal": {
+                    "type": "object"
+                  }
                 },
-                "required": ["action", "principal"],
+                "required": [
+                  "action",
+                  "principal"
+                ],
                 "additionalProperties": false
               }
             }
           },
-          "required": ["defaultAction", "rules"],
+          "required": [
+            "defaultAction",
+            "rules"
+          ],
           "additionalProperties": false
         }
       },
-      "required": ["enabled", "oidc", "jwt", "authorization"],
+      "required": [
+        "enabled",
+        "oidc",
+        "jwt",
+        "authorization"
+      ],
       "additionalProperties": false
     },
     "networkPolicy": {
       "type": "object",
       "description": "NetworkPolicy configuration",
       "properties": {
-        "enabled": { "type": "boolean" },
-        "nameOverride": { "type": "string" },
+        "enabled": {
+          "type": "boolean"
+        },
+        "nameOverride": {
+          "type": "string"
+        },
         "ingress": {
           "type": "array",
-          "items": { "type": "object" }
+          "items": {
+            "type": "object"
+          }
         }
       },
-      "required": ["enabled", "ingress"],
+      "required": [
+        "enabled",
+        "ingress"
+      ],
       "additionalProperties": false
     }
   },
