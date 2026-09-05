@@ -97,8 +97,11 @@ persistence:
 
 # -- RVF API Deployment & Service configuration
 api:
-  # -- Number of API pod replicas
-  replicaCount: 2
+  # -- Number of API pod replicas. One is enough: the API only accepts uploads,
+  # enqueues a job and serves reports from the shared ReadWriteMany volume, and
+  # a nightly pipeline is its only client. A second replica doubles the cost and
+  # duplicates the daily job-store reaper for no gain in throughput.
+  replicaCount: 1
   # -- Override name for API Deployment and Service
   nameOverride: "rvf-api"
   # -- Days to retain uploaded release files in job storage before reaping (0 disables reaping)

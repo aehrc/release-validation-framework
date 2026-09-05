@@ -14,9 +14,12 @@ tests:
           path: metadata.name
           value: rvf-api
         template: api-deployment.yaml
+      # One API pod. It only accepts uploads, enqueues, and serves reports from
+      # the shared ReadWriteMany volume; a second adds cost and a duplicate
+      # daily reaper, not throughput.
       - equal:
           path: spec.replicas
-          value: 2
+          value: 1
         template: api-deployment.yaml
       - equal:
           path: spec.template.spec.containers[0].name

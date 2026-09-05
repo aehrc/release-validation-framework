@@ -11,9 +11,11 @@ tests:
       - equal:
           path: metadata.name
           value: rvf-worker
-      - equal:
+      # KEDA owns spec.replicas by default, so the Deployment must NOT declare
+      # it. Declaring it makes ArgoCD selfHeal fight KEDA: scale to zero on an
+      # empty queue, selfHeal restores 1, KEDA scales it away again.
+      - notExists:
           path: spec.replicas
-          value: 1
       - equal:
           path: spec.template.spec.terminationGracePeriodSeconds
           value: 600
@@ -73,3 +75,27 @@ tests:
       - equal:
           path: spec.template.spec.volumes[2].emptyDir.sizeLimit
           value: 40Gi
+
+  - it: should declare replicas again when KEDA is not managing the Deployment
+    set:
+      fullnameOverride: "rvf"
+      keda.enabled: false
+      worker.replicaCount: 2
+    asserts:
+      # Nothing else owns the field now, so the chart must set it - otherwise
+      # the Deployment silently falls back to the Kubernetes default of 1 and
+      # worker.replicaCount stops meaning anything.
+      - equal:
+          path: spec.replicas
+          value: 2
+
+  - it: should not declare replicas when only the ScaledObject is switched off
+    set:
+      fullnameOverride: "rvf"
+      keda.scaledObject.enabled: false
+    asserts:
+      # keda.enabled stays true here, so this pins the exact condition: it is
+      # the ScaledObject existing that decides who owns spec.replicas.
+      - equal:
+          path: spec.replicas
+          value: 1

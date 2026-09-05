@@ -5,7 +5,14 @@ metadata:
   labels:
     {{- include "release-validation-framework.worker.labels" . | nindent 4 }}
 spec:
+  {{- if not (and .Values.keda.enabled .Values.keda.scaledObject.enabled) }}
+  # Only set when nothing else owns this field. When the ScaledObject exists,
+  # KEDA drives spec.replicas through an HPA, so declaring it here makes the
+  # Deployment permanently OutOfSync under ArgoCD: KEDA scales to zero on an
+  # empty queue, selfHeal puts it back, KEDA scales it away again. That loop is
+  # what made worker pods appear and disappear on the first deployment.
   replicas: {{ .Values.worker.replicaCount }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "release-validation-framework.worker.selectorLabels" . | nindent 6 }}
