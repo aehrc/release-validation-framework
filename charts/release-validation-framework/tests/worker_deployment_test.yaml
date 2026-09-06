@@ -73,6 +73,16 @@ tests:
           content:
             name: RVF_DUCK_THREADS
             value: "8"
+      # The MRCM index location is a JVM system property, not a Spring one -
+      # the library reads it with System.getProperty, so an RVF_* env var is
+      # silently ignored. Asserting the JAVA_TOOL_OPTIONS spelling is what
+      # stops it being "fixed" into the RVF_ convention around it, which would
+      # render, deploy, and quietly keep the index on the heap.
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: JAVA_TOOL_OPTIONS
+            value: "-Dmrcm.validator.index.directory=/work/mrcm-index"
       - contains:
           path: spec.template.spec.containers[0].env
           content:

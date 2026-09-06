@@ -439,6 +439,15 @@
           ],
           "additionalProperties": false
         },
+        "mrcm": {
+          "type": "object",
+          "properties": {
+            "indexDirectory": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
         "workVolume": {
           "type": "object",
           "properties": {
