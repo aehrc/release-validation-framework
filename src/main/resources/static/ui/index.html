@@ -32,6 +32,7 @@
   <nav class="tabs" role="tablist">
     <button role="tab" class="tab active" data-panel="panel-run" aria-selected="true">Run a validation</button>
     <button role="tab" class="tab" data-panel="panel-open" aria-selected="false">Open a report</button>
+    <button role="tab" class="tab" data-panel="panel-releases" aria-selected="false">Kept releases</button>
     <button role="tab" class="tab" data-panel="panel-about" aria-selected="false">Reference</button>
   </nav>
 </header>
@@ -88,8 +89,11 @@
         <div class="row">
           <label class="field">
             <span>Previous release <em>optional</em></span>
-            <input type="text" id="previousRelease" placeholder="e.g. 20260731">
-            <small>Leave empty for a first-time release.</small>
+            <select id="previousRelease">
+              <option value="__auto__">Detect from the package I chose</option>
+              <option value="">None - first-time release</option>
+            </select>
+            <small id="previousHint">Kept releases are loaded from the server.</small>
           </label>
           <label class="field">
             <span>Effective time <em>optional</em></span>
@@ -160,6 +164,38 @@
   </details>
 </section>
 
+<!-- ------------------------------------------------------- kept releases -->
+<section id="panel-releases" class="panel" role="tabpanel">
+  <div class="card">
+    <p class="hint">
+      Releases kept here are what a validation compares against. Choosing
+      <b>Detect from the package I chose</b> on the run form picks the one with
+      the same edition and the newest effective time before the release under
+      test, so a daily build resolves to the last production release.
+    </p>
+    <form id="releaseForm" autocomplete="off">
+      <label class="drop" id="releaseDrop" for="releaseFile">
+        <input type="file" id="releaseFile" accept=".zip" required>
+        <span class="drop-icon" aria-hidden="true"></span>
+        <span class="drop-text"><strong>Choose a published RF2 zip</strong> or drop one here</span>
+        <span class="drop-file" id="releaseDropFile"></span>
+      </label>
+      <div class="actions">
+        <button type="submit" class="primary" id="releaseBtn">Keep this release</button>
+        <span class="muted">Kept under its own filename, which is the name a validation uses.</span>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <div class="status-head">
+      <legend style="padding:0">Releases on this server</legend>
+      <button type="button" class="ghost" id="refreshReleases">Refresh</button>
+    </div>
+    <div id="releaseList"><p class="muted">loading&hellip;</p></div>
+  </div>
+</section>
+
 <!-- ------------------------------------------------------------- reference -->
 <section id="panel-about" class="panel" role="tabpanel">
   <div class="card prose">
@@ -192,6 +228,20 @@
       validation, not in the content. A failure count of
       <code>-1</code> means the assertion did not run to completion, so read the
       message.
+    </p>
+
+    <h3>Previous releases</h3>
+    <p>
+      Most assertions compare the release under test with the one before it. A
+      run with no previous release is a <b>first-time release</b>: those
+      assertions do not run, and the report says so rather than passing them.
+    </p>
+    <p>
+      Keep a release on the <b>Kept releases</b> tab. It is stored under its own
+      filename, and that filename is what a validation names. <b>Detect from the
+      package I chose</b> then picks the kept release with the same edition and
+      the newest effective time before the one under test. Release status is
+      ignored, so a daily build resolves to the last production release.
     </p>
 
     <h3>Other interfaces</h3>

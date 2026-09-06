@@ -3,6 +3,7 @@ package org.ihtsdo.rvf.rest.controller;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.ihtsdo.rvf.core.service.PreviousReleaseResolver;
 import org.ihtsdo.rvf.core.service.ReleaseCatalogue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,6 +13,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -36,10 +38,29 @@ public class ReleaseController {
 	private static final Logger logger = LoggerFactory.getLogger(ReleaseController.class);
 
 	private final ReleaseCatalogue releaseCatalogue;
+	private final PreviousReleaseResolver previousReleaseResolver;
 
 	@Autowired
-	public ReleaseController(ReleaseCatalogue releaseCatalogue) {
+	public ReleaseController(ReleaseCatalogue releaseCatalogue,
+			PreviousReleaseResolver previousReleaseResolver) {
 		this.releaseCatalogue = releaseCatalogue;
+		this.previousReleaseResolver = previousReleaseResolver;
+	}
+
+	@GetMapping("previous")
+	@Operation(summary = "Which kept release precedes the one about to be validated",
+			description = "Given the filename of a release under test, returns the kept release to pass "
+					+ "as previousRelease: the same edition, with the newest effective time strictly "
+					+ "before it. Release status is ignored, so a daily build resolves to the last "
+					+ "production release, which is the comparison a nightly wants. Answers 204 when "
+					+ "nothing suitable is kept, which is the normal case for a first-time release.")
+	public ResponseEntity<Map<String, String>> resolvePrevious(
+			@Parameter(description = "Filename of the release about to be validated, e.g. "
+					+ "SnomedCT_ManagedServiceAU_DAILYBUILD_BETA_AU1000036_20260930T120000Z.zip")
+			@RequestParam("forFile") final String forFile) {
+		return previousReleaseResolver.resolve(forFile, releaseCatalogue.names())
+				.map(name -> ResponseEntity.ok(Map.of("previousRelease", name)))
+				.orElseGet(() -> ResponseEntity.noContent().build());
 	}
 
 	@RequestMapping(value = "{product}/{version}", method = RequestMethod.POST, consumes = "multipart/form-data")

@@ -60,6 +60,7 @@ $$('.tab').forEach((tab) => {
     // network file share, so it should not be paid for by someone who only
     // wants to submit a run.
     if (tab.dataset.panel === 'panel-open' && !loadRuns.done) loadRuns();
+    if (tab.dataset.panel === 'panel-releases' && !loadReleases.done) loadReleases();
   });
 });
 
@@ -133,6 +134,7 @@ fileInput.addEventListener('change', showFile);
 function showFile() {
   const f = fileInput.files?.[0];
   $('#dropFile').textContent = f ? `${f.name} (${(f.size / 1048576).toFixed(1)} MB)` : '';
+  previewPrevious();
 }
 
 $('#enableDrools').addEventListener('change', (e) => { $('#droolsGroupsWrap').hidden = !e.target.checked; });
@@ -165,8 +167,15 @@ $('#runForm').addEventListener('submit', async (e) => {
   const manifest = $('#manifest').files?.[0];
   if (manifest) body.append('manifest', manifest);
 
+  // '__auto__' is resolved before submitting, so what goes on the wire is
+  // always a real filename or nothing at all.
+  let previous = $('#previousRelease').value;
+  if (previous === '__auto__') {
+    previous = (await detectPrevious(fileInput.files[0]?.name)) || '';
+  }
+
   const optional = {
-    previousRelease: $('#previousRelease').value.trim(),
+    previousRelease: previous,
     effectiveTime: $('#effectiveTime').value.trim(),
     droolsRulesGroups: $('#enableDrools').checked ? $('#droolsRulesGroups').value.trim() : '',
   };
@@ -493,8 +502,108 @@ function render(data, runId, storageLocation) {
   el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+/* ------------------------------------------------------- kept releases */
+
+let keptReleases = [];
+
+/* Ask the server which kept release precedes this package. The rule - same
+ * edition, newest effective time before it, status ignored - lives on the
+ * server so the nightly and this page cannot disagree about it. */
+async function detectPrevious(filename) {
+  if (!filename) return '';
+  try {
+    const res = await fetch(`${API}/releases/previous?forFile=${encodeURIComponent(filename)}`,
+      { credentials: 'same-origin' });
+    if (res.status === 204) return '';        // nothing suitable kept
+    if (!res.ok) return '';
+    return (await res.json()).previousRelease || '';
+  } catch {
+    return '';
+  }
+}
+
+/* Show what auto-detect would choose, so the choice is visible before the run
+ * rather than discovered afterwards in the report. */
+async function previewPrevious() {
+  const hint = $('#previousHint');
+  const name = fileInput.files?.[0]?.name;
+  if ($('#previousRelease').value !== '__auto__') {
+    hint.textContent = 'Kept releases are loaded from the server.';
+    return;
+  }
+  if (!name) { hint.textContent = 'Choose a package and the match will be shown here.'; return; }
+  hint.textContent = 'checking\u2026';
+  const found = await detectPrevious(name);
+  hint.textContent = found
+    ? `will use ${found}`
+    : 'no earlier release of this edition is kept - it will run as a first-time release';
+}
+
+async function loadReleases() {
+  loadReleases.done = true;
+  const box = $('#releaseList');
+  box.innerHTML = '<p class="muted">loading&hellip;</p>';
+  try {
+    keptReleases = await api('/releases');
+    const select = $('#previousRelease');
+    const chosen = select.value;
+    select.innerHTML =
+      '<option value="__auto__">Detect from the package I chose</option>'
+      + '<option value="">None - first-time release</option>'
+      + keptReleases.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+    select.value = chosen;
+
+    box.innerHTML = keptReleases.length
+      ? `<table class="runs"><tbody>${keptReleases.map((n) =>
+          `<tr><td>${esc(n)}</td></tr>`).join('')}</tbody></table>`
+      : '<p class="empty">No releases kept yet. A validation with no previous release runs as a first-time release.</p>';
+  } catch (e) {
+    box.innerHTML = `<p class="muted">Could not list releases: ${esc(e.message)}</p>`;
+  }
+}
+
+const releaseInput = $('#releaseFile');
+releaseInput.addEventListener('change', () => {
+  const f = releaseInput.files?.[0];
+  $('#releaseDropFile').textContent = f ? `${f.name} (${(f.size / 1048576).toFixed(1)} MB)` : '';
+});
+
+$('#releaseForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const file = releaseInput.files?.[0];
+  if (!file) { toast('Choose a zip first.'); return; }
+
+  const btn = $('#releaseBtn');
+  btn.disabled = true;
+  btn.textContent = 'Uploading\u2026';
+  try {
+    const body = new FormData();
+    body.append('file', file);
+    // The path segments are the MySQL schema-naming convention and are ignored
+    // by the DuckDB catalogue, which keeps the package under its own filename.
+    // They are still required by the route, so they are derived rather than
+    // asked for.
+    const version = (file.name.match(/(?<!\d)(\d{8})(?:T\d{6}Z)?(?!\d)/g) || ['00000000']).pop().slice(0, 8);
+    await api(`/releases/kept/${version}`, { method: 'POST', body });
+    toast(`Kept ${file.name}`, true);
+    releaseInput.value = '';
+    $('#releaseDropFile').textContent = '';
+    await loadReleases();
+    previewPrevious();
+  } catch (err) {
+    toast(`Could not keep that release: ${err.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Keep this release';
+  }
+});
+
+$('#refreshReleases').addEventListener('click', loadReleases);
+$('#previousRelease').addEventListener('change', previewPrevious);
+
 /* ------------------------------------------------------------------- boot */
 
 defaults();
 loadVersion();
 loadGroups();
+loadReleases();
