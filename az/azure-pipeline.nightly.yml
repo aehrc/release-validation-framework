@@ -137,33 +137,32 @@ stages:
                 set -euo pipefail
                 echo "triggering pipeline : $(resources.pipeline.dailyRvf.pipelineName)"
                 echo "triggering build    : $(resources.pipeline.dailyRvf.runName)"
-                echo "triggering result   : $(resources.pipeline.dailyRvf.result)"
+                echo "triggering run id   : $(resources.pipeline.dailyRvf.runID)"
                 echo "rvf base url        : ${{ parameters.rvfBaseUrl }}"
                 echo "groups              : ${{ parameters.groups }}"
                 echo "drools / mrcm       : ${{ parameters.enableDrools }} / ${{ parameters.enableMRCM }}"
                 mkdir -p '$(workdir)'
 
-          # A partial daily-rvf publishes no rf2-bundle. Detect it here and let
-          # every later step skip, rather than failing on a download.
-          - task: Bash@3
-            name: bundle
-            displayName: 'Check the triggering run published a release'
-            inputs:
-              targetType: 'inline'
-              script: |
-                set -euo pipefail
-                RESULT='$(resources.pipeline.dailyRvf.result)'
-                if [ "$RESULT" = "Succeeded" ]; then
-                  echo "##vso[task.setvariable variable=haveBundle;isOutput=true]true"
-                  echo "triggering run succeeded - expecting rf2-bundle"
-                else
-                  echo "##vso[task.setvariable variable=haveBundle;isOutput=true]false"
-                  echo "triggering run result is '$RESULT' - no rf2-bundle is published for that"
-                fi
-
+          # Download FIRST and decide afterwards. This used to ask whether the
+          # triggering run succeeded, via $(resources.pipeline.dailyRvf.result) -
+          # which is not a variable Azure DevOps defines. It never expanded, bash
+          # tried to run it as a command, and the check therefore concluded "no
+          # bundle" on every single run:
+          #
+          #   resources.pipeline.dailyRvf.result: command not found
+          #   triggering run result is '$(resources.pipeline.dailyRvf.result)'
+          #
+          # Every night would have skipped with a warning and published nothing.
+          # `.pipelineName`, `.runName`, `.pipelineID` and `.runID` are real;
+          # `.result` is not.
+          #
+          # The artifact's presence is the better question anyway. It is what the
+          # next step actually needs, it is true or false rather than inferred
+          # from a status word, and it stays correct if the triggering pipeline
+          # ever publishes a bundle from a partially succeeded run.
           - task: DownloadPipelineArtifact@2
             displayName: 'Download the prospective release'
-            condition: eq(variables['bundle.haveBundle'], 'true')
+            continueOnError: true
             inputs:
               buildType: 'specific'
               project: '$(System.TeamProject)'
@@ -172,6 +171,23 @@ stages:
               pipelineId: '$(resources.pipeline.dailyRvf.runID)'
               artifactName: 'rf2-bundle'
               targetPath: '$(workdir)/bundle'
+
+          - task: Bash@3
+            name: bundle
+            displayName: 'Check the triggering run published a release'
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                POINTER="$(find '$(workdir)/bundle' -type f -name '*.txt' 2>/dev/null | head -1)"
+                if [ -n "$POINTER" ]; then
+                  echo "##vso[task.setvariable variable=haveBundle;isOutput=true]true"
+                  echo "rf2-bundle present: $POINTER"
+                else
+                  echo "##vso[task.setvariable variable=haveBundle;isOutput=true]false"
+                  echo "no rf2-bundle from $(resources.pipeline.dailyRvf.runName) - nothing to validate"
+                  find '$(workdir)/bundle' -type f 2>/dev/null | head -10 || true
+                fi
 
           - task: Bash@3
             displayName: 'Fetch the release named by the bundle'
@@ -569,5 +585,5 @@ stages:
               targetType: 'inline'
               script: |
                 set -euo pipefail
-                echo "##vso[task.logissue type=warning]No release to validate: daily-rvf run $(resources.pipeline.dailyRvf.runName) finished as '$(resources.pipeline.dailyRvf.result)', which publishes no rf2-bundle."
+                echo "##vso[task.logissue type=warning]No release to validate: daily-rvf run $(resources.pipeline.dailyRvf.runName) published no rf2-bundle artifact."
                 echo "##vso[task.complete result=SucceededWithIssues;]"
