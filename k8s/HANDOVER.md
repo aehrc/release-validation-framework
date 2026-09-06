@@ -197,6 +197,14 @@ of them), watch the run, and read the findings: totals, per-phase results, and
 every assertion grouped as failed, warning, skipped or passed with its message
 and its first failing instances. There is a text filter and a JSON download.
 
+The **Open a report** tab lists the runs the server holds, newest first, and
+opens any of them. That needed a new endpoint - `GET /result` - because nothing
+exposed what was in the job store, so a report was only reachable by someone
+who had written down its run id and storage location when they submitted it.
+The listing streams each report and skips the assertion arrays, so a directory
+of large reports costs a few kilobytes to summarise rather than tens of
+megabytes.
+
 It is plain HTML, CSS and JavaScript inside the same image, on the same origin
 as the API, so there is no second deployment, no CORS, and nothing extra to
 authenticate: the gateway has already signed the browser in and injects the
