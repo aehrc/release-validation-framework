@@ -1,0 +1,209 @@
+# Keep a published release in RVF, without uploading it from a laptop.
+#
+# WHY THIS EXISTS
+#
+# Most assertions compare the release under test with the one before it, so RVF
+# has to hold the last published release. Uploading one through the console
+# means pushing ~850MB from wherever the person is sitting, and a single
+# connection to the gateway behaves like a 64 KiB receive window - so what that
+# achieves falls away with latency:
+#
+#   round trip 5 ms  ->  ~10 MB/s      measured from a VM in the same region
+#   round trip 60 ms ->   ~1 MB/s      measured from a laptop
+#
+# At 1 MB/s an AU edition takes about a quarter of an hour of held breath, and
+# nothing about that is necessary: the release is already sitting on an Azure
+# file share in the same region as the cluster. This runs the transfer there
+# instead, which is a few tens of seconds, and it needs no new credential -
+# `azure.accountKey.ontodevelop` already opens that share and is already in the
+# `ncts-release` variable group.
+#
+# It is also the monthly job rather than a one-off: each new published release
+# has to be kept before the nightly can compare against it.
+
+name: 'rvf-keep-release-$(Date:yyyyMMdd)$(Rev:.r)'
+
+# Deliberately manual. Keeping a release is a decision about what RVF compares
+# against, not something that should happen because a commit landed.
+trigger: none
+pr: none
+
+parameters:
+  - name: rvfBaseUrl
+    displayName: 'Base URL of the deployed RVF API, through the gateway'
+    type: string
+    default: 'https://ncts-rvf.australiaeast.cloudapp.azure.com'
+  - name: keycloakIssuer
+    displayName: 'Keycloak issuer (note the /auth path segment)'
+    type: string
+    default: 'https://auth.ontoserver.csiro.au/auth/realms/aehrc'
+  - name: authClientId
+    displayName: 'Service-account client used to obtain a token'
+    type: string
+    default: 'si-rvf-client'
+  - name: sourceAccount
+    displayName: 'Storage account holding the published release'
+    type: string
+    default: 'ontoserverdevelop'
+  - name: sourceShare
+    displayName: 'File share holding the published release'
+    type: string
+    default: 'snomed-versioned-content'
+  - name: sourceDirectory
+    displayName: 'Directory within the share, e.g. prod/AU_32506021000036107/20260831'
+    type: string
+    default: 'prod/AU_32506021000036107/20260831'
+  - name: sourceFile
+    displayName: 'Exact filename, or empty to take the only zip in that directory'
+    type: string
+    default: ''
+
+variables:
+  - group: ncts-release
+  - name: workdir
+    value: '$(Agent.TempDirectory)/keep-release'
+
+stages:
+  - stage: Keep
+    displayName: 'Keep a published release in RVF'
+    jobs:
+      - job: Keep
+        displayName: 'Fetch from the share and hand to RVF'
+        pool:
+          vmImage: ubuntu-latest
+        timeoutInMinutes: 60
+        steps:
+          - checkout: none
+
+          - task: Bash@3
+            displayName: 'Find the release on the share'
+            env:
+              SOURCE_KEY: $(azure.accountKey.ontodevelop)
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                mkdir -p '$(workdir)' && cd '$(workdir)'
+
+                NAME='${{ parameters.sourceFile }}'
+                if [ -z "$NAME" ]; then
+                  # The release number in the filename is not predictable -
+                  # SnomedCT_AMTv4_20260831-Release-121.zip - so the directory is
+                  # listed rather than the name guessed.
+                  echo "listing ${{ parameters.sourceDirectory }}"
+                  az storage file list \
+                    --account-name '${{ parameters.sourceAccount }}' --account-key "$SOURCE_KEY" \
+                    --share-name '${{ parameters.sourceShare }}' \
+                    --path '${{ parameters.sourceDirectory }}' \
+                    --query "[?ends_with(name, '.zip')].name" -o tsv --only-show-errors > zips.txt
+
+                  COUNT="$(wc -l < zips.txt)"
+                  sed 's/^/  /' zips.txt
+                  if [ "$COUNT" -eq 0 ]; then
+                    echo "##vso[task.logissue type=error]no zip in that directory"
+                    exit 1
+                  fi
+                  if [ "$COUNT" -gt 1 ]; then
+                    echo "##vso[task.logissue type=error]$COUNT zips found; set sourceFile to choose"
+                    exit 1
+                  fi
+                  NAME="$(cat zips.txt)"
+                fi
+                echo "release: $NAME"
+                echo "##vso[task.setvariable variable=releaseName]$NAME"
+
+          - task: Bash@3
+            displayName: 'Download it'
+            env:
+              SOURCE_KEY: $(azure.accountKey.ontodevelop)
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                cd '$(workdir)'
+                az storage file download \
+                  --account-name '${{ parameters.sourceAccount }}' --account-key "$SOURCE_KEY" \
+                  --share-name '${{ parameters.sourceShare }}' \
+                  --path '${{ parameters.sourceDirectory }}/$(releaseName)' \
+                  --dest '$(releaseName)' --only-show-errors >/dev/null
+                [ -s '$(releaseName)' ] || {
+                  echo "##vso[task.logissue type=error]download produced no file"; exit 1; }
+                echo "downloaded $(du -h '$(releaseName)' | cut -f1)"
+
+          - task: Bash@3
+            displayName: 'Get an access token from Keycloak'
+            env:
+              CLIENT_SECRET: $(rvf.si.client.secret)
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                cd '$(workdir)'
+                HTTP="$(curl -sS -m 60 -o token.json -w '%{http_code}' \
+                  -X POST '${{ parameters.keycloakIssuer }}/protocol/openid-connect/token' \
+                  -d grant_type=client_credentials \
+                  -d 'client_id=${{ parameters.authClientId }}' \
+                  --data-urlencode "client_secret=$CLIENT_SECRET")"
+                if [ "$HTTP" != "200" ]; then
+                  echo "##vso[task.logissue type=error]token request returned $HTTP"
+                  cut -c1-300 token.json
+                  exit 1
+                fi
+                TOKEN="$(python3 -c 'import json;print(json.load(open("token.json"))["access_token"])')"
+                echo "##vso[task.setvariable variable=accessToken;issecret=true]$TOKEN"
+
+          - task: Bash@3
+            displayName: 'Hand it to RVF'
+            env:
+              ACCESS_TOKEN: $(accessToken)
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                cd '$(workdir)'
+
+                # The path segments are the MySQL schema-naming convention and the
+                # DuckDB catalogue ignores them: it keeps the package under its own
+                # filename, and that filename is what a validation names as its
+                # previousRelease. The date is taken from the filename so the route
+                # is satisfied with something truthful.
+                VERSION="$(printf %s '$(releaseName)' \
+                  | grep -oE '(^|[^0-9])[0-9]{8}([^0-9]|$)' | grep -oE '[0-9]{8}' | tail -1 || true)"
+                VERSION="${VERSION:-00000000}"
+
+                HTTP="$(curl -sS -m 1800 -o keep.json -w '%{http_code}' \
+                  -H "Authorization: Bearer $ACCESS_TOKEN" \
+                  -X POST '${{ parameters.rvfBaseUrl }}'"/releases/kept/$VERSION" \
+                  -F "file=@$(releaseName)")"
+                echo "POST /releases/kept/$VERSION -> $HTTP"
+                cut -c1-300 keep.json || true
+                echo
+                case "$HTTP" in
+                  2??) ;;
+                  *) echo "##vso[task.logissue type=error]RVF refused the release"; exit 1 ;;
+                esac
+
+          - task: Bash@3
+            displayName: 'Confirm RVF now holds it'
+            env:
+              ACCESS_TOKEN: $(accessToken)
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                cd '$(workdir)'
+                curl -sS -m 120 -o kept.json \
+                  -H "Authorization: Bearer $ACCESS_TOKEN" \
+                  '${{ parameters.rvfBaseUrl }}/releases'
+                python3 - "$(releaseName)" <<'PY'
+                import json, sys
+                kept = json.load(open('kept.json'))
+                name = sys.argv[1]
+                print('RVF holds:')
+                for n in kept:
+                    print(f'  {n}')
+                if name not in kept:
+                    print(f'##vso[task.logissue type=error]{name} is not in the list')
+                    raise SystemExit(1)
+                print(f'\n{name} is kept, and can now be named as previousRelease.')
+                PY
