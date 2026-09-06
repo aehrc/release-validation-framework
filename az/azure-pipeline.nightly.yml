@@ -78,14 +78,29 @@ parameters:
     displayName: 'Service-account client used to obtain a token'
     type: string
     default: 'si-rvf-client'
+  # These are DEFAULTS rather than something to type at queue time, and that is
+  # deliberate: this pipeline is started by a resource trigger on daily-rvf's
+  # RvfStage, and a triggered run takes every parameter's default because
+  # nobody is there to supply one. A value that only exists in the queue dialog
+  # would be right when a human ran it and wrong every night.
+  #
+  # Read from the live cluster on 5 September 2026. The PVC is dynamically
+  # provisioned, so AKS generated both names, and they change if the PVC is
+  # ever deleted and recreated:
+  #
+  #   kubectl get pv $(kubectl -n rvf get pvc rvf-jobs \
+  #       -o jsonpath='{.spec.volumeName}') \
+  #     -o jsonpath='{.spec.csi.volumeHandle}'
+  #
+  # which encodes resourceGroup#storageAccount#shareName###namespace.
   - name: jobStoreAccount
     displayName: 'Storage account holding the job store share'
     type: string
-    default: 'ontoserverdevelop'
+    default: 'f850afa0f5ef24e93856ca4'
   - name: jobStoreShare
     displayName: 'File share mounted by the API and workers as the job store'
     type: string
-    default: 'rvf-jobs'
+    default: 'pvc-1a50b744-5fc6-47f7-a4cc-e69b2a95dd01'
   - name: jobStorePrefix
     displayName: 'Directory within the share to stage releases into'
     type: string
@@ -119,8 +134,23 @@ variables:
   - group: ncts-release
   - name: storageAccount
     value: '${{ parameters.jobStoreAccount }}'
+  # The key for THAT account, not for ontodevelop.
+  #
+  # This read `azure.accountKey.ontodevelop`, which is the key for a different
+  # storage account entirely. The job store is the dynamically provisioned
+  # azurefile PVC behind `rvf-jobs`, so AKS created both the account and the
+  # share, and neither existing key in the variable group opens it. Staging
+  # would have failed on the first nightly with an authentication error that
+  # looked like a permissions problem rather than the wrong key.
+  #
+  # Add `azure.accountKey.rvfjobs` to the `ncts-release` group as a SECRET
+  # variable. Its value is on the cluster:
+  #
+  #   kubectl -n rvf get secret \
+  #     azure-storage-account-<account>-secret \
+  #     -o jsonpath='{.data.azurestorageaccountkey}' | base64 -d
   - name: storageKey
-    value: '$(azure.accountKey.ontodevelop)'
+    value: '$(azure.accountKey.rvfjobs)'
   - name: workdir
     value: '$(Agent.TempDirectory)/nightly-rvf'
   # Scope is a decided question now, not an open one: the full run with Drools

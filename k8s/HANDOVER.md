@@ -35,9 +35,12 @@ after every change, because RVF trusts those headers absolutely. See §6.
 
 | # | do | detail |
 |---|---|---|
-| 1 | enable ADO definition **66 `rvf-duckdb-nightly`** | created **disabled** on purpose, because it triggers off `daily-rvf`'s `RvfStage` and would have failed nightly before the API existed. Its two storage parameters are now known - see below - so this is a UI toggle plus those values |
-| 2 | decide **split or single container** | §1 and `k8s/README.md`. A single container needs no broker and no shared volume, and is the honest choice while only the nightly runs |
-| 3 | run the **cross-node** check | §5a. Everything else is proven; this one needs a deliberate look at which node each pod is on |
+| 1 | add **one secret variable**, then enable ADO definition **66 `rvf-duckdb-nightly`** | the storage coordinates are now the committed defaults, so the only manual step is the account key - see below. Then flip the definition from `disabled` to `enabled` |
+| 2 | run the **cross-node** check | §5a. Everything else is proven; this one needs a deliberate look at which node each pod is on |
+
+**Split API and worker is the decided shape** (5 September). The single-container
+alternative in `k8s/README.md` is not being taken; that section is kept as the
+record of why the split was chosen rather than as an open question.
 
 **The job store coordinates**, which were the last unknown. The PVC is
 dynamically provisioned, so Azure generated the share name; it is readable from
@@ -51,9 +54,26 @@ the volume handle, which encodes
     jobStoreShare     pvc-1a50b744-5fc6-47f7-a4cc-e69b2a95dd01
     resource group    MC_ncts_ncts-k8s-cluster_australiaeast
 
-Both differ from the pipeline's defaults (`ontoserverdevelop` / `rvf-jobs`), so
-set them when enabling definition 66. Re-read them if the PVC is ever deleted
-and recreated: the name is generated, not chosen.
+These are now the **defaults committed in `az/azure-pipeline.nightly.yml`**, not
+something to type. That matters because definition 66 is started by a resource
+trigger, and a triggered run takes every parameter's default - a value supplied
+only in the queue dialog would be right when a human ran it and wrong every
+night.
+
+**The one thing left to do by hand** is the account key. The pipeline read
+`azure.accountKey.ontodevelop`, which opens a different storage account
+entirely, so staging would have failed on the first nightly with what looks
+like a permissions problem. Add `azure.accountKey.rvfjobs` to the
+`ncts-release` variable group as a **secret** variable:
+
+    kubectl -n rvf get secret \
+        azure-storage-account-f850afa0f5ef24e93856ca4-secret \
+        -o jsonpath='{.data.azurestorageaccountkey}' | base64 -d
+
+Re-read all three if the PVC is ever deleted and recreated: AKS generates the
+account and share names, so they are not stable across a re-provision. Binding a
+static share instead would remove that fragility, at the cost of provisioning
+one.
 
 ### Things worth knowing about how it got here
 
