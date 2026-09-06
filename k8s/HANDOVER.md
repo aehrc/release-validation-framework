@@ -35,7 +35,7 @@ after every change, because RVF trusts those headers absolutely. See §6.
 
 | # | do | detail |
 |---|---|---|
-| 1 | enable ADO definition **66 `rvf-duckdb-nightly`** | flip it from `disabled` to `enabled`. Nothing else: it needs no storage account, share name or account key, and the client secret it uses is already in the `ncts-release` group |
+| 1 | enable ADO definition **66 `rvf-duckdb-nightly`** | flip it from `disabled` to `enabled`. Nothing else: it needs no storage account, share name or account key, the client secret is already in the `ncts-release` group, and it works out its own previous release |
 | 2 | run the **cross-node** check | §5a. Everything else is proven; this one needs a deliberate look at which node each pod is on |
 
 **Split API and worker is the decided shape** (5 September). The single-container
@@ -64,6 +64,32 @@ against a 600 s request timeout, so there is roughly six times the headroom
 needed. `spring.servlet.multipart.max-file-size` was raised from 1GB to 4GB at
 the same time: 1GB left 147MB of headroom on the AU edition, which is one
 growth spurt from a 413 at the end of a long upload.
+
+### Keeping a previous release
+
+Most assertions compare the release under test with the one before it, so RVF
+has to hold the last published release. It currently holds:
+
+    SnomedCT_ManagedServiceAU_PRODUCTION_AU1000036_20260831T120000Z.zip
+
+**Each month, run ADO definition 68 `rvf-keep-release`** with `sourceDirectory`
+pointed at the new release, e.g. `prod/AU_32506021000036107/20260930`. It takes
+about 100 seconds. It lists the directory rather than guessing the filename,
+because the release number is not predictable, and confirms afterwards that RVF
+lists what it uploaded.
+
+**Do not upload one through the console.** A single connection to the gateway
+behaves like a 64 KiB receive window, so throughput falls away with latency -
+about 10 MB/s from inside the region, about 1 MB/s from a laptop, which is a
+quarter of an hour for an 850MB edition. Parallel connections aggregate to
+36 MB/s, so it is a per-connection limit rather than bandwidth. The pipeline
+does the transfer inside Azure and avoids the question.
+
+The nightly asks RVF which kept release precedes the one it is about to
+validate, so nothing has to be typed. If RVF holds nothing suitable, the run
+warns and continues as a first-time release rather than failing - because that
+is legitimate for a genuine first release, and the report cannot tell the two
+cases apart: the assertions are simply absent, and the run is green either way.
 
 ### Things worth knowing about how it got here
 
