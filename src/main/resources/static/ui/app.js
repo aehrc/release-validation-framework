@@ -140,6 +140,76 @@ function showFile() {
 $('#enableDrools').addEventListener('change', (e) => { $('#droolsGroupsWrap').hidden = !e.target.checked; });
 $('#enableMrcmValidation').addEventListener('change', (e) => { $('#mrcmHint').hidden = !e.target.checked; });
 
+/* ----------------------------------------------------------------- upload */
+
+/* fetch() cannot report upload progress - there is no event for it - so a
+ * release of several hundred megabytes appeared to hang with a disabled button
+ * and nothing else. XMLHttpRequest still exposes upload progress, so it is used
+ * for the two requests that carry a file. Everything else stays on fetch. */
+function upload(path, body, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    upload.current = xhr;
+    xhr.open('POST', `${API}${path}`);
+    xhr.withCredentials = true;
+
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable) onProgress(e.loaded, e.total);
+    });
+    // The last byte leaving is not the end: the server still has to accept the
+    // release and enqueue it. Say that, rather than sit at 100% looking stuck.
+    xhr.upload.addEventListener('load', () => onProgress(-1, -1));
+
+    xhr.addEventListener('load', () => {
+      upload.current = null;
+      if (/openid-connect|protocol\/openid/.test(xhr.responseURL || '')) {
+        reject(new Error('Your session has ended. Reload the page to sign in again.'));
+        return;
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(xhr.responseText);
+      } else {
+        reject(new Error(`${xhr.status} ${xhr.statusText}`
+          + (xhr.responseText ? ` - ${xhr.responseText.slice(0, 200)}` : '')));
+      }
+    });
+    xhr.addEventListener('error', () => { upload.current = null; reject(new Error('The connection failed during the upload')); });
+    xhr.addEventListener('abort', () => { upload.current = null; reject(new Error('Upload cancelled')); });
+    xhr.send(body);
+  });
+}
+
+const MB = 1048576;
+
+/* Renders into a container: a bar, a byte count, and a cancel button. */
+function progressUI(container, label) {
+  container.hidden = false;
+  container.innerHTML = `
+    <div class="uprogress">
+      <div class="ubar"><div class="ufill" style="width:0%"></div></div>
+      <div class="urow">
+        <span class="utext">${esc(label)}</span>
+        <button type="button" class="ghost ucancel">Cancel</button>
+      </div>
+    </div>`;
+  container.querySelector('.ucancel').addEventListener('click', () => upload.current?.abort());
+  const fill = container.querySelector('.ufill');
+  const text = container.querySelector('.utext');
+  return (loaded, total) => {
+    if (loaded < 0) {
+      fill.style.width = '100%';
+      fill.classList.add('waiting');
+      text.textContent = 'uploaded - waiting for the server to accept it\u2026';
+      container.querySelector('.ucancel').hidden = true;
+      return;
+    }
+    const pct = total ? Math.round((loaded / total) * 100) : 0;
+    fill.style.width = `${pct}%`;
+    text.textContent = `${(loaded / MB).toFixed(0)} of ${(total / MB).toFixed(0)} MB \u00b7 ${pct}%`;
+  };
+}
+
+
 /* ------------------------------------------------------------------ submit */
 
 $('#runForm').addEventListener('submit', async (e) => {
@@ -186,13 +256,15 @@ $('#runForm').addEventListener('submit', async (e) => {
   btn.textContent = 'Uploading\u2026';
 
   try {
-    await api('/run-post', { method: 'POST', body });
+    await upload('/run-post', body, progressUI($('#submitProgress'), 'starting\u2026'));
+    $('#submitProgress').hidden = true;
     toast('Validation submitted.', true);
     // The list is now stale, so make the next visit to that tab reload it.
     loadRuns.done = false;
     watch(runId, storageLocation);
     defaults();                       // so a second run cannot reuse the id
   } catch (err) {
+    $('#submitProgress').hidden = true;
     toast(`Could not submit: ${err.message}`);
   } finally {
     btn.disabled = false;
@@ -584,13 +656,16 @@ $('#releaseForm').addEventListener('submit', async (e) => {
     // They are still required by the route, so they are derived rather than
     // asked for.
     const version = (file.name.match(/(?<!\d)(\d{8})(?:T\d{6}Z)?(?!\d)/g) || ['00000000']).pop().slice(0, 8);
-    await api(`/releases/kept/${version}`, { method: 'POST', body });
+    await upload(`/releases/kept/${version}`, body,
+      progressUI($('#releaseProgress'), 'starting\u2026'));
+    $('#releaseProgress').hidden = true;
     toast(`Kept ${file.name}`, true);
     releaseInput.value = '';
     $('#releaseDropFile').textContent = '';
     await loadReleases();
     previewPrevious();
   } catch (err) {
+    $('#releaseProgress').hidden = true;
     toast(`Could not keep that release: ${err.message}`);
   } finally {
     btn.disabled = false;
