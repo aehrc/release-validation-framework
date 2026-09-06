@@ -49,10 +49,17 @@ class ValidationRunCatalogueTest {
 	}
 
 	private void writeRun(String location, String state, String results) throws IOException {
+		writeRun(location, state, results, null);
+	}
+
+	private void writeRun(String location, String state, String results, String progress) throws IOException {
 		Path rvf = Files.createDirectories(store.resolve(location).resolve("rvf"));
 		Files.writeString(rvf.resolve("state.txt"), state);
 		if (results != null) {
 			Files.writeString(rvf.resolve("results.json"), results);
+		}
+		if (progress != null) {
+			Files.writeString(rvf.resolve("progress.txt"), progress);
 		}
 	}
 
@@ -213,5 +220,43 @@ class ValidationRunCatalogueTest {
 		ReflectionTestUtils.setField(catalogue, "jobResourceConfig", config);
 
 		assertTrue(catalogue.list(50).isEmpty());
+	}
+
+	@Test
+	void reportsWhatARunningJobIsDoingNow() throws IOException {
+		// RVF appends a line per phase, so the END of the file is the current
+		// phase. Taken from a real run: three phases had started.
+		writeRun("nightly-16222", "RUNNING", null,
+				"RVF assertions validation started\n"
+				+ "Drools rules validation started\n"
+				+ "MRCM validation started\n");
+
+		ValidationRunCatalogue.RunSummary r = catalogue().list(50).get(0);
+
+		assertEquals("RUNNING", r.state());
+		assertEquals("MRCM validation started", r.progress());
+		assertNull(r.runId());
+	}
+
+	@Test
+	void progressIsAbsentRatherThanBlankWhenThereIsNone() throws IOException {
+		writeRun("queued", "QUEUED", null);
+		assertNull(catalogue().list(50).get(0).progress());
+	}
+
+	@Test
+	void aRunningJobSortsAheadOfAnOlderFinishedOne() throws IOException {
+		// Progress moves while state does not, so the ordering has to consider
+		// both - otherwise a long run slides down the list as it works.
+		writeRun("finished", "COMPLETE", report(1L, "old.zip", 5, 0));
+		writeRun("running", "RUNNING", null, "MRCM validation started\n");
+		Files.setLastModifiedTime(store.resolve("finished/rvf/state.txt"),
+				java.nio.file.attribute.FileTime.fromMillis(1_000L));
+		Files.setLastModifiedTime(store.resolve("running/rvf/state.txt"),
+				java.nio.file.attribute.FileTime.fromMillis(2_000L));
+		Files.setLastModifiedTime(store.resolve("running/rvf/progress.txt"),
+				java.nio.file.attribute.FileTime.fromMillis(9_000_000_000L));
+
+		assertEquals("running", catalogue().list(50).get(0).storageLocation());
 	}
 }

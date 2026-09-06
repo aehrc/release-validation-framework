@@ -304,13 +304,16 @@ function statePill(state, failures) {
   return `<span class="pill off">${esc(state || 'unknown')}</span>`;
 }
 
-async function loadRuns() {
+async function loadRuns(opts = {}) {
   loadRuns.done = true;
   const box = $('#runList');
-  box.innerHTML = '<p class="muted">loading&hellip;</p>';
+  // A poll must not blank the table it is refreshing.
+  if (!opts.quiet) box.innerHTML = '<p class="muted">loading&hellip;</p>';
   try {
     allRuns = await api('/result?limit=200');
+    drawRunning();
     drawRuns();
+    scheduleRunsRefresh();
   } catch (e) {
     // A server without the listing endpoint answers 404. Say what to do rather
     // than leave the panel blank.
@@ -318,6 +321,42 @@ async function loadRuns() {
       ? '<p class="muted">This server does not support listing runs. Use the run id below.</p>'
       : `<p class="muted">Could not list runs: ${esc(e.message)}</p>`;
   }
+}
+
+const IN_FLIGHT = new Set(['QUEUED', 'READY', 'RUNNING']);
+
+/* A run in flight is the thing someone is most likely to have come to see, so
+ * it gets its own panel above the list, and a count on the tab so it is visible
+ * from anywhere in the console. */
+function drawRunning() {
+  const running = allRuns.filter((r) => IN_FLIGHT.has(r.state));
+
+  const tab = $$('.tab').find((x) => x.dataset.panel === 'panel-open');
+  const label = tab.textContent.replace(/\s*\d+$/, '').trim();
+  tab.innerHTML = running.length
+    ? `${esc(label)}<span class="badge">${running.length}</span>`
+    : esc(label);
+
+  $('#runningCard').hidden = running.length === 0;
+  if (!running.length) return;
+
+  $('#runningNote').textContent = 'refreshing every 10 seconds';
+  $('#runningList').innerHTML = running.map((r) => `
+    <div class="job">
+      <span class="pulse" aria-hidden="true"></span>
+      <span class="jname">${esc(r.testFileName || r.storageLocation)}</span>
+      <span class="jphase">${esc(r.progress || (r.state === 'RUNNING' ? 'starting' : 'waiting for a worker'))}</span>
+      <span class="jage">${esc(ago(r.lastModified))}</span>
+    </div>`).join('');
+}
+
+/* Poll only while something is in flight, and stop when nothing is. A console
+ * left open on an idle server should not talk to it forever. */
+let runsTimer = null;
+function scheduleRunsRefresh() {
+  clearTimeout(runsTimer);
+  if (!allRuns.some((r) => IN_FLIGHT.has(r.state))) return;
+  runsTimer = setTimeout(() => loadRuns({ quiet: true }), 10000);
 }
 
 function drawRuns() {
@@ -682,3 +721,6 @@ defaults();
 loadVersion();
 loadGroups();
 loadReleases();
+// Start-up: learn whether anything is in flight, so the tab badge is
+// right without the reports tab having been opened.
+loadRuns({ quiet: true });

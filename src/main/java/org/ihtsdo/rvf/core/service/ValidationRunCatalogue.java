@@ -38,6 +38,7 @@ public class ValidationRunCatalogue {
 
 	private static final String STATE = "rvf/state.txt";
 	private static final String RESULTS = "rvf/results.json";
+	private static final String PROGRESS = "rvf/progress.txt";
 
 	@Autowired
 	private ValidationJobResourceConfig jobResourceConfig;
@@ -50,6 +51,8 @@ public class ValidationRunCatalogue {
 			String storageLocation,
 			Long runId,
 			String state,
+			/** The most recent line of progress.txt: what the run is doing now. */
+			String progress,
 			String testFileName,
 			String groups,
 			Integer totalTestsRun,
@@ -108,18 +111,21 @@ public class ValidationRunCatalogue {
 	private RunSummary summarise(Path dir) {
 		String storageLocation = dir.getFileName().toString();
 		String state = readTrimmed(dir.resolve(STATE));
-		long modified = lastModified(dir.resolve(STATE));
+		// The last line, not the first: RVF appends a line per phase, so the end
+		// of the file is what the run is doing now.
+		String progress = lastLine(dir.resolve(PROGRESS));
+		long modified = Math.max(lastModified(dir.resolve(STATE)), lastModified(dir.resolve(PROGRESS)));
 
 		Path results = dir.resolve(RESULTS);
 		if (!Files.isRegularFile(results)) {
 			// Queued or running: the state is written before the report exists.
-			return new RunSummary(storageLocation, null, state, null, null, null, null, null, null, null, modified);
+			return new RunSummary(storageLocation, null, state, progress, null, null, null, null, null, null, null, modified);
 		}
 		try {
-			return readSummary(results, storageLocation, state, modified);
+			return readSummary(results, storageLocation, state, progress, modified);
 		} catch (IOException | RuntimeException e) {
 			LOGGER.warn("Could not summarise {}: {}", results, e.toString());
-			return new RunSummary(storageLocation, null, state, null, null, null, null, null, null, null, modified);
+			return new RunSummary(storageLocation, null, state, progress, null, null, null, null, null, null, null, modified);
 		}
 	}
 
@@ -144,12 +150,13 @@ public class ValidationRunCatalogue {
 	 * megabytes off a network file share to display a few numbers, so this walks
 	 * the token stream and skips every array it does not need.
 	 */
-	private RunSummary readSummary(Path file, String storageLocation, String state, long modified) throws IOException {
+	private RunSummary readSummary(Path file, String storageLocation, String state, String progress,
+			long modified) throws IOException {
 		Fields f = new Fields();
 		try (JsonReader in = new JsonReader(Files.newBufferedReader(file, StandardCharsets.UTF_8))) {
 			readResultObject(in, f);
 		}
-		return new RunSummary(storageLocation, f.runId, state, f.testFileName, f.groups,
+		return new RunSummary(storageLocation, f.runId, state, progress, f.testFileName, f.groups,
 				f.totalTestsRun, f.totalFailures, f.totalWarnings, f.startTime, f.endTime, modified);
 	}
 
@@ -227,6 +234,24 @@ public class ValidationRunCatalogue {
 			return null;
 		}
 		return in.nextString();
+	}
+
+	/** The last non-blank line, or null. Progress is appended a line per phase. */
+	private static String lastLine(Path file) {
+		if (!Files.isRegularFile(file)) {
+			return null;
+		}
+		try (BufferedReader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+			String last = null;
+			for (String line = reader.readLine(); line != null; line = reader.readLine()) {
+				if (!line.isBlank()) {
+					last = line.trim();
+				}
+			}
+			return last;
+		} catch (IOException e) {
+			return null;
+		}
 	}
 
 	private static String readTrimmed(Path file) {

@@ -129,6 +129,14 @@
 
 <!-- --------------------------------------------------------- open a report -->
 <section id="panel-open" class="panel" role="tabpanel">
+  <div class="card" id="runningCard" hidden>
+    <div class="status-head">
+      <legend style="padding:0">Running now</legend>
+      <span class="muted" id="runningNote"></span>
+    </div>
+    <div id="runningList"></div>
+  </div>
+
   <div class="card">
     <div class="status-head">
       <legend style="padding:0">Runs on this server</legend>
