@@ -51,7 +51,11 @@ MAVEN_SETTINGS="${MAVEN_SETTINGS:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/
 # Resolved before any cd: this script changes directory into the clone.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-VERSION="${1:-4.0.3-aehrc-perf}"
+# Defaulted FROM THE POM, not duplicated here. A hardcoded default drifts the
+# moment the pom is bumped, and then a no-argument rebuild quietly installs a
+# version nothing consumes while the build keeps using a stale jar.
+VERSION="${1:-$(grep -oP '(?<=<mrcm.validator.version>)[^<]+' "$SCRIPT_DIR/../pom.xml")}"
+[ -n "$VERSION" ] || { echo "FATAL: cannot read mrcm.validator.version from pom.xml" >&2; exit 1; }
 COMMIT="${MRCM_COMMIT:-bfdf76f}"          # "Release 4.0.1"
 WORKDIR="${MRCM_BUILD_DIR:-/data/work/mrcm-src}"
 REPO="${MAVEN_REPO_LOCAL:-/data/m2}"

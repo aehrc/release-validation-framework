@@ -47,7 +47,9 @@ MAVEN_SETTINGS="${MAVEN_SETTINGS:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/
 # the failure this avoids - it produced an artefact that looked right.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-VERSION="${1:-6.1.1-aehrc-perf}"
+# Defaulted FROM THE POM, not duplicated here - see build-mrcm-validator.sh.
+VERSION="${1:-$(grep -oP '(?<=<snomed.drools.version>)[^<]+' "$SCRIPT_DIR/../pom.xml")}"
+[ -n "$VERSION" ] || { echo "FATAL: cannot read snomed.drools.version from pom.xml" >&2; exit 1; }
 COMMIT="84d511b"
 WORKDIR="${DROOLS_BUILD_DIR:-/data/work/snomed-drools-build}"
 REPO="${MAVEN_REPO_LOCAL:-/data/m2}"

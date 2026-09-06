@@ -36,7 +36,9 @@ set -euo pipefail
 # settings.xml or an empty local repository cannot build this at all.
 MAVEN_SETTINGS="${MAVEN_SETTINGS:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/maven-settings.xml}"
 
-VERSION="${1:-6.0.1-aehrc-perf}"
+# Defaulted FROM THE POM, not duplicated here - see build-mrcm-validator.sh.
+VERSION="${1:-$(grep -oP '(?<=<snomed.query.service.version>)[^<]+' "$(cd "$(dirname "$0")/.." && pwd)/pom.xml")}"
+[ -n "$VERSION" ] || { echo "FATAL: cannot read snomed.query.service.version from pom.xml" >&2; exit 1; }
 BASE_TAG="${BASE_TAG:-6.0.1}"
 BUILD_DIR="${QUERY_SERVICE_BUILD_DIR:-/data/work/sqs-build}"
 PATCH_FILE="$(cd "$(dirname "$0")" && pwd)/snomed-query-service-docvalues.patch"
