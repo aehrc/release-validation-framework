@@ -123,14 +123,24 @@ parameters:
     type: number
     default: 60
   # A floor, not a target: it exists to catch a phase that silently did not run.
-  # 900 was carried over from the incumbent's scope and is far above what these
-  # groups can produce - the four above hold 375 between them before overlap is
-  # removed - so it would have failed every run that got past the group names.
-  # Set from the first measured run rather than guessed again.
+  #
+  # Measured, not guessed. Build 16226 - the first green full-scope run, with a
+  # previous release - executed 1282 assertions across four phases:
+  #
+  #   ARCHIVE_STRUCTURAL  0 failures
+  #   SQL                15 failures
+  #   DROOL_RULES         6 failures
+  #   MRCM                1 failure
+  #
+  # 1000 sits below that and far above any single phase, so losing a phase
+  # trips it while ordinary variation in the corpus does not. Note how badly a
+  # guess would have served: without a previous release the same groups produce
+  # 209, because the release-type assertions have nothing to compare against and
+  # are simply absent from the report rather than failing.
   - name: minAssertions
     displayName: 'Fail if fewer than this many assertions ran (guards a silently skipped phase)'
     type: number
-    default: 150
+    default: 1000
 
 variables:
   - group: ncts-release
