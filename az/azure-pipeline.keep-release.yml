@@ -121,13 +121,23 @@ stages:
               script: |
                 set -euo pipefail
                 cd '$(workdir)'
+
+                # `--dest .` rather than `--dest <name>`. Given a destination
+                # that does not exist yet, the CLI treats it as a directory and
+                # appends the source basename, so `--dest NAME` looked for
+                # NAME/NAME and failed with "No such file or directory". An
+                # existing directory is unambiguous, and the file lands under its
+                # own name.
                 az storage file download \
                   --account-name '${{ parameters.sourceAccount }}' --account-key "$SOURCE_KEY" \
                   --share-name '${{ parameters.sourceShare }}' \
                   --path '${{ parameters.sourceDirectory }}/$(releaseName)' \
-                  --dest '$(releaseName)' --only-show-errors >/dev/null
+                  --dest . --only-show-errors >/dev/null
+
                 [ -s '$(releaseName)' ] || {
-                  echo "##vso[task.logissue type=error]download produced no file"; exit 1; }
+                  echo "##vso[task.logissue type=error]no file at $(releaseName) after download"
+                  ls -la
+                  exit 1; }
                 echo "downloaded $(du -h '$(releaseName)' | cut -f1)"
 
           - task: Bash@3
