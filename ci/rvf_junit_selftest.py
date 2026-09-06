@@ -185,6 +185,22 @@ def _():
     ET.fromstring(xml)
 
 
+@case("the console link leads, and absent links are omitted not blank")
+def _():
+    links = rvf_junit.build_links(
+        console_url="https://rvf.example/ui/?run=1&storage=s",
+        report_url="https://rvf.example/result/1?storageLocation=s",
+    )
+    lines = links.splitlines()
+    # A red build is read top-down, and only the console answers "what failed"
+    # without further tooling, so it must not sit under the raw JSON.
+    assert lines[0].startswith("Report in the RVF console:"), \
+        f"console link must lead, got {lines[0]!r}"
+    assert len(lines) == 2, f"an unset dashboard must vanish, got {lines!r}"
+    assert all(line.strip() for line in lines), "no blank link lines"
+    assert rvf_junit.build_links() == "", "no URLs must give no block at all"
+
+
 def main():
     failed = 0
     for name, fn in CASES.items():

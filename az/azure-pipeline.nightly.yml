@@ -589,9 +589,15 @@ stages:
                 # failureCount == -1 is RVF's sentinel for "never ran", so it
                 # becomes <skipped> rather than a red build. Warnings likewise -
                 # a nightly that goes red on a warning gets ignored within a week.
+                # Percent-encoded rather than spliced: a storage location is a
+                # free-text field the submitter chooses, so it can carry a
+                # character that silently truncates the query string.
+                CONSOLE_URL=$(RUN_ID='$(runId)' STORAGE='$(storageLocation)' BASE='${{ parameters.rvfBaseUrl }}' python3 -c "import os, urllib.parse as u; print(os.environ['BASE'].rstrip('/') + '/ui/?' + u.urlencode({'run': os.environ['RUN_ID'], 'storage': os.environ['STORAGE']}))")
+
                 python3 '$(Build.SourcesDirectory)/ci/rvf_junit.py' report.json \
                   --out rvf-junit.xml \
                   --summary rvf-summary.md \
+                  --console-url "$CONSOLE_URL" \
                   --report-url '${{ parameters.rvfBaseUrl }}/result/$(runId)?storageLocation=$(storageLocation)' \
                   --instance-limit 10
 

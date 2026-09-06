@@ -277,6 +277,29 @@ $('#openForm').addEventListener('submit', (e) => {
   watch($('#openRunId').value.trim(), $('#openStorage').value.trim(), true);
 });
 
+/* A report is something people link TO - from an ADO build summary, a chat
+ * message, a ticket. Without this the link can only land on the console and
+ * leave the reader retyping a run id and a storage location off a build log,
+ * which is exactly the friction the link was meant to remove.
+ *
+ * Deliberately a query string rather than a fragment: the fragment is not sent
+ * to the server, and these URLs get pasted into tools that rewrite or strip
+ * it. Both parameters are required - a run id without its storage location
+ * does not identify a report. */
+function openFromLink() {
+  const q = new URLSearchParams(location.search);
+  const runId = (q.get('run') || '').trim();
+  const storage = (q.get('storage') || '').trim();
+  if (!runId || !storage) return;
+
+  $('#openRunId').value = runId;
+  $('#openStorage').value = storage;
+  // Reuse the tab's own click handler so the panel is activated and the run
+  // list is lazily loaded by exactly the same path as a human click.
+  $$('.tab').find((t) => t.dataset.panel === 'panel-open').click();
+  watch(runId, storage, true);
+}
+
 /* ----------------------------------------------------------- the run list */
 
 let allRuns = [];
@@ -724,3 +747,6 @@ loadReleases();
 // Start-up: learn whether anything is in flight, so the tab badge is
 // right without the reports tab having been opened.
 loadRuns({ quiet: true });
+// Last, so a deep link overrides the default panel and the generated run id
+// that the calls above have just put on the form.
+openFromLink();

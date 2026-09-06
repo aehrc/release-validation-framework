@@ -221,6 +221,25 @@ def summary_markdown(report: dict, links: str) -> str:
     ])
 
 
+def build_links(console_url=None, dashboard_url=None, report_url=None):
+    """Assemble the link block that heads the summary and the suite output.
+
+    Ordered for a human reading a red build: the rendered console first,
+    because it is the only one of these that answers "what failed" without
+    further tooling. The raw JSON stays for scripts, and for when the console
+    is itself the thing that is broken. Absent URLs are omitted rather than
+    emitted empty, so a pipeline that configures none produces no block.
+    """
+    lines = []
+    if console_url:
+        lines.append(f"Report in the RVF console: {console_url}")
+    if dashboard_url:
+        lines.append(f"Report on the dashboard: {dashboard_url}")
+    if report_url:
+        lines.append(f"Raw RVF report: {report_url}")
+    return "\n".join(lines)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -232,6 +251,10 @@ def main() -> int:
     parser.add_argument("--report-url",
                         help="URL of the report itself, e.g. "
                              "https://rvf.example/result/1788069581?storageLocation=duck-8core")
+    parser.add_argument("--console-url",
+                        help="URL of the rendered report in the RVF console, "
+                             "e.g. https://rvf.example/ui/?run=1788069581"
+                             "&storage=duck-8core")
     parser.add_argument("--dashboard-url",
                         help="URL of the Release Dashboard product page, e.g. "
                              "https://dashboard.example/international/rvf_bench_product")
@@ -243,12 +266,7 @@ def main() -> int:
 
     report = load_report(args.report)
 
-    link_lines = []
-    if args.dashboard_url:
-        link_lines.append(f"Report on the dashboard: {args.dashboard_url}")
-    if args.report_url:
-        link_lines.append(f"Raw RVF report: {args.report_url}")
-    links = "\n".join(link_lines)
+    links = build_links(args.console_url, args.dashboard_url, args.report_url)
 
     root = build_suites(report, links, args.instance_limit, args.warnings_as_failures)
     ET.indent(root, space="  ")
