@@ -281,6 +281,57 @@ stages:
                 "
 
           - task: Bash@3
+            displayName: 'Decide which previous release to compare against'
+            condition: eq(variables['bundle.haveBundle'], 'true')
+            env:
+              ACCESS_TOKEN: $(accessToken)
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                cd '$(workdir)'
+
+                # An explicit parameter wins, so a person re-running by hand can
+                # pin the comparison. Empty means "ask the server", which is the
+                # nightly's normal path.
+                PREV='${{ parameters.previousRelease }}'
+                if [ -n "$PREV" ]; then
+                  echo "previous release pinned by parameter: $PREV"
+                  echo "##vso[task.setvariable variable=previousRelease]$PREV"
+                  exit 0
+                fi
+
+                # The rule - same edition, newest effective time strictly before
+                # this one, release status ignored - lives in RVF so that this
+                # pipeline and the console cannot reach different conclusions
+                # about the same pair of releases.
+                HTTP="$(curl -sS -m 120 -o previous.json -w '%{http_code}' \
+                  -H "Authorization: Bearer $ACCESS_TOKEN" \
+                  --get --data-urlencode 'forFile=$(releaseName)' \
+                  '${{ parameters.rvfBaseUrl }}/releases/previous')"
+
+                case "$HTTP" in
+                  204)
+                    # Nothing suitable is kept. That is legitimate for a genuine
+                    # first-time release, and a mistake the rest of the time, and
+                    # the report cannot tell the difference - the assertions are
+                    # simply absent. So it is a warning rather than silence.
+                    echo "##vso[task.logissue type=warning]RVF holds no earlier release of this edition, so release-type assertions will not run. Keep one with the rvf-keep-release pipeline."
+                    echo "##vso[task.setvariable variable=previousRelease]"
+                    ;;
+                  200)
+                    PREV="$(python3 -c 'import json;print(json.load(open("previous.json"))["previousRelease"])')"
+                    echo "resolved: $PREV"
+                    echo "##vso[task.setvariable variable=previousRelease]$PREV"
+                    ;;
+                  *)
+                    echo "##vso[task.logissue type=error]asking for the previous release returned $HTTP"
+                    cut -c1-300 previous.json || true
+                    exit 1
+                    ;;
+                esac
+
+          - task: Bash@3
             displayName: 'Submit the validation'
             condition: eq(variables['bundle.haveBundle'], 'true')
             env:
@@ -329,13 +380,15 @@ stages:
                   -F 'releaseAsAnEdition=true'
                   -F 'failureExportMax=100'
                 )
-                PREV='${{ parameters.previousRelease }}'
+                PREV='$(previousRelease)'
                 if [ -n "$PREV" ]; then
                   ARGS+=( -F "previousRelease=$PREV" )
-                  echo "previous release supplied: $PREV"
+                  echo "previous release: $PREV"
                 else
                   # Without one, every release-type assertion needing <PREVIOUS>
-                  # is dropped as not-executed: 49 of 87 on the AU edition.
+                  # is dropped as not-executed: 49 of 87 on the AU edition. The
+                  # run is still green, which is why the step before this one
+                  # warns rather than staying quiet about it.
                   echo "no previous release - release-type assertions will not execute"
                 fi
 
