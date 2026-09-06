@@ -78,33 +78,6 @@ parameters:
     displayName: 'Service-account client used to obtain a token'
     type: string
     default: 'si-rvf-client'
-  # These are DEFAULTS rather than something to type at queue time, and that is
-  # deliberate: this pipeline is started by a resource trigger on daily-rvf's
-  # RvfStage, and a triggered run takes every parameter's default because
-  # nobody is there to supply one. A value that only exists in the queue dialog
-  # would be right when a human ran it and wrong every night.
-  #
-  # Read from the live cluster on 5 September 2026. The PVC is dynamically
-  # provisioned, so AKS generated both names, and they change if the PVC is
-  # ever deleted and recreated:
-  #
-  #   kubectl get pv $(kubectl -n rvf get pvc rvf-jobs \
-  #       -o jsonpath='{.spec.volumeName}') \
-  #     -o jsonpath='{.spec.csi.volumeHandle}'
-  #
-  # which encodes resourceGroup#storageAccount#shareName###namespace.
-  - name: jobStoreAccount
-    displayName: 'Storage account holding the job store share'
-    type: string
-    default: 'f850afa0f5ef24e93856ca4'
-  - name: jobStoreShare
-    displayName: 'File share mounted by the API and workers as the job store'
-    type: string
-    default: 'pvc-1a50b744-5fc6-47f7-a4cc-e69b2a95dd01'
-  - name: jobStorePrefix
-    displayName: 'Directory within the share to stage releases into'
-    type: string
-    default: 'nightly'
   - name: groups
     displayName: 'Assertion groups (comma separated)'
     type: string
@@ -132,25 +105,9 @@ parameters:
 
 variables:
   - group: ncts-release
-  - name: storageAccount
-    value: '${{ parameters.jobStoreAccount }}'
-  # The key for THAT account, not for ontodevelop.
-  #
-  # This read `azure.accountKey.ontodevelop`, which is the key for a different
-  # storage account entirely. The job store is the dynamically provisioned
-  # azurefile PVC behind `rvf-jobs`, so AKS created both the account and the
-  # share, and neither existing key in the variable group opens it. Staging
-  # would have failed on the first nightly with an authentication error that
-  # looked like a permissions problem rather than the wrong key.
-  #
-  # Add `azure.accountKey.rvfjobs` to the `ncts-release` group as a SECRET
-  # variable. Its value is on the cluster:
-  #
-  #   kubectl -n rvf get secret \
-  #     azure-storage-account-<account>-secret \
-  #     -o jsonpath='{.data.azurestorageaccountkey}' | base64 -d
-  - name: storageKey
-    value: '$(azure.accountKey.rvfjobs)'
+  # No storage account, share name or account key here any more. The release is
+  # sent in the request to /run-post rather than staged into the job store, so
+  # the only secret this pipeline needs is the Keycloak client secret below.
   - name: workdir
     value: '$(Agent.TempDirectory)/nightly-rvf'
   # Scope is a decided question now, not an open one: the full run with Drools
@@ -217,10 +174,8 @@ stages:
               targetPath: '$(workdir)/bundle'
 
           - task: Bash@3
-            displayName: 'Stage the release into the job store share'
+            displayName: 'Find the release in the downloaded bundle'
             condition: eq(variables['bundle.haveBundle'], 'true')
-            env:
-              STORAGE_KEY: $(storageKey)
             inputs:
               targetType: 'inline'
               script: |
@@ -233,26 +188,27 @@ stages:
                   find bundle -type f | head -20
                   exit 1
                 fi
-                NAME="$(basename "$RELEASE")"
-                echo "release: $NAME ($(du -h "$RELEASE" | cut -f1))"
+                echo "release: $(basename "$RELEASE") ($(du -h "$RELEASE" | cut -f1))"
 
-                # The API resolves the prospective file under the job store root,
-                # so the path we POST must be relative to the share, and the file
-                # must be visible to whichever WORKER claims the message - which
-                # is the entire reason this is a shared share and not agent disk.
-                az storage directory create \
-                  --account-name '$(storageAccount)' --account-key "$STORAGE_KEY" \
-                  --share-name '${{ parameters.jobStoreShare }}' \
-                  --name '${{ parameters.jobStorePrefix }}' --only-show-errors >/dev/null || true
+                # An absolute path, because the submit step runs from the same
+                # working directory but curl is given this verbatim.
+                echo "##vso[task.setvariable variable=releasePath]$(pwd)/$RELEASE"
 
-                az storage file upload \
-                  --account-name '$(storageAccount)' --account-key "$STORAGE_KEY" \
-                  --share-name '${{ parameters.jobStoreShare }}' \
-                  --path '${{ parameters.jobStorePrefix }}/'"$NAME" \
-                  --source "$RELEASE" --only-show-errors
-
-                echo "##vso[task.setvariable variable=releasePath]${{ parameters.jobStorePrefix }}/$NAME"
-                echo "staged at ${{ parameters.jobStorePrefix }}/$NAME"
+                # This step used to upload the release into the job store share
+                # with `az storage file upload`, and the submit step then passed
+                # the path with releaseFileS3Path. That needed the storage
+                # account name, the share name and an account key.
+                #
+                # All three were liabilities. The share is a dynamically
+                # provisioned PVC, so AKS generates the account and share names
+                # and both change without warning if it is re-provisioned. The
+                # key had to be lifted out of a Kubernetes secret and kept in an
+                # ADO variable, because an agent cannot reach the in-cluster
+                # Vault that holds every other secret here.
+                #
+                # Sending the file to /run-post instead removes all three. The
+                # API writes it into the job store itself, so the worker sees it
+                # exactly as before.
 
           - task: Bash@3
             displayName: 'Get an access token from Keycloak'
@@ -318,15 +274,28 @@ stages:
                 # expression - it would land mid-continuation and break the
                 # command - so it goes in a bash array.
                 ARGS=(
-                  -X POST '${{ parameters.rvfBaseUrl }}/run-post-via-s3'
+                  # /run-post, not /run-post-via-s3: the release is sent in the
+                  # request rather than staged into the job store first. The API
+                  # writes it into the store itself, so the end state is the
+                  # same, but the pipeline needs no storage account, no share
+                  # name and no account key.
+                  #
+                  # Those three were worth removing. The share is a dynamically
+                  # provisioned PVC, so AKS generates the account and share
+                  # names and they change silently if it is ever re-provisioned;
+                  # and the key had to be copied out of the cluster into an ADO
+                  # variable because an agent cannot reach the in-cluster Vault.
+                  # This is the path the console and ci/smoke_test.sh already
+                  # use, so it is the exercised one.
+                  -X POST '${{ parameters.rvfBaseUrl }}/run-post'
                   # A Bearer token, NOT X-AUTH-*. The gateway authenticates the
                   # JWT and injects the X-AUTH-* headers itself, stripping any
                   # the client sent - so sending them here would at best be
                   # ignored and at worst look like a spoofing attempt.
                   -H "Authorization: Bearer $ACCESS_TOKEN"
+                  -F "file=@$(releasePath)"
                   -F "runId=$RUN_ID"
                   -F "storageLocation=$STORAGE_LOCATION"
-                  -F "releaseFileS3Path=$(releasePath)"
                   -F 'groups=${{ parameters.groups }}'
                   -F 'enableDrools=${{ parameters.enableDrools }}'
                   # NOTE the spelling: enableMRCMValidation, capital MRCM. A

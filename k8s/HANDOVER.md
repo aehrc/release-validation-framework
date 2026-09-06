@@ -35,45 +35,35 @@ after every change, because RVF trusts those headers absolutely. See §6.
 
 | # | do | detail |
 |---|---|---|
-| 1 | add **one secret variable**, then enable ADO definition **66 `rvf-duckdb-nightly`** | the storage coordinates are now the committed defaults, so the only manual step is the account key - see below. Then flip the definition from `disabled` to `enabled` |
+| 1 | enable ADO definition **66 `rvf-duckdb-nightly`** | flip it from `disabled` to `enabled`. Nothing else: it needs no storage account, share name or account key, and the client secret it uses is already in the `ncts-release` group |
 | 2 | run the **cross-node** check | §5a. Everything else is proven; this one needs a deliberate look at which node each pod is on |
 
 **Split API and worker is the decided shape** (5 September). The single-container
 alternative in `k8s/README.md` is not being taken; that section is kept as the
 record of why the split was chosen rather than as an open question.
 
-**The job store coordinates**, which were the last unknown. The PVC is
-dynamically provisioned, so Azure generated the share name; it is readable from
-the volume handle, which encodes
-`<resourceGroup>#<storageAccount>#<shareName>###<namespace>`:
+**The nightly needs no storage credential.** It sends the release in the
+request to `/run-post` rather than staging it into the job store share, so
+there is no storage account name, no share name and no account key anywhere in
+the pipeline. The API writes the upload into the store itself, so the worker
+sees it exactly as it did before.
 
-    kubectl get pv $(kubectl -n rvf get pvc rvf-jobs -o jsonpath='{.spec.volumeName}') \
-        -o jsonpath='{.spec.csi.volumeHandle}'
+That removed three liabilities rather than one. The share is a dynamically
+provisioned PVC, so AKS generates the account and share names and both change
+without warning if it is ever re-provisioned; and the key would have had to be
+lifted out of a Kubernetes secret into an ADO variable, because an agent cannot
+reach the in-cluster Vault that holds every other secret here. The only secret
+the nightly now holds is `rvf.si.client.secret`, which it already had.
 
-    jobStoreAccount   f850afa0f5ef24e93856ca4
-    jobStoreShare     pvc-1a50b744-5fc6-47f7-a4cc-e69b2a95dd01
-    resource group    MC_ncts_ncts-k8s-cluster_australiaeast
+Measured through the gateway before committing to it:
 
-These are now the **defaults committed in `az/azure-pipeline.nightly.yml`**, not
-something to type. That matters because definition 66 is started by a resource
-trigger, and a triggered run takes every parameter's default - a value supplied
-only in the queue dialog would be right when a human ran it and wrong every
-night.
+    100 MB  ->  201 in  12 s
+    900 MB  ->  201 in  95 s      larger than the AU edition at ~853 MB
 
-**The one thing left to do by hand** is the account key. The pipeline read
-`azure.accountKey.ontodevelop`, which opens a different storage account
-entirely, so staging would have failed on the first nightly with what looks
-like a permissions problem. Add `azure.accountKey.rvfjobs` to the
-`ncts-release` variable group as a **secret** variable:
-
-    kubectl -n rvf get secret \
-        azure-storage-account-f850afa0f5ef24e93856ca4-secret \
-        -o jsonpath='{.data.azurestorageaccountkey}' | base64 -d
-
-Re-read all three if the PVC is ever deleted and recreated: AKS generates the
-account and share names, so they are not stable across a re-provision. Binding a
-static share instead would remove that fragility, at the cost of provisioning
-one.
+against a 600 s request timeout, so there is roughly six times the headroom
+needed. `spring.servlet.multipart.max-file-size` was raised from 1GB to 4GB at
+the same time: 1GB left 147MB of headroom on the AU edition, which is one
+growth spurt from a 413 at the end of a long upload.
 
 ### Things worth knowing about how it got here
 
