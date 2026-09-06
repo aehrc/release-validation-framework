@@ -98,6 +98,18 @@ parameters:
     displayName: 'Run the Drools rules'
     type: boolean
     default: true
+  # Required whenever enableDrools is true. Without it the run does not skip
+  # Drools - it FAILS, with "Drools validation has stopped due to error: No
+  # drools rules assertion group specified", which is what happened to build
+  # 16221 after fifteen minutes of validating.
+  #
+  # These are directories under the rule set mounted at
+  # /app/snomed-drools-rules, confirmed on the running worker. common-authoring
+  # holds the rules every edition shares; au-authoring holds the AU ones.
+  - name: droolsRulesGroups
+    displayName: 'Drools rule groups (comma separated), used when Drools is on'
+    type: string
+    default: 'common-authoring,au-authoring'
   - name: enableMRCM
     displayName: 'Run the MRCM validation'
     type: boolean
@@ -406,6 +418,9 @@ stages:
                   -F "storageLocation=$STORAGE_LOCATION"
                   -F 'groups=${{ parameters.groups }}'
                   -F 'enableDrools=${{ parameters.enableDrools }}'
+                  # Named whenever Drools is on. RVF fails the run rather than
+                  # skipping the phase if the groups are absent.
+                  -F 'droolsRulesGroups=${{ parameters.droolsRulesGroups }}'
                   # NOTE the spelling: enableMRCMValidation, capital MRCM. A
                   # misspelling binds silently to the false default and produces
                   # a green report that skipped the entire phase.
