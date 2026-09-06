@@ -74,6 +74,10 @@ spec:
               value: {{ .Values.worker.duckdb.cacheMaxGb | quote }}
             - name: RVF_DUCK_THREADS
               value: {{ .Values.worker.duckdb.threads | quote }}
+            {{- with .Values.worker.duckdb.memoryLimit }}
+            - name: RVF_DUCK_MEMORY_LIMIT
+              value: {{ . | quote }}
+            {{- end }}
             {{- with .Values.worker.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

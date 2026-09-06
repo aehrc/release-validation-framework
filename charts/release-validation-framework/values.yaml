@@ -155,13 +155,22 @@ worker:
   # -- Reaping is the API's responsibility, so retention is set to 0 on workers
   retentionDays: "0"
   # -- Resource requests and limits for the Worker container
+  # A worker holds TWO editions when a previous release is supplied, which is the
+  # normal case: Drools and MRCM load the prospective and the previous side by
+  # side to compare them. 16Gi was measured against a single edition - MRCM
+  # peaked at 11.3GB with nothing to compare against - and the first run with a
+  # previous release was OOMKilled four times over, pegged at 16.0 of 16.0 GiB,
+  # restarting into the same message each time.
+  #
+  # The `large` node has 29Gi allocatable and the CPU request means one worker
+  # per node, so the headroom is there to use.
   resources:
     requests:
       cpu: "4"
       memory: 12Gi
     limits:
       cpu: "8"
-      memory: 16Gi
+      memory: 24Gi
   # -- DuckDB engine performance tuning
   duckdb:
     # -- Scratch working directory (node-local)
@@ -170,6 +179,18 @@ worker:
     cacheDirectory: "/work/release-cache"
     # -- Max cache size in GB (0 disables cache)
     cacheMaxGb: "0"
+    # -- Memory DuckDB may use, which it CANNOT work out for itself.
+    #
+    # DuckDB's default is 80% of system RAM, read from the host rather than the
+    # cgroup - so on a 30Gi node it plans for about 24GB however small the
+    # container is. Left empty, it and the JVM heap were both sizing against
+    # numbers that do not fit in the same box, and the container was killed as
+    # soon as something needed the headroom.
+    #
+    # Budget within the 24Gi limit: about 18Gi of heap (MaxRAMPercentage=75 is
+    # baked into the image), 4GB here, and the rest for metaspace, thread
+    # stacks and the JVM itself.
+    memoryLimit: "4GB"
     # -- Number of DuckDB worker threads (must match cpu limit)
     threads: "8"
   # -- Ephemeral work volume configuration

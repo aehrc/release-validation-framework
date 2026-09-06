@@ -44,9 +44,20 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].resources.limits.cpu
           value: "8"
+      # 24Gi, not 16Gi. A worker holds two editions whenever a previous release
+      # is supplied - Drools and MRCM load both to compare them - and at 16Gi the
+      # first such run was OOMKilled four times, pegged at 16.0 of 16.0 GiB.
       - equal:
           path: spec.template.spec.containers[0].resources.limits.memory
-          value: 16Gi
+          value: 24Gi
+      # DuckDB cannot see the container limit: its default is 80% of HOST RAM,
+      # so on a 30Gi node it plans for ~24GB inside a 24Gi box already holding
+      # an 18Gi heap. It has to be told.
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: RVF_DUCK_MEMORY_LIMIT
+            value: "4GB"
       - contains:
           path: spec.template.spec.containers[0].env
           content:

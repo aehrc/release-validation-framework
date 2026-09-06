@@ -425,6 +425,10 @@
             },
             "threads": {
               "type": "string"
+            },
+            "memoryLimit": {
+              "type": "string",
+              "description": "Memory DuckDB may use, with a unit, e.g. 4GB. DuckDB otherwise defaults to 80% of host RAM, which ignores the container limit entirely. RVF rejects a value without a unit."
             }
           },
           "required": [
