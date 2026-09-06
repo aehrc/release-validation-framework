@@ -78,10 +78,22 @@ parameters:
     displayName: 'Service-account client used to obtain a token'
     type: string
     default: 'si-rvf-client'
+  # Checked against GET /groups on the deployed server, with the assertion count
+  # each one carries:
+  #
+  #   AustralianEdition             200   the edition being validated
+  #   release-type-validation        87   needs a previous release
+  #   file-centric-validation        46
+  #   component-centric-validation   42
+  #
+  # The previous default ended in `resource`, which is not a group this server
+  # has - the string had been truncated, and `resource-centric-validation` does
+  # not exist here either. RVF rejects the whole submission when any named group
+  # is unknown, so every run would have died on HTTP 412. Build 16220 did.
   - name: groups
     displayName: 'Assertion groups (comma separated)'
     type: string
-    default: 'file-centric-validation,component-centric-validation,release-type-validation,resource'
+    default: 'AustralianEdition,file-centric-validation,component-centric-validation,release-type-validation'
   - name: enableDrools
     displayName: 'Run the Drools rules'
     type: boolean
@@ -98,10 +110,15 @@ parameters:
     displayName: 'Minutes to wait for the validation to finish'
     type: number
     default: 60
+  # A floor, not a target: it exists to catch a phase that silently did not run.
+  # 900 was carried over from the incumbent's scope and is far above what these
+  # groups can produce - the four above hold 375 between them before overlap is
+  # removed - so it would have failed every run that got past the group names.
+  # Set from the first measured run rather than guessed again.
   - name: minAssertions
     displayName: 'Fail if fewer than this many assertions ran (guards a silently skipped phase)'
     type: number
-    default: 900
+    default: 150
 
 variables:
   - group: ncts-release
