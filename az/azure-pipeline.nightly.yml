@@ -174,41 +174,65 @@ stages:
               targetPath: '$(workdir)/bundle'
 
           - task: Bash@3
-            displayName: 'Find the release in the downloaded bundle'
+            displayName: 'Fetch the release named by the bundle'
             condition: eq(variables['bundle.haveBundle'], 'true')
+            env:
+              SOURCE_KEY: $(azure.accountKey.ontodevelop)
             inputs:
               targetType: 'inline'
               script: |
                 set -euo pipefail
                 cd '$(workdir)'
 
-                RELEASE="$(find bundle -name '*.zip' -type f | head -1)"
-                if [ -z "$RELEASE" ]; then
-                  echo "##vso[task.logissue type=error]rf2-bundle contained no zip"
+                # The rf2-bundle artifact is a POINTER, not the release: one text
+                # file holding one URL, about 300 bytes.
+                #
+                #   https://ontoserverdevelop.file.core.windows.net/si-daily-builds/
+                #     <run>/output-files/SnomedCT_...AU...zip
+                #
+                # This step used to run `find bundle -name '*.zip'` and would have
+                # failed on the first night with "contained no zip". Definition 66
+                # has never run, so nobody had seen it.
+                POINTER="$(find bundle -type f -name '*.txt' | head -1)"
+                if [ -z "$POINTER" ]; then
+                  echo "##vso[task.logissue type=error]rf2-bundle held no pointer file"
                   find bundle -type f | head -20
                   exit 1
                 fi
-                echo "release: $(basename "$RELEASE") ($(du -h "$RELEASE" | cut -f1))"
 
-                # An absolute path, because the submit step runs from the same
-                # working directory but curl is given this verbatim.
-                echo "##vso[task.setvariable variable=releasePath]$(pwd)/$RELEASE"
+                URL="$(tr -d ' \r\n' < "$POINTER")"
+                echo "pointer: $URL"
+                case "$URL" in
+                  https://*.file.core.windows.net/*) ;;
+                  *) echo "##vso[task.logissue type=error]not an Azure Files URL: $URL"; exit 1 ;;
+                esac
 
-                # This step used to upload the release into the job store share
-                # with `az storage file upload`, and the submit step then passed
-                # the path with releaseFileS3Path. That needed the storage
-                # account name, the share name and an account key.
-                #
-                # All three were liabilities. The share is a dynamically
-                # provisioned PVC, so AKS generates the account and share names
-                # and both change without warning if it is re-provisioned. The
-                # key had to be lifted out of a Kubernetes secret and kept in an
-                # ADO variable, because an agent cannot reach the in-cluster
-                # Vault that holds every other secret here.
-                #
-                # Sending the file to /run-post instead removes all three. The
-                # API writes it into the job store itself, so the worker sees it
-                # exactly as before.
+                # https://<account>.file.core.windows.net/<share>/<path>
+                REST="${URL#https://}"
+                ACCOUNT="${REST%%.file.core.windows.net/*}"
+                AFTER="${REST#*.file.core.windows.net/}"
+                SHARE="${AFTER%%/*}"
+                FILEPATH="${AFTER#*/}"
+                NAME="$(basename "$FILEPATH")"
+                echo "account=$ACCOUNT share=$SHARE path=$FILEPATH"
+
+                # This key reads the SI daily-build share, which is a different
+                # thing from the RVF job store - that needs no credential now,
+                # because the release is sent to the API rather than staged.
+                # `azure.accountKey.ontodevelop` already exists in ncts-release
+                # for exactly this account.
+                az storage file download \
+                  --account-name "$ACCOUNT" --account-key "$SOURCE_KEY" \
+                  --share-name "$SHARE" --path "$FILEPATH" \
+                  --dest "$NAME" --only-show-errors >/dev/null
+
+                if [ ! -s "$NAME" ]; then
+                  echo "##vso[task.logissue type=error]download produced no file"
+                  exit 1
+                fi
+                echo "release: $NAME ($(du -h "$NAME" | cut -f1))"
+                echo "##vso[task.setvariable variable=releasePath]$(pwd)/$NAME"
+                echo "##vso[task.setvariable variable=releaseName]$NAME"
 
           - task: Bash@3
             displayName: 'Get an access token from Keycloak'
