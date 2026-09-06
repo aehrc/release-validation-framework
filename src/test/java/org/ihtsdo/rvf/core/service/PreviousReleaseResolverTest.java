@@ -96,4 +96,41 @@ class PreviousReleaseResolverTest {
 		assertFalse(tokens.contains("snomedct"));
 		assertFalse(tokens.contains("20260930t120000z"));
 	}
+
+	// The pair that actually matters, and the one word-matching alone misses:
+	// the AU daily build under test against the published NCTS distribution.
+	private static final String AU_NCTS_JUL =
+			"NCTS_SCT_RF2_DISTRIBUTION_32506021000036107-20260731-ALL.zip";
+	private static final String AU_NCTS_AUG =
+			"NCTS_SCT_RF2_DISTRIBUTION_32506021000036107-20260831-ALL.zip";
+
+	@Test
+	void matchesTheDailyBuildToThePublishedDistribution() {
+		// These names share no word at all. They share the AU namespace 1000036:
+		// spelled out in AU1000036, and inside the module id 32506021000036107.
+		assertEquals(AU_NCTS_AUG,
+				resolver.resolve(AU_DAILY, List.of(AU_NCTS_JUL, AU_NCTS_AUG, INT_JUL)).orElseThrow());
+	}
+
+	@Test
+	void stillWillNotCrossEditionsWithNamespacesInPlay() {
+		// The international package carries no AU namespace, so it is not a
+		// candidate however close its date.
+		assertTrue(resolver.resolve(AU_DAILY, List.of(INT_JUL)).isEmpty());
+	}
+
+	@Test
+	void readsTheNamespaceOutOfBothShapes() {
+		assertEquals("1000036", resolver.namespaceOf("32506021000036107").orElseThrow());
+		assertEquals("1000036", resolver.namespaceOf("au1000036").orElseThrow());
+		assertTrue(resolver.namespaceOf("managedserviceau").isEmpty());
+		assertTrue(resolver.namespaceOf("internationalrf2").isEmpty());
+	}
+
+	@Test
+	void editionTokensCarryTheNamespace() {
+		assertTrue(resolver.editionTokens(AU_DAILY).contains("ns:1000036"));
+		assertTrue(resolver.editionTokens(AU_NCTS_AUG).contains("ns:1000036"));
+		assertFalse(resolver.editionTokens(INT_JUL).contains("ns:1000036"));
+	}
 }

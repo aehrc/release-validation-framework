@@ -46,8 +46,29 @@ public class PreviousReleaseResolver {
 	 */
 	private static final Set<String> STATUS_TOKENS = Set.of(
 			"snomedct", "release", "rf2", "production", "dailybuild", "daily", "build",
-			"beta", "alpha", "member", "delta", "snapshot", "full", "package");
+			"beta", "alpha", "member", "delta", "snapshot", "full", "package",
+			"ncts", "sct", "distribution", "all");
 
+	/**
+	 * A SNOMED namespace, which is the identity that survives renaming.
+	 *
+	 * <p>The same edition is named several ways here, and the schemes share no
+	 * words at all:
+	 *
+	 * <pre>
+	 *   SnomedCT_ManagedServiceAU_DAILYBUILD_BETA_AU1000036_20260930T120000Z.zip
+	 *   NCTS_SCT_RF2_DISTRIBUTION_32506021000036107-20260731-ALL.zip
+	 * </pre>
+	 *
+	 * <p>Matching on words alone finds nothing between those two, which is
+	 * exactly the pair a nightly needs. What they do share is the AU namespace
+	 * {@code 1000036}: plainly in {@code AU1000036}, and inside the module
+	 * concept id {@code 32506021000036107}, because a SNOMED identifier is
+	 * item-namespace-partition-check and the namespace is the seven digits
+	 * before the last three.
+	 */
+	private static final Pattern NAMESPACE_IN_ID = Pattern.compile("(\\d{7})\\d{3}$");
+	private static final Pattern TRAILING_NAMESPACE = Pattern.compile("(?:^|[^0-9])(\\d{7})$");
 	/**
 	 * The best previous release for {@code underTest}, if there is one.
 	 *
@@ -107,7 +128,14 @@ public class PreviousReleaseResolver {
 		return last;
 	}
 
-	/** The name's tokens with the status words and the dates removed. */
+	/**
+	 * The name's tokens with status words and dates removed, plus any SNOMED
+	 * namespace found in them.
+	 *
+	 * <p>The namespace is what makes two differently-named packages of the same
+	 * edition comparable; see {@link #NAMESPACE_IN_ID}. It is added as a token
+	 * in its own right, so a match on it counts exactly like a match on a word.
+	 */
 	Set<String> editionTokens(String filename) {
 		String stem = filename.replaceAll("(?i)\\.zip$", "");
 		Set<String> tokens = new LinkedHashSet<>();
@@ -117,8 +145,29 @@ public class PreviousReleaseResolver {
 				continue;
 			}
 			tokens.add(token);
+			namespaceOf(token).ifPresent(ns -> tokens.add("ns:" + ns));
 		}
 		return tokens;
+	}
+
+	/**
+	 * The SNOMED namespace a token carries, if any.
+	 *
+	 * <p>Two shapes occur: a full identifier, where the namespace is the seven
+	 * digits before the partition and check digits, and a token that simply ends
+	 * in the namespace, such as {@code au1000036}. A plain eight-digit date
+	 * cannot reach here, because dates are dropped before this is called.
+	 */
+	Optional<String> namespaceOf(String token) {
+		Matcher inId = NAMESPACE_IN_ID.matcher(token);
+		if (inId.find() && token.chars().allMatch(Character::isDigit) && token.length() >= 10) {
+			return Optional.of(inId.group(1));
+		}
+		Matcher trailing = TRAILING_NAMESPACE.matcher(token);
+		if (trailing.find()) {
+			return Optional.of(trailing.group(1));
+		}
+		return Optional.empty();
 	}
 
 	private static int overlap(Set<String> a, Set<String> b) {
