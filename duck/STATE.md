@@ -55,50 +55,75 @@ on restart. `duck/ASSERTION-PACKS.md` is the fix.
 
 ### 1. Parity tests for EVERY assertion
 
-The headline commitment. Nothing currently proves that an assertion does on
-DuckDB what it did on MySQL, one assertion at a time. The denominator:
+The headline commitment. The denominator:
 
-    international SQL   453   IHTSDO/snomed-release-validation-assertions
-    AMT SQL             200   aehrc/rvf testscripts
+    international SQL   360   in the bundled store (453 files in the corpus)
+    AMT SQL             200   aehrc/rvf testscripts, not in this repo's store
     Drools rules         78   109 rule directories with test-cases.json
     MRCM                979   two content forms
 
-Donated in two parts, to where the assertions live: international to
-`IHTSDO/snomed-release-validation-assertions`, AMT to `aehrc/rvf`.
+**Done: the half that runs anywhere.** `AssertionCorpusDigestTest` runs every
+assertion in the bundled store against RVF's committed regression pair
+(`SnomedCT_RegressionTest_20130731` over `_20130131`) and records per assertion
+whether it ran plus a sha256 over the sorted `concept_id`, `component_id`,
+`table_name` and `details` of every row it inserted. 360 assertions in ~3s, no
+clone, no Docker, no network. Golden file
+`src/test/resources/duck/assertion-digests.tsv`; regenerate with
+`-Dduck.digests.write=true` and commit the diff WITH the reason. Baseline: 355
+ran, 221 of them finding something, 2 not run for want of a DEPENDENCY release,
+3 that cannot execute.
 
-Shape, with the oracle differing by environment:
+Per-assertion because a total is not a parity check, and a digest rather than a
+count because a transpilation can preserve how MANY rows an assertion finds
+while changing WHICH components it names - the risk carried by all 43 `REGEXP`
+rewrites, since a regex matching the wrong thing still matches something.
 
-* where Docker exists the incumbent MySQL engine is a LIVE oracle, so the test
-  is differential - same release, both engines, compare failing component ids
-  per assertion, and classify divergences against a committed baseline of
-  causes. A plain agreement check is useless in both directions: MySQL has
-  defects that make it blind to real content, so DuckDB correctly disagrees.
-  That is the design `ci/engine_ab.py` already uses.
-* where it does not, compare against a committed golden digest per assertion -
-  order-sensitive, `LC_ALL=C`.
+**Three latent production defects it found**, all in
+`duck/known-assertion-errors.json` with causes and fixes:
 
-`src/test/resources/SnomedCT_RegressionTest_20130131` and `_20130731` are
-already committed and small (58 RF2 files), and no DuckDB test needs Docker, so
-the golden half can run everywhere today.
+* two `mapGroup = ''` against a SMALLINT column (complexmap, extendedmap) -
+  MySQL coerces the literal to 0, DuckDB refuses to cast it per row. Fix is a
+  transpilation rule in the publisher: numeric column compared to `''` becomes
+  compared to `0`.
+* one statement ending `... ) commit`, because its source script omits the
+  semicolon before its final `commit;`. Fix is upstream (add the semicolon) plus
+  a publisher refusal to emit a statement whose tail is a bare
+  transaction-control token.
 
-Two rules, both learned from real failures this week:
+They are invisible in production because an AU release has no complexmap,
+extendedmap or expressionassociation rows, so DuckDB evaluates nothing and
+reports zero findings. Build 16247's only two incomplete assertions are both
+"`<DEPENDENCY>` not supplied". **An assertion that cannot run looks exactly like
+one that ran and found nothing** - which is the whole reason this test exists.
 
-* **Every parity test must assert the assertion EXECUTED.** A parity check over
-  an assertion that silently skipped compares two empty results and passes.
-  `RangeSetProbe` reported 134 expressions identical while BOTH arms ran the
-  old code, because an unidentified field falls back silently.
+It also found that `DuckMaterialiser` could not load RVF's own regression
+fixture at all (fixed, `62132059`): `read_csv` refuses a ragged relation where
+MySQL pads and truncates, and structural validation runs CONCURRENTLY with the
+SQL phase rather than gating it, so refusing lost the content report for
+precisely the releases someone needs one about.
+
+**Still to do:**
+
+* the differential arm against the live MySQL oracle, classified against
+  `ci/known-engine-divergences.json` - needs Docker, so it is a CI job, not a
+  developer gate. `ci/engine_ab.py` is the shape; it needs to report WHICH
+  assertions it exercised, since a green gate can otherwise hide a class that
+  never ran.
+* the same digest recording for the 200 AMT assertions, which live in a store
+  this repo deliberately does not carry - it belongs beside them in `aehrc/rvf`.
+* Drools `RulesTestManual` (109 rule directories) does not run in CI at all:
+  the class name matches no surefire pattern and it expects the rules checked
+  out beside the engine.
+* MRCM parity is a COUNT (`inferred 497, stated 481`), not a digest, so two
+  changes swapping one finding for another would pass.
+
+Two rules, both learned from real failures and now enforced by the test:
+
+* **A parity test must assert the assertion EXECUTED.** `RangeSetProbe`
+  reported 134 expressions identical while BOTH arms ran the old code.
 * **Comparing two empty results proves nothing.** Both laterality forms
-  returned zero violations, so that probe now mutates the input to force real
+  returned zero violations, so that probe mutates the input to force real
   violations and requires agreement on those too.
-
-Sub-tasks: Drools `RulesTestManual` does not run in CI at all (the class name
-matches no surefire pattern, and it expects the rules checked out beside the
-engine); MRCM parity is a COUNT (`inferred 497, stated 481`) not a digest, so
-two changes swapping one finding for another would pass; the 43 AMT `REGEXP`
-transpilations have never been checked against the MySQL oracle, and a regex
-that silently matches nothing yields zero findings and reads as a pass;
-`ci/engine_ab.py` never reports which assertions it exercised, so a green gate
-can hide a class that never ran.
 
 ### 2. Raise the performance work upstream with SI
 
