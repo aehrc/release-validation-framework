@@ -179,12 +179,36 @@ both of this week's wins. Two PRs, each independently useful, against
 Patches are already the deliverable: `duck/mrcm-validator-parallel.patch`,
 `duck/snomed-query-service-docvalues.patch`.
 
-### 3. Assertion packs
+### 3. Assertion packs - BUILT, except publishing
 
-`duck/ASSERTION-PACKS.md`. Pack format and merge with conflict rejection; fetch
-by pinned digest plus an atomic reload endpoint; record pack name/version/digest
-in the report; publish the AMT pack from `aehrc/rvf` and retire the
-hand-staged volume.
+`duck/ASSERTION-PACKS.md` carries the detail. Done:
+
+* `DuckStorePacks.merge` with 14 tests, one per way two packs can combine into a
+  store that lies. The rule that earns its keep: ports union BY MACRO NAME and a
+  redefinition is refused, because appending them lets the second definition win
+  and an assertion in the first pack then quietly computes something else.
+* `AssertionPackFetcher` checks the sha256 BEFORE parsing, refuses an unpinned
+  pack when the source is built, and takes its token from a header rather than a
+  URL.
+* `DuckAssertionService.reload` builds the whole corpus before publishing
+  anything and swaps in two volatile writes. `AssertionPackReloadTest` drives it
+  against a real `HttpServer`: a wrong digest, a 404 and a merge conflict all
+  leave the previous corpus serving.
+* `GET /assertions/packs` and `POST /assertions/packs/refresh` (409 with every
+  conflict, 502 for fetch or digest failure).
+* Every report records name, version, digest and assertion count per pack, read
+  from the store that RAN rather than from a service holding a second copy.
+
+Proven twice on real content: merging today's international store with the
+560-assertion AMT build is REFUSED, naming exactly the three assertions the
+publisher fix changed - a stale pack, correctly identified - and an AMT-ONLY
+pack built from the 200 extension scripts merges to 560 assertions and 20 ports
+with no conflicts.
+
+**Not published.** The pack belongs in `aehrc/rvf` beside its scripts and must
+not be committed here; the recipe and the `rvf.assertion.packs` line are in
+`duck/ASSERTION-PACKS.md`. That is a branch on a private repository, so it is
+your call.
 
 ### 4. Smaller follow-ups
 
