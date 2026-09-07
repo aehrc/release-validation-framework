@@ -116,11 +116,14 @@ precisely the releases someone needs one about.
 
 **Still to do:**
 
-* the differential arm against the live MySQL oracle, classified against
-  `ci/known-engine-divergences.json` - needs Docker, so it is a CI job, not a
-  developer gate. `ci/engine_ab.py` is the shape; it needs to report WHICH
-  assertions it exercised, since a green gate can otherwise hide a class that
-  never ran.
+* **Differential arm: DONE** (`4ea122d9`, `fedba280`, `bec5fdf5`). Run for real
+  on this host, both engines, one AU edition: 149 joined, 147 identical, of
+  which **12 both-ran-with-findings and 135 both-ran-empty**, 0 that ran on one
+  engine only, 2 divergences both explained. 1380s against 180s. The gate now
+  splits agreement by whether the assertions RAN and fails when one engine
+  silently skipped, with `ci/compare_reports_selftest.py` covering the
+  classification (9 cases) and the pipeline running it before spending forty
+  minutes on two engines.
 * the same digest recording for the 200 AMT assertions, which live in a store
   this repo deliberately does not carry - it belongs beside them in `aehrc/rvf`.
 * **Drools: DONE** (`ba3e4a98`). `DroolsRuleTestCasesTest` gates all 109 rule
@@ -135,8 +138,12 @@ precisely the releases someone needs one about.
   and `redundant-is-a-relationship`, the last of which fires on real AU content
   while nothing states what it should find. `-Ddrools.rules.dir` gates a
   candidate ref before the pin moves; `-Ddrools.rules.only` runs one directory.
-* MRCM parity is a COUNT (`inferred 497, stated 481`), not a digest, so two
-  changes swapping one finding for another would pass.
+* **MRCM parity: DONE** (`12f63f74`). `MrcmSoloProbe` emits a sha256 per
+  assertion over its sorted violated concept ids plus one overall digest.
+  Measured on the AU edition: 497/481 assertions, **2,630 violations across
+  SEVEN assertions** - one stated ERROR carries 2,391 - and two independent
+  runs are byte-identical. Baseline committed as
+  `duck/mrcm-digest-au-20260731.tsv`.
 
 Two rules, both learned from real failures and now enforced by the test:
 
