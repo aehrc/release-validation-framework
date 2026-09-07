@@ -364,3 +364,16 @@ table.runs tr.openable:focus-visible { outline: 2px solid var(--accent); outline
   border-radius: 9px; background: var(--warn); color: var(--bg);
   font-size: 11px; font-weight: 700; line-height: 17px; text-align: center;
 }
+
+/* Report groups. A nightly is ~1,480 assertions across a dozen groups, so the
+   header has to carry enough to decide whether to read the group at all -
+   its name, how many assertions, and how many instances behind them. */
+.grp { border: 1px solid var(--line); border-radius: 8px; margin: 10px 0; background: var(--panel); }
+.grp > summary { display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 10px 12px; cursor: pointer; list-style: none; font-weight: 600; }
+.grp > summary::-webkit-details-marker { display: none; }
+.grp > summary::before { content: '\25b8'; font-weight: 400; color: var(--ink-2); transition: transform .12s; }
+.grp[open] > summary::before { transform: rotate(90deg); }
+.gname { flex: 1; font-family: var(--mono); font-size: 13px; }
+.gcount { color: var(--ink-2); font-size: 12.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.gbody { padding: 0 10px 8px; }

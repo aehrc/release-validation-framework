@@ -550,6 +550,48 @@ function itemHtml(item, kind) {
   </details>`;
 }
 
+/* Which group an assertion belongs to, for the report listing.
+ *
+ * SQL assertions carry testCategory - `amtv4`, `release-type-validation`,
+ * `file-centric-validation,mdrs` and so on. It is a comma-separated token list,
+ * so the FIRST token is used: it is the category the assertion is filed under,
+ * and the rest are edition and scope qualifiers that would fragment the listing
+ * into a group per combination.
+ *
+ * Drools rules and MRCM checks carry no category at all - null and "" in a real
+ * report - so they are bucketed by testType instead. Without that they would
+ * all collapse into one unnamed group, which on a nightly is 1,057 of 1,482
+ * records. */
+const TYPE_GROUPS = {
+  DROOL_RULES: 'Drools rules',
+  MRCM: 'MRCM',
+  TRACEABILITY: 'Traceability',
+  ARCHIVE_STRUCTURAL: 'Structure',
+};
+
+function groupOf(item) {
+  const category = String(item.testCategory || '').trim();
+  if (category) return category.split(',')[0].trim();
+  return TYPE_GROUPS[item.testType] || item.testType || 'ungrouped';
+}
+
+/* Groups ordered by how much is wrong in them, then by name. Someone opening a
+ * red report wants the worst group first, not alphabetical order. */
+function groupRows(rows) {
+  const groups = new Map();
+  for (const item of rows) {
+    const name = groupOf(item);
+    if (!groups.has(name)) groups.set(name, { name, items: [], instances: 0 });
+    const g = groups.get(name);
+    g.items.push(item);
+    if (typeof item.failureCount === 'number' && item.failureCount > 0) {
+      g.instances += item.failureCount;
+    }
+  }
+  return [...groups.values()].sort((a, b) =>
+    b.instances - a.instances || a.name.localeCompare(b.name));
+}
+
 function render(data, runId, storageLocation) {
   const result = data.rvfValidationResult || {};
   const test = result.TestResult || {};
@@ -595,7 +637,9 @@ function render(data, runId, storageLocation) {
           `<button data-kind="${kind}" class="${i === 0 ? 'on' : ''}">${label} (${num((test[key] || []).length)})</button>`).join('')}
       </div>
       <input type="text" id="filter" placeholder="Filter by assertion text\u2026">
+      <label class="check"><input type="checkbox" id="grouped" checked> Group by assertion group</label>
       <button type="button" class="ghost" id="download">Download JSON</button>
+      <button type="button" class="ghost" id="downloadCsv">All failures (CSV)</button>
     </div>
 
     <div class="items" id="items"></div>`;
@@ -610,9 +654,29 @@ function render(data, runId, storageLocation) {
     const rows = (test[key] || []).filter((it) =>
       !needle || String(it.assertionText || '').toLowerCase().includes(needle));
 
-    $('#items').innerHTML = rows.length
-      ? rows.map((it) => itemHtml(it, kind)).join('')
-      : `<p class="empty">Nothing in this category${needle ? ' for that filter' : ''}.</p>`;
+    if (!rows.length) {
+      $('#items').innerHTML =
+        `<p class="empty">Nothing in this category${needle ? ' for that filter' : ''}.</p>`;
+      return;
+    }
+
+    if (!$('#grouped').checked) {
+      $('#items').innerHTML = rows.map((it) => itemHtml(it, kind)).join('');
+      return;
+    }
+
+    // Groups open by default: a collapsed report hides the thing the reader
+    // came for. The count in the header is instances, not assertions, because
+    // "3 assertions" and "40,000 concepts" are different questions.
+    $('#items').innerHTML = groupRows(rows).map((g) => `
+      <details class="grp" open>
+        <summary>
+          <span class="gname">${esc(g.name)}</span>
+          <span class="gcount">${num(g.items.length)} assertion${g.items.length === 1 ? '' : 's'}${
+            g.instances ? ` \u00b7 ${num(g.instances)} instance${g.instances === 1 ? '' : 's'}` : ''}</span>
+        </summary>
+        <div class="gbody">${g.items.map((it) => itemHtml(it, kind)).join('')}</div>
+      </details>`).join('');
   };
 
   $$('#seg button').forEach((b) => b.addEventListener('click', () => {
@@ -622,6 +686,17 @@ function render(data, runId, storageLocation) {
     draw();
   }));
   $('#filter').addEventListener('input', draw);
+  $('#grouped').addEventListener('change', draw);
+
+  // Straight to the server, not built from the report: the report only carries
+  // the first N instances per assertion, which is the cap this button exists to
+  // get past. A whole run can be millions of rows, so it is a navigation rather
+  // than a fetch-into-memory.
+  $('#downloadCsv').addEventListener('click', () => {
+    const url = `${API}/result/${encodeURIComponent(runId)}/failures`
+      + `?storageLocation=${encodeURIComponent(storageLocation)}&format=csv`;
+    window.location.assign(url);
+  });
 
   $('#download').addEventListener('click', () => {
     const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
