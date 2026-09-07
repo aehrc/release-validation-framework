@@ -1193,19 +1193,36 @@ term. The 148 `MINUS`-shape expressions - the whole range-check pass - measure:
 converter, in a library already pinned. Verify with the order-sensitive digest
 over all 432 expressions.
 
-**3. Peak heap is the concept map, and it gates everything.** `All in memory.
-Using approx 9,456 MB` is logged immediately before the write loop, and
-`conceptMap.clear()` runs only after it, so the whole map is held for the
-duration - twice over, once per content form. This is why the phase peaks at
-11.3 GB of 12 GB, why a boxed scratch array was enough to OOM it, and why the
-disk-backed index bought only 312 MB: it never touched the map. Streaming
-concepts into the writer instead of materialising them first is the structural
-fix and the only one that creates headroom.
+**3. ~~Peak heap is the concept map, and it gates everything.~~ WRONG, corrected
+2026-09-07 by measurement.** `All in memory. Using approx 9,456 MB` prints
+`Runtime.getRuntime().totalMemory()` - the size of the whole heap - not the size
+of the map, so it was never evidence about the map. Sampled with a class
+histogram after a forced GC, with the map fully built and still held, the live
+set is **3.04 GiB**: 30M Strings plus their byte arrays are 1.77 GiB of it, and
+8M HashMaps another 0.6 GiB. Both maps do coexist (`ConceptImpl` 1,444,808 =
+2 x 722,404), but that is ~6 GiB against a 14.2 GiB peak.
+
+**The peak is compiled query automata, not data.** At the true high-water mark
+of 14,225 MiB: 19,950,001 `[I` totalling **10.94 GB**, alongside 3,991,430
+`TermRangeQuery` and a matching ~4M each of `Automaton`, `CompiledAutomaton`,
+`ByteRunAutomaton` and `Transition`. Cause: `SnomedQueryService.buildRangeList`
+renders "attribute value NOT in set S" as one `{a TO b}` range per member of S
+inside a query *string*, and the classic parser compiles an automaton per
+clause - see `BooleanQuery.setMaxClauseCount(400_000)` at
+`SnomedQueryService.java:60`. Replacing that string with a term-set query is
+the lever; streaming the concept map cannot reach the ceiling and should not be
+funded on memory grounds.
 
 **4. `executeAttributeDomainValidation` is still serial** (ValidationService:236
-and :567). Present in every profile, cost never isolated. Time it before
-touching it - if it is under ~40 s there is nothing worth the concurrency risk,
-and its sibling range pass has an order-dependent dedupe that must stay serial.
+and :567). **Cost isolated 2026-09-07: 153.5 s, 4,561 queries** - 21% of a 710 s
+sequential run, so above the ~40 s threshold and worth fixing. But NOT by
+collapsing it to `descendantOrSelfOf(members)`: `LateralityProbe` implements
+both forms and they diverge, because `<< ^723264001` is silently equivalent to
+`^723264001` in this service - the descendant operator is dropped over a
+member-of expression, losing the members' descendants and inventing 4,560
+failures. Fix it by reading each candidate's ancestors from the index instead
+of building one ECL string per concept. Its sibling range pass still has an
+order-dependent dedupe that must stay serial.
 
 #### Ruled out, with reasons
 
