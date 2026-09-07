@@ -45,9 +45,39 @@ replaces is the other half of this cost. IHTSDO/release-mrcm-validator uses it
   (including the 58-case `ExamplesExpressionConstraintToLuceneConverterTest`,
   updated here where the expected Lucene string changes).
 
+## The second half: reading ids at scale
+
+`conceptsWithAnyAncestor` returns the whole domain - hundreds of thousands of
+ids - and reading each through a stored field is the cost that would replace
+the one this removes. So the concept id is also written as a
+`NumericDocValuesField` and read back per segment, which is what makes the new
+query shape worth having rather than merely different. It is in the same PR
+because the query is not usable without it, not because they are the same idea.
+
+Index format: the speed arrives with an index rebuild.
+`ReleaseImportManager` handles the field being absent, so an existing index
+still opens.
+
 ## What a reviewer should push back on
 
-The term-dictionary subtraction is only equivalent because the field is a
+**The term-dictionary subtraction** is only equivalent because the field is a
 single-valued id field, so "terms present" is exactly the domain. It would NOT
 be equivalent for an analysed text field, and the code says so at the point it
 matters.
+
+**The sentinel/ThreadLocal handoff is the ugly part.** The converter cannot
+build a `TermInSetQuery` itself - it emits Lucene query *text* - so it writes a
+`__notinset__` token and parks the excluded terms in a `ThreadLocal` the
+service drains when it sees the token. That is hidden coupling between two
+classes, and it leaks if the token is ever emitted without being consumed.
+
+It is done this way because the alternative is changing the converter's return
+type from `String` to a query object, which touches every caller and all 83
+converter tests. If you would rather have that, say so and I will do it: the
+measurement does not depend on this detail, and I would rather carry a bigger
+diff than invisible state.
+
+**Instrumentation.** `termSetQueriesBuilt()` counts the new queries so a run can
+prove which path it took. Two of my own parity results in this area were wrong
+because both arms ran the old code and agreed; a counter is how that stops
+being possible. Easy to drop if you would rather not have counters here.
