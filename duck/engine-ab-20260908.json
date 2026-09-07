@@ -1,0 +1,39 @@
+{
+ "sharedAssertions": 149,
+ "identical": 147,
+ "identicalWithFindings": 12,
+ "identicalBothRanEmpty": 135,
+ "identicalNeitherRan": 0,
+ "ranOnOneEngineOnly": [],
+ "divergent": 2,
+ "explained": 2,
+ "unexplained": [],
+ "wrongDirection": [],
+ "resolvedBaselineEntries": [],
+ "explainedDivergences": [
+  {
+   "assertionUuid": "02cf4438-170e-4b6b-b5da-624ef730a8e0",
+   "class": "mysql-errors-on-identifier-having-no-id-column",
+   "assertionText": "Components inactivated in the current release must remain in the module in which they were previously published.",
+   "incumbentFailureCount": -1,
+   "candidateFailureCount": 0
+  },
+  {
+   "assertionUuid": "26c25479-c3ba-47f2-9851-bb05ae42ad48",
+   "class": "duckdb-reports-not-run-where-mysql-false-passes",
+   "assertionText": "All OWL Expression inactivated in current release must have been active in the previous release.",
+   "incumbentFailureCount": 0,
+   "candidateFailureCount": -1
+  }
+ ],
+ "coverage": {
+  "accounted": {},
+  "uncovered": 0,
+  "uncoveredAllowed": 0,
+  "uncoveredAssertions": [],
+  "onlyCandidate": []
+ },
+ "incumbentSeconds": 1380,
+ "candidateSeconds": 180,
+ "speedup": 7.7
+}
