@@ -32,7 +32,13 @@ HEAP="${HEAP:-8g}"
 RELEASE=""
 PREVIOUS=""
 DEPENDENCY=""
-GROUPS="release-type-validation file-centric-validation"
+# NOT named GROUPS. In bash that is a special variable holding the calling
+# user's group ids, and assigning to it does nothing: `--groups
+# release-type-validation` silently became `--groups 1103459` - my primary gid -
+# and RVF answered HTTP 412 because no such assertion group exists. The A/B
+# submitted the wrong thing and failed for a reason that looked like a server
+# problem.
+ASSERTION_GROUPS="release-type-validation file-centric-validation"
 EFFECTIVE_TIME=""
 KEEP_UP="${KEEP_UP:-0}"
 
@@ -41,7 +47,7 @@ while [ $# -gt 0 ]; do
     --release)    RELEASE="$2"; shift 2 ;;
     --previous)   PREVIOUS="$2"; shift 2 ;;
     --dependency) DEPENDENCY="$2"; shift 2 ;;
-    --groups)     GROUPS="$2"; shift 2 ;;
+    --groups)     ASSERTION_GROUPS="$2"; shift 2 ;;
     --effective-time) EFFECTIVE_TIME="$2"; shift 2 ;;
     --keep-up)    KEEP_UP=1; shift ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
@@ -79,6 +85,25 @@ wait_for_http() {
   echo "$label did not come up within ${limit}s" >&2
   return 1
 }
+
+# MySQL's generic Linux tarball links libaio.so.1, and Ubuntu 24.04 ships that
+# library as libaio.so.1t64 - the time_t transition rename. mysqld then dies
+# with "error while loading shared libraries: libaio.so.1" before it logs
+# anything, which reads like a broken download rather than a distro rename.
+#
+# A symlink in a private directory fixes it with no root and no apt, and
+# LD_LIBRARY_PATH already points at $WORK/libs below.
+mkdir -p "$WORK/libs"
+if [ ! -e "$WORK/libs/libaio.so.1" ]; then
+  for candidate in /usr/lib/x86_64-linux-gnu/libaio.so.1t64 \
+                   /usr/lib64/libaio.so.1t64 /lib/x86_64-linux-gnu/libaio.so.1t64; do
+    if [ -e "$candidate" ]; then
+      ln -sf "$candidate" "$WORK/libs/libaio.so.1"
+      echo "  shimmed $(basename "$candidate") as libaio.so.1"
+      break
+    fi
+  done
+fi
 
 echo "=== MySQL ==="
 if ! "$MYSQL_HOME/bin/mysqladmin" --socket="$MYSQL_SOCKET" -uroot -p"$MYSQL_PASSWORD" ping >/dev/null 2>&1; then
@@ -131,7 +156,7 @@ wait_for_http "$DUCK_URL" "duckdb engine" 400
 
 echo "=== A/B ==="
 ARGS=(--mysql-url "$MYSQL_URL" --duck-url "$DUCK_URL" --release "$RELEASE"
-      --groups $GROUPS --release-as-edition
+      --groups $ASSERTION_GROUPS --release-as-edition
       --out "$WORK/engine-ab.json" --junit "$WORK/engine-ab.xml"
       --mysql-report "$WORK/engine-ab-mysql.json" --duck-report "$WORK/engine-ab-duck.json")
 [ -n "$PREVIOUS" ] && ARGS+=(--previous-release "$PREVIOUS")
