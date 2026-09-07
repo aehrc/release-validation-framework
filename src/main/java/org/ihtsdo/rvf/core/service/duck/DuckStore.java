@@ -103,6 +103,31 @@ public final class DuckStore {
 				generator.path("tool").asText(""));
 	}
 
+	/** One pack recorded in a merged store: its identity and its size. */
+	public record PackRecord(String name, String version, String digest, int assertions) {
+	}
+
+	/**
+	 * The packs this store was assembled from, empty for an unmerged one.
+	 *
+	 * <p>Provenance travels INSIDE the artefact rather than beside it, so a
+	 * report can say which assertions produced it by reading the store it
+	 * executed. A service holding a second copy of the answer is a second
+	 * answer, and the two can disagree exactly when it matters - after a
+	 * reload.
+	 */
+	public List<PackRecord> packs() {
+		List<PackRecord> out = new ArrayList<>();
+		for (JsonNode node : root.path("packs")) {
+			out.add(new PackRecord(
+					node.path("name").asText(),
+					node.path("version").asText(),
+					node.path("digest").asText(),
+					node.path("assertions").asInt()));
+		}
+		return Collections.unmodifiableList(out);
+	}
+
 	/** One assertion's precompiled statements and the metadata to report it. */
 	public record StoredAssertion(String uuid, String file, String text,
 			String keywords, String severity, List<String> statements) {

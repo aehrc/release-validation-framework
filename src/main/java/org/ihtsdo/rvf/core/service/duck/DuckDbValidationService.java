@@ -529,7 +529,8 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 
 		constructTestReport(statusReport, executionConfig, timeStart, items,
 				new DuckFailuresExtractor(connection, qaResultTable, whitelistService,
-						source::findAll));
+						source::findAll),
+				store);
 		archiveFailures(connection, reportStorage);
 		return statusReport;
 	}
@@ -886,8 +887,21 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 	 */
 	private void constructTestReport(ValidationStatusReport statusReport,
 			MysqlExecutionConfig executionConfig, long timeStart, List<TestRunItem> items,
-			DuckFailuresExtractor extractor) {
+			DuckFailuresExtractor extractor, DuckStore store) {
 		ValidationReport report = statusReport.getResultReport();
+		// Which assertions produced this report. Nothing else can say once packs
+		// are fetched at runtime: the image tag named the corpus while the
+		// corpus was baked in, and a pack set is not in the tag. Recorded from
+		// what is LOADED rather than from configuration, so a report describes
+		// the corpus that ran and not the one someone meant to run.
+		// Read from the STORE this run executed, not from a service holding
+		// another copy: the merged store records the packs it was assembled
+		// from, so provenance travels inside the artefact and there is one
+		// answer rather than two that can disagree.
+		report.setAssertionPacks(store.packs().stream()
+				.map(pack -> new ValidationReport.AssertionPackRecord(
+						pack.name(), pack.version(), pack.digest(), pack.assertions()))
+				.toList());
 		try {
 			extractor.extractTestResults(items, executionConfig);
 

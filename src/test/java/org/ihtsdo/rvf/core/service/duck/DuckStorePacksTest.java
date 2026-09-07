@@ -221,16 +221,33 @@ class DuckStorePacksTest {
 	void theMergedStoreRecordsWhatWentIntoIt() throws Exception {
 		// Provenance is the thing packs cost: baked in, the image tag named the
 		// corpus; fetched at runtime, only this can answer "which assertions
-		// produced this report".
+		// produced this report". It lives INSIDE the artefact so a report can
+		// read it from the store that ran, rather than from a service holding a
+		// second copy of the answer.
 		DuckStore merged = DuckStorePacks.merge(List.of(
 				packOf("international", "2026.09.1",
 						pack(UUID_A, "a.sql", "SELECT 1", MACRO_A, "h1")),
 				packOf("amtv4", "2026.09.2",
 						pack(UUID_B, "b.sql", "SELECT 2", MACRO_B, "h1"))));
 
-		assertTrue(merged.toJson().contains("\"name\":\"amtv4\""), merged.toJson());
-		assertTrue(merged.toJson().contains("2026.09.1"), merged.toJson());
-		assertTrue(merged.toJson().contains("\"digest\""), merged.toJson());
+		List<DuckStore.PackRecord> packs = merged.packs();
+		assertEquals(2, packs.size());
+		assertEquals("international", packs.get(0).name());
+		assertEquals("2026.09.2", packs.get(1).version());
+		assertEquals(1, packs.get(1).assertions());
+		assertTrue(packs.get(1).digest().startsWith("sha256:"), packs.get(1).digest());
+
+		// And it survives a round trip, because the report is written from a
+		// store that was read back from disk on the worker.
+		assertEquals(2, DuckStore.parse(merged.toJson()).packs().size());
+	}
+
+	@Test
+	void anUnmergedStoreHasNoPacks() throws Exception {
+		// Every deployment today. The field has to be empty rather than absent
+		// or invented, so a report from the bundled store says so plainly.
+		assertTrue(DuckStore.parse(pack(UUID_A, "a.sql", "SELECT 1", MACRO_A, "h1"))
+				.packs().isEmpty());
 	}
 
 	@Test
