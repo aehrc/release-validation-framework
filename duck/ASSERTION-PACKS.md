@@ -186,5 +186,44 @@ the invariant - the failure to design against is not an exception but an engine
 serving a half-applied assertion set, because that reports a release as clean
 for assertions it no longer holds.
 
-Still to build: recording the pack list in the validation report, and publishing
-the AMT pack from its own repository.
+## Proven with the real extension pack, 2026-09-08
+
+An AMT-only pack was published from the 200 extension scripts and merged with
+the bundled store:
+
+    bundled store          360 assertions
+    amtv4 pack             200 assertions, 217KB, sha256 eee2c389...
+    merged                 560 assertions, 20 ports, no conflicts
+    amtv4-keyworded        200 in the merged store
+    provenance             both packs recorded, with the pack's digest
+
+So the mechanism does what the hand-staged volume does today, with three
+differences that are the entire point: the pack is a published artefact rather
+than mutable state outside git, its digest is pinned so a run is reproducible,
+and the report says which packs produced it.
+
+**The pack itself is not committed here, and must not be.** This repository is
+public; the AMT assertions are not. That is not a hypothetical constraint - the
+SQL and the 200 assertion names were briefly committed here on 2026-09-07 and
+had to be purged from history. The pack lives at `/data/work/amt-pack.json` on
+the build host and belongs in `aehrc/rvf` beside the scripts it was built from.
+
+### Publishing it, when someone decides to
+
+    # in a checkout of aehrc/rvf, from the AMT scripts and manifest
+    publish_store.py --scripts testscripts/scripts/amtv4 \
+                     --manifest-root testscripts \
+                     --prerequisites <rvf>/duck/prerequisites \
+                     --ddl <rvf>/duck/create-tables-mysql.sql \
+                     --no-derive-uuids --out amtv4-pack.json
+    sha256sum amtv4-pack.json          # this is what gets pinned
+
+Attach it to a release in that repository, then point a deployment at it:
+
+    rvf.assertion.packs=name=amtv4;version=<tag>;uri=<asset url>;sha256=<hex>
+
+and `POST /assertions/packs/refresh`. The corpus overlay on the shared volume
+and the private-image-layering plan both stop being necessary at that point.
+
+Not done here on purpose: publishing requires a branch on a private repository,
+which is a decision rather than a step.
