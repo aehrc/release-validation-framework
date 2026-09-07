@@ -1,5 +1,10 @@
 package org.ihtsdo.rvf.rest.controller;
 
+import org.ihtsdo.rvf.core.service.duck.DuckAssertionService;
+import org.springframework.beans.factory.ObjectProvider;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -53,15 +58,70 @@ public class AssertionController {
 	private final DroolsRulesValidationService droolsValidationService;
 	private final TraceabilityComparisonService traceabilityComparisonService;
 
+	/**
+	 * {@code ObjectProvider} for the DuckDB service because it only exists when
+	 * {@code rvf.execution.engine=duckdb}. Injecting it directly would make this
+	 * controller - and every endpoint on it - unloadable on the MySQL engine.
+	 */
+	private final ObjectProvider<DuckAssertionService> duckAssertions;
+
 	@Autowired
 	public AssertionController(AssertionService assertionService,
 			AssertionLookup assertionLookup,
 			DroolsRulesValidationService droolsValidationService,
-			TraceabilityComparisonService traceabilityComparisonService) {
+			TraceabilityComparisonService traceabilityComparisonService,
+			ObjectProvider<DuckAssertionService> duckAssertions) {
 		this.assertionService = assertionService;
 		this.assertionLookup = assertionLookup;
 		this.droolsValidationService = droolsValidationService;
 		this.traceabilityComparisonService = traceabilityComparisonService;
+		this.duckAssertions = duckAssertions;
+	}
+
+	/**
+	 * What an assertion actually runs, for showing beside its failures.
+	 *
+	 * <p>A report names an assertion and counts its failures; it cannot say what
+	 * the assertion checked. The transpiled statements are already in the store
+	 * the engine executes, so this reads them from there rather than from the
+	 * corpus - what is returned is what RAN, which is the only version worth
+	 * showing next to a failure.
+	 *
+	 * <p>404 for a Drools rule or an MRCM check, with a reason: those are not
+	 * SQL and have no statements. Saying "not found" without that reads as an
+	 * unknown assertion.
+	 */
+	@GetMapping(value = "{uuid}/source")
+	@Operation(summary = "The source an assertion executes: its file and transpiled statements.",
+			description = "SQL assertions only. Drools rules and MRCM checks are not SQL and return 404 "
+					+ "with an explanation. The statements are read from the precompiled store, so they "
+					+ "are what actually ran rather than what the corpus currently holds.")
+	public ResponseEntity<Map<String, Object>> getAssertionSource(
+			@Parameter(description = "The assertion uuid") @PathVariable final String uuid) {
+
+		DuckAssertionService duck = duckAssertions.getIfAvailable();
+		if (duck == null) {
+			return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED)
+					.body(Map.of("uuid", uuid, "message",
+							"Assertion source is only available on the DuckDB execution engine."));
+		}
+		return duck.storedAssertion(uuid)
+				.<ResponseEntity<Map<String, Object>>>map(stored -> {
+					Map<String, Object> body = new LinkedHashMap<>();
+					body.put("uuid", stored.uuid());
+					body.put("type", "SQL");
+					body.put("file", stored.file());
+					body.put("text", stored.text());
+					body.put("keywords", stored.keywords());
+					body.put("severity", stored.severity());
+					body.put("statements", stored.statements());
+					return ResponseEntity.ok(body);
+				})
+				.orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
+						.body(Map.of("uuid", uuid, "message",
+								"No SQL source for this assertion. Drools rules and MRCM checks are "
+										+ "not SQL; their logic lives in the rule set and the MRCM "
+										+ "library rather than in a script.")));
 	}
 
 	@RequestMapping(value = "", method = RequestMethod.GET)

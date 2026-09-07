@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -100,6 +101,15 @@ public class DuckAssertionService implements AssertionService {
 
 	private volatile DuckAssertionSource loaded;
 
+	/**
+	 * The store the current {@link #loaded} source was built from.
+	 *
+	 * <p>Kept because the source exposes assertions in RVF's model, which
+	 * carries no SQL - the STATEMENTS live in the store. Answering "what does
+	 * this assertion actually run" needs the store itself.
+	 */
+	private volatile DuckStore store;
+
 	private DuckAssertionSource source() {
 		DuckAssertionSource current = loaded;
 		if (current != null) {
@@ -108,7 +118,9 @@ public class DuckAssertionService implements AssertionService {
 		synchronized (this) {
 			if (loaded == null) {
 				try {
-					loaded = DuckAssertionSource.from(storeLocator.load(), Path.of(corpusRoot));
+					DuckStore read = storeLocator.load();
+					loaded = DuckAssertionSource.from(read, Path.of(corpusRoot));
+					store = read;
 				} catch (IOException e) {
 					throw new UncheckedIOException("Failed to read the DuckDB assertion store "
 							+ storeLocator.description(), e);
@@ -119,6 +131,22 @@ public class DuckAssertionService implements AssertionService {
 			}
 			return loaded;
 		}
+	}
+
+	/**
+	 * What an assertion actually executes - its file, keywords and transpiled
+	 * statements.
+	 *
+	 * <p>Empty for an assertion this store does not carry, which includes every
+	 * Drools rule and MRCM check: those are not SQL and have no statements to
+	 * show. The caller has to say so rather than imply the assertion is unknown.
+	 */
+	public Optional<DuckStore.StoredAssertion> storedAssertion(String uuid) {
+		source();
+		DuckStore current = store;
+		return current == null
+				? Optional.empty()
+				: Optional.ofNullable(current.assertions().get(uuid));
 	}
 
 	@Override
