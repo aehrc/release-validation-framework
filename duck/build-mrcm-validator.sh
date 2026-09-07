@@ -108,7 +108,18 @@ PY
 # rate limit, which is hours - and that, not Maven resolution, is what made a
 # clean-machine build look like it hung. A vulnerability scan is a thing to run
 # deliberately, not a side effect of building a patched library.
-mvn -q -s "$MAVEN_SETTINGS" -Dmaven.legacyLocalRepo=true -Ddependency-check.skip=true install -DskipTests -Dmaven.repo.local="$REPO"
+# The patched validator calls SnomedQueryService.conceptsWithAnyAncestor, which
+# exists only in our query-service fork. snomed-parent-bom pins
+# snomed-query-service to its own release, so without this override the build
+# compiles against the BOM's version and fails on a missing symbol. Taken from
+# the pom that consumes both, so the two forks cannot drift apart.
+SQS_VERSION="$(grep -oP '(?<=<snomed.query.service.version>)[^<]+' "$SCRIPT_DIR/../pom.xml")"
+[ -n "$SQS_VERSION" ] || { echo "FATAL: cannot read snomed.query.service.version from pom.xml" >&2; exit 1; }
+echo "==> compiling against snomed-query-service $SQS_VERSION"
+
+mvn -q -s "$MAVEN_SETTINGS" -Dmaven.legacyLocalRepo=true -Ddependency-check.skip=true \
+    -Dsnomed-query-service.version="$SQS_VERSION" \
+    install -DskipTests -Dmaven.repo.local="$REPO"
 
 JAR="$REPO/org/snomed/quality/mrcm-validator/$VERSION/mrcm-validator-$VERSION.jar"
 [ -f "$JAR" ] || { echo "FATAL: $JAR not produced" >&2; exit 1; }

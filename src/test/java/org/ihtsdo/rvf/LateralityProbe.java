@@ -9,6 +9,9 @@ import org.ihtsdo.rvf.core.service.RF2ReleaseTypeUnpacker;
 import java.io.File;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -102,10 +105,23 @@ public final class LateralityProbe {
 		System.out.printf("  PER-CONCEPT  : %,d queries, %.1fs, %,d violated%n",
 				queries, oldMs / 1000.0, oldViolated.size());
 
-		// ---- set-based: descendantOrSelfOf(members), one query ----
+		// ---- ancestor-set: one term-set query over the indexed ancestors ----
+		//
+		// The rule is that a concept may carry Laterality only if it IS, or
+		// descends from, a member. "c has an ancestor in M" is exactly "c's
+		// indexed ancestor field contains some m in M", which one term-set
+		// query answers for every candidate at once.
+		//
+		// NOT "<< ^723264001": that reads as the members themselves here, the
+		// descendant operator being dropped over a member-of expression, which
+		// loses the members' descendants. Measured at 4,560 invented failures.
 		t0 = System.currentTimeMillis();
-		Set<Long> allowed = new HashSet<>(
-				q.eclQueryReturnConceptIdentifiers("<< " + MEMBERS, 0, -1).conceptIds());
+		Set<Long> allowed = new HashSet<>(membersList);
+		List<String> memberStrings = new ArrayList<>(membersList.size());
+		for (Long m : membersList) {
+			memberStrings.add(String.valueOf(m));
+		}
+		allowed.addAll(q.conceptsWithAnyAncestor(memberStrings));
 		Set<Long> newViolated = new LinkedHashSet<>();
 		for (Long conceptId : withAttribute) {
 			if (!allowed.contains(conceptId)) {
@@ -113,7 +129,7 @@ public final class LateralityProbe {
 			}
 		}
 		long newMs = System.currentTimeMillis() - t0;
-		System.out.printf("  SET-BASED    : 2 queries, %.1fs, %,d violated  (allowed set %,d)%n",
+		System.out.printf("  ANCESTOR-SET : 2 queries, %.1fs, %,d violated  (allowed set %,d)%n",
 				newMs / 1000.0, newViolated.size(), allowed.size());
 
 		// ---- the only thing that licenses the change ----
@@ -130,6 +146,55 @@ public final class LateralityProbe {
 			System.exit(1);
 		}
 		System.out.printf("  VERDICT: identical, speedup %.1fx%n", oldMs / (double) Math.max(newMs, 1));
+
+		// Both forms returned ZERO violations above, so that comparison is two
+		// empty sets matching: it shows the fast form invents nothing, but not
+		// that it would still FIND a violation. So mutate the input - drop the
+		// member that carries the most candidates - and require both forms to
+		// report the same NON-EMPTY set.
+		Map<Long, Integer> weight = new HashMap<>();
+		for (Long m : membersList) {
+			weight.put(m, q.conceptsWithAnyAncestor(List.of(String.valueOf(m))).size());
+		}
+		Long heaviest = membersList.stream().max(Comparator.comparingInt(weight::get)).orElseThrow();
+		List<Long> reduced = new ArrayList<>(membersList);
+		reduced.remove(heaviest);
+		System.out.printf("%n  sensitivity  : dropping member %d, which carries %,d descendants%n",
+				heaviest, weight.get(heaviest));
+
+		Set<Long> mutOld = new LinkedHashSet<>();
+		for (Long conceptId : withAttribute) {
+			if (reduced.contains(conceptId)) {
+				continue;
+			}
+			List<Long> ancestors = q.eclQueryReturnConceptIdentifiers(">" + conceptId, 0, -1).conceptIds();
+			if (ancestors.stream().noneMatch(reduced::contains)) {
+				mutOld.add(conceptId);
+			}
+		}
+		Set<Long> mutAllowed = new HashSet<>(reduced);
+		List<String> reducedStrings = new ArrayList<>(reduced.size());
+		for (Long m : reduced) {
+			reducedStrings.add(String.valueOf(m));
+		}
+		mutAllowed.addAll(q.conceptsWithAnyAncestor(reducedStrings));
+		Set<Long> mutNew = new LinkedHashSet<>();
+		for (Long conceptId : withAttribute) {
+			if (!mutAllowed.contains(conceptId)) {
+				mutNew.add(conceptId);
+			}
+		}
+		System.out.printf("  mutated      : per-concept %,d violated, ancestor-set %,d violated%n",
+				mutOld.size(), mutNew.size());
+		if (mutOld.isEmpty()) {
+			System.out.println("  VERDICT: INCONCLUSIVE - the mutation produced no violations to compare");
+			System.exit(1);
+		}
+		if (!mutOld.equals(mutNew)) {
+			System.out.println("  VERDICT: NOT equivalent under mutation, do not ship");
+			System.exit(1);
+		}
+		System.out.printf("  VERDICT: identical on %,d real violations under mutation too%n", mutOld.size());
 		store.destroy();
 	}
 }

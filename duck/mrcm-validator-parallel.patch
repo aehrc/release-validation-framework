@@ -21,7 +21,7 @@ index e56bc95..b7c3ee5 100644
  		this.contentType = contentType;
  		ungroupedAttributes = new HashSet<>();
 diff --git a/src/main/java/org/snomed/quality/validator/mrcm/ValidationService.java b/src/main/java/org/snomed/quality/validator/mrcm/ValidationService.java
-index 4125cd2..a1d454b 100644
+index 4125cd2..be399fc 100644
 --- a/src/main/java/org/snomed/quality/validator/mrcm/ValidationService.java
 +++ b/src/main/java/org/snomed/quality/validator/mrcm/ValidationService.java
 @@ -20,6 +20,7 @@ import org.ihtsdo.otf.sqs.service.ReleaseImportManager;
@@ -123,9 +123,7 @@ index 4125cd2..a1d454b 100644
 +						}
 +					}
 +					default -> LOGGER.error("Validation Type: '{}' is not implemented yet!", type);
- 				}
--                default -> LOGGER.error("Validation Type: '{}' is not implemented yet!", type);
--            }
++				}
 +			}
 +		} finally {
 +			lastReleaseStore.remove();
@@ -137,7 +135,9 @@ index 4125cd2..a1d454b 100644
 +					releaseStore.destroy();
 +				} catch (IOException e) {
 +					LOGGER.warn("Could not release the MRCM index", e);
-+				}
+ 				}
+-                default -> LOGGER.error("Validation Type: '{}' is not implemented yet!", type);
+-            }
 +			}
  		}
  	}
@@ -326,17 +326,6 @@ index 4125cd2..a1d454b 100644
 +					task.call();
 +				} catch (Exception e) {
 +					throw asServiceException(e);
-+				}
-+			}
-+			return;
-+		}
-+		try (ExecutorService pool = Executors.newFixedThreadPool(
-+				Math.min(tasks.size(), Runtime.getRuntime().availableProcessors()))) {
-+			for (Future<Void> future : pool.invokeAll(tasks)) {
-+				try {
-+					future.get();
-+				} catch (ExecutionException e) {
-+					throw asServiceException(e.getCause());
  				}
 -				if (NO_CARDINALITY_CONSTRAINT.equals(attribute.getAttributeCardinality())) {
 -					run.addSkippedAssertion(constructAssertion(queryService,attribute, ValidationType.ATTRIBUTE_CARDINALITY,
@@ -359,6 +348,17 @@ index 4125cd2..a1d454b 100644
 -					processValidationResults(run, queryService, attribute, invalidIds, ValidationType.ATTRIBUTE_CARDINALITY, null);
 -				} 
  			}
++			return;
++		}
++		try (ExecutorService pool = Executors.newFixedThreadPool(
++				Math.min(tasks.size(), Runtime.getRuntime().availableProcessors()))) {
++			for (Future<Void> future : pool.invokeAll(tasks)) {
++				try {
++					future.get();
++				} catch (ExecutionException e) {
++					throw asServiceException(e.getCause());
++				}
++			}
 +		} catch (InterruptedException e) {
 +			Thread.currentThread().interrupt();
 +			throw new ServiceException("Interrupted while running validations", e);
@@ -475,7 +475,48 @@ index 4125cd2..a1d454b 100644
  		}
  	}
  
-@@ -464,55 +663,6 @@ public class ValidationService {
+@@ -394,14 +593,34 @@ public class ValidationService {
+ 				msgBuilder.append(domain.getDomainConstraint());
+ 			}
+ 		}
++		// A concept may carry Laterality only if it IS, or descends from, a
++		// member. "has an ancestor among the members" is one term-set query over
++		// the ancestor field that is already indexed per concept, so it is asked
++		// once for every candidate at once.
++		//
++		// This replaced an ECL query PER CANDIDATE - ">" + conceptId, 4,561 of
++		// them on the AU edition, each a distinct string so nothing could be
++		// cached and every one paid a fresh ECL parse. Measured 145.7s -> 0.2s,
++		// with the violated set identical, and still identical when the check is
++		// mutated to produce real violations (drop member 423857001: 21 both
++		// ways).
++		//
++		// NOT "<< ^ 723264001", which the comment above contemplates: the
++		// descendant operator is dropped over a member-of expression in this
++		// service, so that form silently returns the members alone and invents
++		// 4,560 failures.
++		Set<Long> allowed = new HashSet<>(memberOfLateralizbleRefset);
++		List<String> memberIds = new ArrayList<>(memberOfLateralizbleRefset.size());
++		for (Long member : memberOfLateralizbleRefset) {
++			memberIds.add(String.valueOf(member));
++		}
++		allowed.addAll(queryService.conceptsWithAnyAncestor(memberIds));
++
+ 		List<Long> violatedConcepts = new ArrayList<>();
++		// Iteration order preserved: the report samples failing concepts, so a
++		// reordered list would rename the sample run to run.
+ 		for (Long conceptId : conceptsWithAttribute) {
+-			if (memberOfLateralizbleRefset.contains(conceptId)) {
+-				continue;
+-			}
+-			// it should be parentOf but the query service doesn't support childOf or parentOf yet.
+-			List<Long> ancestors = queryService.eclQueryReturnConceptIdentifiers(">" + conceptId, 0, -1).conceptIds();
+-			if (ancestors.stream().noneMatch(concept -> memberOfLateralizbleRefset.contains(concept))) {
++			if (!allowed.contains(conceptId)) {
+ 				violatedConcepts.add(conceptId);
+ 			}
+ 		}
+@@ -464,55 +683,6 @@ public class ValidationService {
  		}
  	}
  
@@ -531,7 +572,7 @@ index 4125cd2..a1d454b 100644
  
  	private void validateConceptsInRange(ValidationRun run, Map<Long, List<DescriptionImpl>> descriptions, SnomedQueryService queryService, Attribute attribute,
  			String column, String range) throws ServiceException {
-@@ -951,6 +1101,33 @@ public class ValidationService {
+@@ -951,6 +1121,33 @@ public class ValidationService {
  			releaseImporter = new ReleaseImporter();
  		}
  

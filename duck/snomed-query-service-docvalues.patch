@@ -286,7 +286,7 @@ index 7043029..183e843 100644
  		conceptDoc.add(new StringField(ConceptFieldNames.MODULE_ID, concept.getModuleId(), Field.Store.YES));
  		conceptDoc.add(new StringField(ConceptFieldNames.DEFINITION_STATUS_ID, concept.getDefinitionStatusId(), Field.Store.YES));
 diff --git a/src/main/java/org/ihtsdo/otf/sqs/service/SnomedQueryService.java b/src/main/java/org/ihtsdo/otf/sqs/service/SnomedQueryService.java
-index a7a9a5e..690f5f6 100644
+index a7a9a5e..9340a95 100644
 --- a/src/main/java/org/ihtsdo/otf/sqs/service/SnomedQueryService.java
 +++ b/src/main/java/org/ihtsdo/otf/sqs/service/SnomedQueryService.java
 @@ -6,7 +6,13 @@ import org.apache.lucene.analysis.Analyzer;
@@ -339,7 +339,7 @@ index a7a9a5e..690f5f6 100644
  	private final ExpressionConstraintToLuceneConverter eclToLucene;
  	private final IndexSearcher indexSearcher;
  	private final Analyzer analyzer;
-@@ -209,17 +244,93 @@ public class SnomedQueryService {
+@@ -209,17 +244,119 @@ public class SnomedQueryService {
  			final TopDocs topDocs = indexSearcher.search(query, fetchLimit);
  			final ScoreDoc[] scoreDocs = topDocs.scoreDocs;
  			int total = (int) topDocs.totalHits.value;
@@ -355,6 +355,32 @@ index a7a9a5e..690f5f6 100644
  		}
  	}
  
++	/**
++	 * Every concept with at least one of {@code ancestorIds} among its
++	 * ancestors.
++	 *
++	 * <p>Exists so a caller does not have to ask one concept at a time.
++	 * MRCM's lateralizable-domain check was building an ECL string per
++	 * candidate concept - {@code ">" + conceptId}, 4,561 of them on the AU
++	 * edition, each a distinct string so none of it could be cached and every
++	 * one paid a fresh ECL parse. The ancestor relation is already indexed per
++	 * concept, so the same question is one term-set query over that field.
++	 *
++	 * <p>{@code TermInSetQuery} rather than a boolean OR of term queries: the
++	 * set is prefix-compressed and holds no automata, so a large ancestor set
++	 * stays cheap.
++	 */
++	public List<Long> conceptsWithAnyAncestor(Collection<String> ancestorIds) throws ServiceException {
++		if (ancestorIds == null || ancestorIds.isEmpty()) {
++			return List.of();
++		}
++		List<BytesRef> terms = new ArrayList<>(ancestorIds.size());
++		for (String id : ancestorIds) {
++			terms.add(new BytesRef(id));
++		}
++		return getConceptIdResults(new TermInSetQuery(ConceptFieldNames.ANCESTOR, terms), 0, -1).conceptIds();
++	}
++
 +	/**
 +	 * Reads the concept id of every hit from doc values.
 +	 *
@@ -439,7 +465,7 @@ index a7a9a5e..690f5f6 100644
  	private ConceptResults getConceptResults(Query query, int offset, int limit) throws ServiceException {
  		try {
  			if (offset < 0) offset = 0;
-@@ -294,12 +405,86 @@ public class SnomedQueryService {
+@@ -294,12 +431,86 @@ public class SnomedQueryService {
  				}
  			}
  			Collections.sort(conceptRelatives);
@@ -526,7 +552,7 @@ index a7a9a5e..690f5f6 100644
  	private String buildRangeList(List<String> conceptRelatives) {
  		StringBuilder builder = new StringBuilder();
  		builder.append("{* TO ");
-@@ -433,6 +618,27 @@ public class SnomedQueryService {
+@@ -433,6 +644,27 @@ public class SnomedQueryService {
  			super(f, a);
  		}
  
