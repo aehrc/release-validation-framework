@@ -123,9 +123,18 @@ precisely the releases someone needs one about.
   never ran.
 * the same digest recording for the 200 AMT assertions, which live in a store
   this repo deliberately does not carry - it belongs beside them in `aehrc/rvf`.
-* Drools `RulesTestManual` (109 rule directories) does not run in CI at all:
-  the class name matches no surefire pattern and it expects the rules checked
-  out beside the engine.
+* **Drools: DONE** (`ba3e4a98`). `DroolsRuleTestCasesTest` gates all 109 rule
+  directories of the pinned clone - 237 pass-concepts, 307 fail-concepts, 6
+  seconds, in CI by construction since surefire matches `*Test` and
+  `checkout-resources.sh` is a build phase. Upstream's support classes are
+  copied verbatim under `org.ihtsdo.drools.rulestestrig` so a re-sync is a
+  diff. Sixteen directories assert nothing and are named in
+  `src/test/resources/drools/rules-without-test-cases.tsv`: 13 placeholders,
+  and **3 real upstream gaps** worth a PR -
+  `modelling-change-on-base-substance-concept`, `relationship-invalid-target`
+  and `redundant-is-a-relationship`, the last of which fires on real AU content
+  while nothing states what it should find. `-Ddrools.rules.dir` gates a
+  candidate ref before the pin moves; `-Ddrools.rules.only` runs one directory.
 * MRCM parity is a COUNT (`inferred 497, stated 481`), not a digest, so two
   changes swapping one finding for another would pass.
 
