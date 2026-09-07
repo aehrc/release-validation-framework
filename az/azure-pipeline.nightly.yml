@@ -122,25 +122,50 @@ parameters:
     displayName: 'Minutes to wait for the validation to finish'
     type: number
     default: 60
-  # A floor, not a target: it exists to catch a phase that silently did not run.
+  # Floors, not targets: they exist to catch a phase or a category that
+  # silently did not run.
   #
-  # Measured, not guessed. Build 16226 - the first green full-scope run, with a
-  # previous release - executed 1282 assertions across four phases:
+  # Measured, not guessed, and re-measured once the amtv4 assertions were
+  # wired. Build 16247 - full scope, with a previous release - executed 1,482:
   #
-  #   ARCHIVE_STRUCTURAL  0 failures
-  #   SQL                15 failures
-  #   DROOL_RULES         6 failures
-  #   MRCM                1 failure
+  #   MRCM                979
+  #   SQL                 425   (225 international + 200 amtv4)
+  #   DROOL_RULES          78
+  #   ARCHIVE_STRUCTURAL    0 failures
   #
-  # 1000 sits below that and far above any single phase, so losing a phase
-  # trips it while ordinary variation in the corpus does not. Note how badly a
-  # guess would have served: without a previous release the same groups produce
-  # 209, because the release-type assertions have nothing to compare against and
-  # are simply absent from the report rather than failing.
+  # 1,400 sits below that with headroom for MRCM, whose count moves with the
+  # content of the MRCM refsets, and far above any single phase.
+  #
+  # The old floor of 1,000 was set against build 16226's 1,282 and was too low
+  # to do its job: when the 200 amtv4 assertions were absent, SQL ran 225 of
+  # 425 and the total of 1,282 cleared 1,000 without a murmur. A total
+  # dominated by a phase that legitimately varies cannot police a phase that
+  # does not, which is why SQL now has its own floor below.
+  #
+  # Note how badly a guess would serve either number: without a previous
+  # release the same groups produce 209, because the release-type assertions
+  # have nothing to compare against and are simply absent from the report
+  # rather than failing.
   - name: minAssertions
-    displayName: 'Fail if fewer than this many assertions ran (guards a silently skipped phase)'
+    displayName: 'Fail if fewer than this many assertions ran in total (guards a silently skipped phase)'
     type: number
-    default: 1000
+    default: 1400
+  # SQL is the deterministic part - group selection times the precompiled store
+  # - so this is the floor that catches an assertion CATEGORY going absent.
+  # 400 leaves room for the release-type assertions that drop out when a
+  # previous release is genuinely unavailable, while 225 - the international
+  # groups alone, i.e. amtv4 gone - fails it. Verified against the real
+  # reports: 16247 clears both floors, and 16226 and 16246 fail both.
+  #
+  # Consequence worth stating: a DELIBERATE narrower run - someone overriding
+  # `groups` to the international set - must lower these too, or it fails for
+  # doing what was asked. That is the right way round. The floors encode what
+  # the scheduled nightly is supposed to cover, and a manual run that covers
+  # less should have to say so.
+  - name: minSqlAssertions
+    displayName: 'Fail if fewer than this many SQL assertions ran (guards a silently absent category)'
+    type: number
+    default: 400
 
 variables:
   - group: ncts-release
@@ -561,10 +586,37 @@ stages:
                     if requested and not ran:
                         problems.append(f'{phase} was requested but the report says "{line}"')
 
-                tests = (report.get('TestResult') or {}).get('totalTestsRun') or 0
+                # Per testType, not just the total. The total is dominated by
+                # MRCM - 979 of build 16247's 1,482 - and MRCM's count moves
+                # with the content of the MRCM refsets, so a total floor has to
+                # sit low enough to tolerate that. Which means it cannot see the
+                # failure that actually happened: the 200 amtv4 assertions were
+                # missing for weeks, SQL ran 225 instead of 425, and 1,282 total
+                # cleared a floor of 1,000 without a murmur.
+                #
+                # SQL is the deterministic part - group selection times the
+                # store - so it gets its own floor, and that is the one that
+                # catches a category silently going absent.
+                result = report.get('TestResult') or {}
+                tests = result.get('totalTestsRun') or 0
+                by_type = {}
+                for bucket in ('assertionsFailed', 'assertionsWarning',
+                               'assertionsPassed', 'assertionsSkipped'):
+                    for a in result.get(bucket) or []:
+                        by_type[a.get('testType') or 'unknown'] = \
+                            by_type.get(a.get('testType') or 'unknown', 0) + 1
                 print(f'  totalTestsRun {tests}')
+                for name, count in sorted(by_type.items()):
+                    print(f'    {name:16s} {count}')
+
                 if tests < int(os.environ['MIN_TESTS']):
                     problems.append(f'only {tests} assertions ran, below the floor of {os.environ["MIN_TESTS"]}')
+                sql = by_type.get('SQL', 0)
+                if sql < int(os.environ['MIN_SQL']):
+                    problems.append(
+                        f'only {sql} SQL assertions ran, below the floor of '
+                        f'{os.environ["MIN_SQL"]} - a whole assertion category '
+                        f'can go absent without moving the total')
 
                 for p in problems:
                     print(f'##vso[task.logissue type=error]{p}')
@@ -573,9 +625,10 @@ stages:
             env:
               WANT_DROOLS: '${{ parameters.enableDrools }}'
               WANT_MRCM: '${{ parameters.enableMRCM }}'
-              # A floor, not an exact count: the corpus grows. Set below the
+              # Floors, not exact counts: the corpus grows. Set below the
               # smallest legitimate full run and above any partial one.
               MIN_TESTS: '${{ parameters.minAssertions }}'
+              MIN_SQL: '${{ parameters.minSqlAssertions }}'
 
           - task: Bash@3
             displayName: 'Convert the report to JUnit'
