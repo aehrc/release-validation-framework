@@ -140,6 +140,21 @@ stages:
                 ls -la shared-jobs/releases store/previous
 
           - task: Bash@3
+            displayName: 'Selftest the comparison logic'
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                # Before spending 40 minutes on two engines, check that the
+                # thing which JUDGES them can tell evidence from silence. The
+                # gate compares failureCount, and zero equals zero, so an
+                # assertion that never ran agrees with one that ran and found
+                # nothing - which is how 200 amtv4 assertions sat in a green
+                # report for weeks.
+                python3 ci/compare_reports_selftest.py
+                python3 ci/rvf_junit_selftest.py
+
+          - task: Bash@3
             displayName: 'Run the A/B and gate'
             inputs:
               targetType: 'inline'

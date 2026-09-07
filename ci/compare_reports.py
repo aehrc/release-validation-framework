@@ -51,8 +51,36 @@ def load(path):
                 "text": a.get("assertionText", ""),
                 "testType": a.get("testType"),
                 "bucket": bucket,
+                "failureMessage": a.get("failureMessage") or "",
             })
     return out, seconds, tr
+
+
+# An assertion that did not RUN reports zero failures, and zero failures on both
+# sides counts as agreement. That is how a whole category can sit in a report
+# looking perfect: 200 amtv4 assertions were absent from the DuckDB store for
+# weeks and the report was green, and three international assertions could not
+# execute at all while the AU nightly showed nothing, because the tables they
+# read are empty in an AU release.
+#
+# RVF says so in the record, on both engines - "Not run: requires <DEPENDENCY>",
+# "Error executing DuckDB statement", "No precompiled statements ... out of
+# step" - so the evidence is there to be read rather than inferred.
+NOT_EXECUTED = re.compile(
+    r"^(not run:|error executing|no precompiled statements|"
+    r"failed to execute|skipped)", re.I)
+
+
+def executed(rec):
+    """Did this assertion actually run?
+
+    A message is the signal, not the bucket: RVF files a not-run assertion under
+    assertionsFailed with a failureMessage, so bucket alone would call it a real
+    failure with a real count.
+    """
+    if rec["bucket"] in ("assertionsSkipped", "assertionsIncomplete"):
+        return False
+    return not NOT_EXECUTED.match(rec["failureMessage"].strip())
 
 
 def classify_uncovered(rec, categories):
@@ -110,6 +138,26 @@ def main():
         (agree if inc[u]["failureCount"] == cand[u]["failureCount"]
          else differ).append(u)
 
+    # --- how much of that agreement is evidence --------------------------
+    # Three kinds, and only the first two are worth anything:
+    #   both ran and found the same failures   - real agreement
+    #   both ran and found nothing             - weaker, but both engines ran
+    #   one or both never ran                  - no evidence at all
+    # The last kind used to be indistinguishable from the first two, which is
+    # what let an unexecuted category read as a clean pass.
+    with_findings, empty_both_ran, vacuous, asymmetric = [], [], [], []
+    for u in agree:
+        ran_i, ran_c = executed(inc[u]), executed(cand[u])
+        if ran_i and ran_c:
+            (with_findings if inc[u]["failureCount"] else empty_both_ran).append(u)
+        elif ran_i != ran_c:
+            # One engine ran it and the other did not, yet they "agree" - so
+            # the one that ran found nothing. That is a silent skip, and it is
+            # the failure mode this whole check exists for.
+            asymmetric.append(u)
+        else:
+            vacuous.append(u)
+
     # --- classify divergences against the baseline -----------------------
     expected, wrong_direction, unexplained = [], [], []
     for u in differ:
@@ -144,6 +192,10 @@ def main():
     print(f"    assertions joined on uuid        {len(shared)}")
     print(f"    identical failureCount           {len(agree)}"
           f"  ({100*len(agree)/max(len(shared),1):.1f}%)")
+    print(f"      both ran, same failures        {len(with_findings)}")
+    print(f"      both ran, found nothing        {len(empty_both_ran)}")
+    print(f"      NEITHER ran - no evidence      {len(vacuous)}")
+    print(f"      ONE ran, other did not         {len(asymmetric)}")
     print(f"    divergent                        {len(differ)}")
     print(f"      explained by baseline          {len(expected)}")
     print(f"      UNEXPLAINED                    {len(unexplained)}")
@@ -195,9 +247,34 @@ def main():
         for u in uncovered[:30]:
             print(f"    {inc[u]['text'][:70]}")
 
+    if asymmetric:
+        print("\n  --- ONE ENGINE RAN IT, THE OTHER DID NOT (these fail the gate) ---")
+        print("      They agree on zero failures, which is why this was invisible.")
+        for u in asymmetric:
+            side = "DuckDB" if not executed(cand[u]) else "RVF/MySQL"
+            rec = cand[u] if not executed(cand[u]) else inc[u]
+            print(f"    {u}")
+            print(f"      not run on {side}: {rec['failureMessage'][:70]}")
+            print(f"      {inc[u]['text'][:70]}")
+
+    if vacuous:
+        print(f"\n  --- {len(vacuous)} assertion(s) ran on NEITHER engine ---")
+        print("      Counted as identical above, and worth nothing as evidence.")
+        for u in vacuous[:10]:
+            print(f"    {inc[u]['failureMessage'][:60] or inc[u]['bucket']}"
+                  f"  {inc[u]['text'][:44]}")
+
     result = {
         "sharedAssertions": len(shared),
         "identical": len(agree),
+        "identicalWithFindings": len(with_findings),
+        "identicalBothRanEmpty": len(empty_both_ran),
+        "identicalNeitherRan": len(vacuous),
+        "ranOnOneEngineOnly": [
+            {"assertionUuid": u, "assertionText": inc[u]["text"],
+             "notRunOn": "candidate" if not executed(cand[u]) else "incumbent",
+             "message": (cand[u] if not executed(cand[u]) else inc[u])["failureMessage"]}
+            for u in asymmetric],
         "divergent": len(differ),
         "explained": len(expected),
         "unexplained": [
@@ -232,13 +309,29 @@ def main():
     pathlib.Path(a.out).write_text(json.dumps(result, indent=1))
     print(f"\nwrote {a.out}")
 
-    gate_failures = len(unexplained) + len(wrong_direction) + \
+    gate_failures = len(unexplained) + len(wrong_direction) + len(asymmetric) + \
         max(0, len(uncovered) - expected_gaps)
 
     if a.junit:
         cases = []
-        for u in agree:
+        # Only the agreements that ran on both engines are reported as passing
+        # tests. An assertion neither engine ran is not a pass, and rendering it
+        # as one is how a green board came to mean less than it looked.
+        for u in with_findings + empty_both_ran:
             cases.append(f'<testcase classname="rvf.parity" name="{escape(u)}"/>')
+        for u in vacuous:
+            cases.append(
+                f'<testcase classname="rvf.parity.notRun" name="{escape(u)}">'
+                f'<skipped message="ran on neither engine"/></testcase>')
+        for u in asymmetric:
+            side = "candidate" if not executed(cand[u]) else "incumbent"
+            rec = cand[u] if side == "candidate" else inc[u]
+            msg = (f"ran on one engine only: not run on the {side} "
+                   f"({rec['failureMessage'][:80]}), and they agree on zero")
+            cases.append(
+                f'<testcase classname="rvf.parity" name="{escape(u)}">'
+                f'<failure message="{escape(msg)}">{escape(inc[u]["text"])}'
+                f'</failure></testcase>')
         for u in expected:
             # Explained: pass, but carry the reason so it is visible in ADO.
             cases.append(
@@ -268,7 +361,7 @@ def main():
                 f'<failure message="{escape(msg)}">'
                 f'{escape(chr(10).join(inc[u]["text"] for u in uncovered[:40]))}'
                 f'</failure></testcase>')
-        fails = len(unexplained) + len(wrong_direction) + \
+        fails = len(unexplained) + len(wrong_direction) + len(asymmetric) + \
             (1 if len(uncovered) > expected_gaps else 0)
         xml = (f'<?xml version="1.0" encoding="UTF-8"?>\n'
                f'<testsuites name="RVF DuckDB Parity" tests="{len(cases)}" '
@@ -284,11 +377,14 @@ def main():
         sys.exit(1)
     if a.gate and gate_failures:
         print(f"\nFAIL: {len(unexplained)} unexplained, {len(wrong_direction)} "
-              f"wrong-direction, {max(0, len(uncovered)-expected_gaps)} new "
-              f"coverage gap(s)")
+              f"wrong-direction, {len(asymmetric)} ran on one engine only, "
+              f"{max(0, len(uncovered)-expected_gaps)} new coverage gap(s)")
         sys.exit(1)
     if a.gate:
-        print("\nPASS: every divergence is accounted for and coverage is intact")
+        print(f"\nPASS: every divergence is accounted for, coverage is intact, "
+              f"and {len(with_findings) + len(empty_both_ran)} of {len(shared)} "
+              f"agreements ran on both engines"
+              + (f" ({len(vacuous)} ran on neither)" if vacuous else ""))
 
 
 if __name__ == "__main__":
