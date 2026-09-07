@@ -1,7 +1,9 @@
 package org.ihtsdo.rvf.rest.controller;
 
 import org.ihtsdo.rvf.core.service.duck.DuckAssertionService;
+import org.ihtsdo.rvf.core.service.duck.DuckStorePacks;
 import org.springframework.beans.factory.ObjectProvider;
+import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -122,6 +124,74 @@ public class AssertionController {
 								"No SQL source for this assertion. Drools rules and MRCM checks are "
 										+ "not SQL; their logic lives in the rule set and the MRCM "
 										+ "library rather than in a script.")));
+	}
+
+	/**
+	 * What the loaded assertion corpus is made of.
+	 *
+	 * <p>The provenance packs cost. Baked into the image, the tag named the
+	 * corpus; fetched at runtime, this is the only thing that can answer which
+	 * assertions produced a report.
+	 */
+	@GetMapping(value = "packs")
+	@Operation(summary = "The assertion packs the loaded corpus was assembled from.",
+			description = "Name, version, digest and assertion count per pack. DuckDB engine only.")
+	public ResponseEntity<Map<String, Object>> getPacks() {
+		DuckAssertionService duck = duckAssertions.getIfAvailable();
+		if (duck == null) {
+			return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body(Map.of("message",
+					"Assertion packs are only available on the DuckDB execution engine."));
+		}
+		List<Map<String, Object>> packs = duck.loadedPacks().stream()
+				.map(pack -> {
+					Map<String, Object> entry = new LinkedHashMap<>();
+					entry.put("name", pack.name());
+					entry.put("version", pack.version());
+					entry.put("digest", pack.digest());
+					entry.put("assertions", pack.store().assertions().size());
+					return entry;
+				})
+				.toList();
+		Map<String, Object> body = new LinkedHashMap<>();
+		body.put("assertions", duck.findAll().size());
+		body.put("packs", packs);
+		return ResponseEntity.ok(body);
+	}
+
+	/**
+	 * Fetches the configured packs and swaps the corpus, or changes nothing.
+	 *
+	 * <p>Every pack is fetched and digest-checked, then merged, then the source
+	 * is built - and only then is anything published. A failure at any step
+	 * leaves the running corpus exactly as it was and says why, because the
+	 * alternative is an engine serving a half-applied assertion set, which
+	 * reports a release as clean for assertions it no longer holds.
+	 *
+	 * <p>409 for a merge conflict specifically: that is not a server fault but
+	 * two packs that cannot be combined, and the body lists every conflict so a
+	 * publishing pipeline can fix them in one pass.
+	 */
+	@PostMapping(value = "packs/refresh")
+	@Operation(summary = "Re-fetch the configured assertion packs and swap the corpus atomically.",
+			description = "Digests are verified before anything is loaded. On any failure the "
+					+ "current corpus keeps serving. DuckDB engine only.")
+	public ResponseEntity<Map<String, Object>> refreshPacks() {
+		DuckAssertionService duck = duckAssertions.getIfAvailable();
+		if (duck == null) {
+			return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body(Map.of("message",
+					"Assertion packs are only available on the DuckDB execution engine."));
+		}
+		try {
+			return ResponseEntity.ok(Map.of("loaded", duck.refreshConfiguredPacks()));
+		} catch (DuckStorePacks.ConflictException e) {
+			return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+					"message", "the configured packs cannot be merged; the corpus is unchanged",
+					"conflicts", e.getConflicts()));
+		} catch (IOException e) {
+			return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of(
+					"message", "could not load the configured packs; the corpus is unchanged",
+					"reason", String.valueOf(e.getMessage())));
+		}
 	}
 
 	@RequestMapping(value = "", method = RequestMethod.GET)

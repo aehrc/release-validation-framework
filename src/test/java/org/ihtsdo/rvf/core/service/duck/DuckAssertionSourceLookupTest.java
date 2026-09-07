@@ -51,7 +51,7 @@ class DuckAssertionSourceLookupTest {
 						+ "</assertionGroupingStrategy>");
 		Files.writeString(corpus.resolve("policies.xml"), "<assertionPolicies/>");
 		DuckStoreLocator locator = new DuckStoreLocator(store.toString(), corpus.toString());
-		return new DuckAssertionService(locator, corpus.toString());
+		return new DuckAssertionService(locator, corpus.toString(), java.util.List.of());
 	}
 
 	private static String sha256(Path file) throws Exception {

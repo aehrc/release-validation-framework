@@ -145,5 +145,46 @@ mechanism working on the first real pair it was given.
 It did not object to 20 ports against 19: union by macro name, and the AMT
 build defines nothing that contradicts the international prelude.
 
-Still to build: fetch by pinned digest, the atomic reload endpoint, and
-recording the pack list in the validation report.
+## Implemented: fetch, verify and swap, 2026-09-08
+
+`AssertionPackFetcher` fetches each configured pack and checks its sha256
+BEFORE parsing - not after, because parsing attacker-controlled JSON to find
+out whether it is the right JSON has the order backwards. An unpinned pack is
+refused when the source is built, so a deployment cannot start with one
+configured and discover it on the first refresh. `file:` URLs are accepted
+deliberately: it is how today's shared-volume layout feeds the engine and how
+this is tested without a network.
+
+`DuckAssertionService.reload` builds the whole corpus - merge, then
+`DuckAssertionSource` - before publishing anything, and the swap itself is two
+volatile writes. A validation already running holds its own reference and
+finishes against the corpus it started with, which is what you want: a run that
+changed assertion sets halfway would produce a report describing neither. The
+bundled store is always the base, so a pack set cannot quietly replace the
+international corpus.
+
+Configuration is `rvf.assertion.packs`, one entry per pack:
+
+    name=amtv4;version=2026.09.1;uri=https://...;sha256=<hex>;authHeader=<ref>
+
+Semicolons because a URL contains commas far more often, and Spring splits list
+properties on commas. The token is a header supplied by configuration and never
+part of the URL, because a URL ends up in logs.
+
+Endpoints: `GET /assertions/packs` reports name, version, digest and assertion
+count per pack; `POST /assertions/packs/refresh` re-reads what is configured
+and swaps. 409 with every conflict listed for a merge conflict - not a server
+fault, two packs that cannot be combined - and 502 for a fetch or digest
+failure. Both leave the corpus untouched.
+
+`AssertionPackReloadTest` drives all of it against a real `HttpServer`, because
+the failures that matter here are the ones a mock cannot show: a body that
+arrives and is not what was pinned; a 404 from a repository that moved a
+release asset; a pack that parses, verifies, and then redefines the base pack's
+macro. In all three the previous corpus is still serving afterwards, which is
+the invariant - the failure to design against is not an exception but an engine
+serving a half-applied assertion set, because that reports a release as clean
+for assertions it no longer holds.
+
+Still to build: recording the pack list in the validation report, and publishing
+the AMT pack from its own repository.
