@@ -60,6 +60,49 @@ public final class DuckStore {
 		return new DuckStore(root);
 	}
 
+	/**
+	 * The store as JSON, for merging packs.
+	 *
+	 * <p>Returns the parsed tree's own serialisation rather than the string it
+	 * was read from: a merged store has no source string, and handing back the
+	 * original would make {@code merge(merge(a, b), c)} silently lose b.
+	 */
+	public String toJson() {
+		return root.toString();
+	}
+
+	public int formatVersion() {
+		return root.path("formatVersion").asInt(-1);
+	}
+
+	/** The literal a run id is substituted for. */
+	public String runIdSentinel() {
+		return root.path("runIdSentinel").asText("");
+	}
+
+	/** The table name {@code qa_result} is rewritten to per run. */
+	public String qaResultToken() {
+		return root.path("qaResultToken").asText("");
+	}
+
+	/** Every table the DDL declares, whether or not a release ships it. */
+	public List<String> knownTables() {
+		return strings(root.path("knownTables"));
+	}
+
+	/**
+	 * The transpiler that compiled these statements, e.g. {@code sqlglot 30.15.0}.
+	 *
+	 * <p>Load-bearing when packs are merged: two sqlglot versions in one store
+	 * means two dialects, and nothing downstream could say which assertion was
+	 * compiled by which.
+	 */
+	public String transpilerVersion() {
+		JsonNode generator = root.path("generator");
+		return generator.path("sqlglot").asText(
+				generator.path("tool").asText(""));
+	}
+
 	/** One assertion's precompiled statements and the metadata to report it. */
 	public record StoredAssertion(String uuid, String file, String text,
 			String keywords, String severity, List<String> statements) {

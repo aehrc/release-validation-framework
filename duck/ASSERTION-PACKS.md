@@ -114,3 +114,36 @@ pipeline rather than vendored into the image. So does any national extension.
 The image then ships an engine and no assertions at all, which is the right
 shape: the engine's version and the assertion set's version are different
 questions and should not be answered by one tag.
+
+
+## Implemented: the merge, 2026-09-08
+
+`DuckStorePacks.merge(List<Pack>)` in
+`src/main/java/org/ihtsdo/rvf/core/service/duck/`, with `DuckStorePacksTest`
+pinning one rule per case - 13 of them, each a way for two packs to combine
+into a store that runs and reports the wrong thing.
+
+`DuckStore` gained the accessors the merge needs (`toJson`, `formatVersion`,
+`runIdSentinel`, `qaResultToken`, `knownTables`, `transpilerVersion`), and the
+merged store records every pack's name, version, digest and assertion count -
+because once packs are fetched at runtime, that is the only thing that can
+answer "which assertions produced this report".
+
+**Proven against the two real stores.** Merging the committed 360-assertion
+international store with the 560-assertion AMT build is REFUSED, with exactly
+three conflicts:
+
+    assertion 7e70ea3e... differs (component-centric-snapshot-complexmap-group.sql)
+    assertion 6e70ea3e... differs (component-centric-snapshot-extendedmap-group.sql)
+    assertion 6c37bee7... differs (release-type-snapshot-delta-...-refset.sql)
+
+Those are precisely the three assertions the publisher fix changed today, so
+the AMT build is a stale pack - and the merge says which assertions are stale
+rather than producing a store that mixes two publisher versions. That is the
+mechanism working on the first real pair it was given.
+
+It did not object to 20 ports against 19: union by macro name, and the AMT
+build defines nothing that contradicts the international prelude.
+
+Still to build: fetch by pinned digest, the atomic reload endpoint, and
+recording the pack list in the validation report.
