@@ -92,11 +92,18 @@ echo "==> maven repository: $MAVEN_REPO_LOCAL"
 DROOLS_BUILD_DIR="$BUILD_DIR/snomed-drools"   \
   bash "$SCRIPT_DIR/build-drools-engine.sh" "$DROOLS_VERSION"
 
-MRCM_BUILD_DIR="$BUILD_DIR/mrcm-validator"    \
-  bash "$SCRIPT_DIR/build-mrcm-validator.sh" "$MRCM_VERSION"
-
+# ORDER MATTERS: the patched mrcm-validator calls
+# SnomedQueryService.conceptsWithAnyAncestor, which exists only in our
+# query-service fork, so that fork has to be installed BEFORE the validator
+# compiles against it. Built the other way round this step fails with
+# "Could not find artifact org.ihtsdo.otf:snomed-query-service:jar:<pin>" -
+# and only on a clean machine, because a developer box already has the jar
+# from a previous run. Build 16242 is where that landed.
 QUERY_SERVICE_BUILD_DIR="$BUILD_DIR/query-service" \
   bash "$SCRIPT_DIR/build-query-service.sh" "$SQS_VERSION"
+
+MRCM_BUILD_DIR="$BUILD_DIR/mrcm-validator"    \
+  bash "$SCRIPT_DIR/build-mrcm-validator.sh" "$MRCM_VERSION"
 
 # Gate on the artefacts actually being resolvable, because each script's own
 # bytecode checks only prove the patch took - not that the version the pom asks

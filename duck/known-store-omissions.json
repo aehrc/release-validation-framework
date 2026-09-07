@@ -1,0 +1,29 @@
+{
+  "_comment": [
+    "Assertions the pinned corpus declares that the precompiled DuckDB store is",
+    "allowed to omit, each with the reason it is absent.",
+    "",
+    "Why an allow-list rather than a tolerance: an assertion missing from the",
+    "store does not error, it simply never runs, and a report with a whole class",
+    "of assertion absent still reads as a healthy green run. That is how 200 AMT",
+    "assertions could be added to the corpus while BundledStoreMatchesCorpusTest",
+    "kept passing - it only checked that bundled assertions carried source hashes",
+    "and that there were more than 300 of them, never that the corpus declared",
+    "any the store lacked.",
+    "",
+    "So the gate is: every assertion the corpus declares must be in the store,",
+    "unless it is named here with a reason. Unexplained absence fails the build.",
+    "",
+    "Empty is the correct state. It was verified empty on 2026-09-07: the store",
+    "held exactly the 360 international assertions the corpus declared, with",
+    "nothing in the store that the corpus did not declare either.",
+    "",
+    "Add an entry as \"<uuid>\": \"<sqlFile> - <reason>\". Reasons that would be",
+    "legitimate: a construct the publisher cannot port (gbTerm, usTerm and",
+    "caseSignificance need MySQL FULLTEXT plus RVF's res_* resource tables), or",
+    "an assertion that requires an input production never supplies. Note those",
+    "particular three ARE currently published and simply skip at runtime, which",
+    "is why they are not listed."
+  ],
+  "omissions": {}
+}
