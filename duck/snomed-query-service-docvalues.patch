@@ -286,19 +286,60 @@ index 7043029..183e843 100644
  		conceptDoc.add(new StringField(ConceptFieldNames.MODULE_ID, concept.getModuleId(), Field.Store.YES));
  		conceptDoc.add(new StringField(ConceptFieldNames.DEFINITION_STATUS_ID, concept.getDefinitionStatusId(), Field.Store.YES));
 diff --git a/src/main/java/org/ihtsdo/otf/sqs/service/SnomedQueryService.java b/src/main/java/org/ihtsdo/otf/sqs/service/SnomedQueryService.java
-index a7a9a5e..8622050 100644
+index a7a9a5e..690f5f6 100644
 --- a/src/main/java/org/ihtsdo/otf/sqs/service/SnomedQueryService.java
 +++ b/src/main/java/org/ihtsdo/otf/sqs/service/SnomedQueryService.java
-@@ -6,6 +6,8 @@ import org.apache.lucene.analysis.Analyzer;
+@@ -6,7 +6,13 @@ import org.apache.lucene.analysis.Analyzer;
  import org.apache.lucene.document.Document;
  import org.apache.lucene.document.FloatPoint;
  import org.apache.lucene.index.DirectoryReader;
 +import org.apache.lucene.index.LeafReaderContext;
 +import org.apache.lucene.index.NumericDocValues;
  import org.apache.lucene.index.Term;
++import org.apache.lucene.index.MultiTerms;
++import org.apache.lucene.index.Terms;
++import org.apache.lucene.index.TermsEnum;
++import org.apache.lucene.util.BytesRef;
  import org.apache.lucene.queryparser.classic.ParseException;
  import org.apache.lucene.queryparser.classic.QueryParser;
-@@ -209,17 +211,93 @@ public class SnomedQueryService {
+ import org.apache.lucene.search.*;
+@@ -37,6 +43,35 @@ public class SnomedQueryService {
+ 	public static final int DEFAULT_LIMIT = 1000;
+ 	public static final Pattern SCTID_PATTERN = Pattern.compile("\\d{6,18}");
+ 	public static final Pattern NOT_EQUAL_TO_PATTERN = Pattern.compile(".*(\\(\\* NOT.*\\)).*");
++	/**
++	 * Matches the {@code <attributeId>:} that the replaced {@code (* NOT ...)}
++	 * belongs to, so the complement can be expressed over that field's own
++	 * terms. Anchored at the end, because it is applied to the text PRECEDING
++	 * the match.
++	 */
++	private static final Pattern TRAILING_FIELD = Pattern.compile("(\\d{6,18})\\s*:\\s*$");
++	/** Sentinel handed to the parser in place of a chain of range clauses. */
++	private static final String NOT_IN_TOKEN = "__notinset__";
++	/**
++	 * The complement term set for the query being parsed on THIS thread.
++	 *
++	 * <p>A thread local because the string is built in
++	 * {@code preprocessECLQuery} and consumed during {@code parse}, two calls
++	 * deep in the same thread, and MRCM parses on many threads at once. Cleared
++	 * by the parser as soon as it is read, so a fallback path cannot inherit a
++	 * stale set.
++	 */
++	private static final ThreadLocal<List<BytesRef>> notInTerms = new ThreadLocal<>();
++	/**
++	 * How many out-of-range clauses were answered with a term set rather than
++	 * a chain of ranges. Exposed so a parity harness can assert the fast path
++	 * actually ran: an equality result means nothing if both arms fell back.
++	 */
++	private static final java.util.concurrent.atomic.AtomicLong termSetQueries = new java.util.concurrent.atomic.AtomicLong();
++
++	public static long termSetQueriesBuilt() {
++		return termSetQueries.get();
++	}
+ 	private final ExpressionConstraintToLuceneConverter eclToLucene;
+ 	private final IndexSearcher indexSearcher;
+ 	private final Analyzer analyzer;
+@@ -209,17 +244,93 @@ public class SnomedQueryService {
  			final TopDocs topDocs = indexSearcher.search(query, fetchLimit);
  			final ScoreDoc[] scoreDocs = topDocs.scoreDocs;
  			int total = (int) topDocs.totalHits.value;
@@ -398,6 +439,121 @@ index a7a9a5e..8622050 100644
  	private ConceptResults getConceptResults(Query query, int offset, int limit) throws ServiceException {
  		try {
  			if (offset < 0) offset = 0;
+@@ -294,12 +405,86 @@ public class SnomedQueryService {
+ 				}
+ 			}
+ 			Collections.sort(conceptRelatives);
++
++			// "value NOT in S" is expressed here as the COMPLEMENT of S, so a
++			// document matches when it carries some value outside S. Rendering
++			// that complement as one {a TO b} range per member of S makes the
++			// classic parser compile an automaton per clause: measured at 4.0M
++			// TermRangeQuery and 10.94 GB of transition tables at the peak of
++			// an AU MRCM run, and 12.9% of the phase spent parsing the text.
++			//
++			// The same document set is selected by naming the terms actually
++			// present in this field and subtracting S - one TermInSetQuery,
++			// prefix-compressed, no automata. Only terms present in the index
++			// can match anything, so the two are equivalent.
++			Optional<List<BytesRef>> complement = complementTerms(luceneQuery, matcher.start(1), conceptRelatives);
++			if (complement.isPresent()) {
++				notInTerms.set(complement.get());
++				termSetQueries.incrementAndGet();
++				return luceneQuery.replace(matcher.group(1), NOT_IN_TOKEN);
++			}
++
++			// Field not identifiable, or the field has no terms: fall back to
++			// the range chain rather than silently changing the answer.
+ 			String rangeQuery = "(" + buildRangeList(conceptRelatives) + ")";
+ 			return luceneQuery.replace(matcher.group(1), rangeQuery);
+ 		}
+ 		return luceneQuery;
+ 	}
+ 
++	/**
++	 * The terms present in the field the match belongs to, minus {@code exclude}.
++	 *
++	 * @param luceneQuery the whole query being rewritten
++	 * @param matchStart  where the {@code (* NOT ...)} match begins, so the
++	 *                    owning {@code <attributeId>:} can be read off the text
++	 *                    before it
++	 * @param exclude     the set whose complement is wanted
++	 * @return the complement as sorted terms, or {@code null} if the field
++	 *         cannot be identified or carries no terms, in which case the caller
++	 *         must keep the original behaviour
++	 */
++	private Optional<List<BytesRef>> complementTerms(String luceneQuery, int matchStart, List<String> exclude) {
++		// Escape hatch, and the mechanism the equivalence probe uses to run both
++		// forms against one index in one process. Read per call, not cached, so
++		// it can be flipped between queries.
++		if (Boolean.getBoolean("sqs.notin.rangeform")) {
++			return Optional.empty();
++		}
++		Matcher field = TRAILING_FIELD.matcher(luceneQuery.substring(0, matchStart));
++		if (!field.find()) {
++			// Cannot tell which field owns the match, so the answer is unknown
++			// and the original behaviour must stand.
++			return Optional.empty();
++		}
++		try {
++			Terms terms = MultiTerms.getTerms(indexSearcher.getIndexReader(), field.group(1));
++			if (terms == null) {
++				// The field is absent from the index, so no document carries ANY
++				// value for this attribute, so none can carry one outside S. The
++				// answer is the empty set - and this is the case worth catching:
++				// the range chain compiles one automaton per member of S in order
++				// to match nothing at all.
++				return Optional.of(List.of());
++			}
++			Set<String> excluded = new HashSet<>(exclude);
++			List<BytesRef> complement = new ArrayList<>();
++			TermsEnum it = terms.iterator();
++			for (BytesRef term = it.next(); term != null; term = it.next()) {
++				if (!excluded.contains(term.utf8ToString())) {
++					// Copied: TermsEnum reuses the BytesRef it returns.
++					complement.add(BytesRef.deepCopyOf(term));
++				}
++			}
++			// An empty complement is a real answer too: every present value is
++			// in S, so nothing lies outside it.
++			return Optional.of(complement);
++		} catch (IOException e) {
++			logger.warn("Could not enumerate terms for field {}; keeping the range form.", field.group(1), e);
++			return Optional.empty();
++		}
++	}
++
+ 	private String buildRangeList(List<String> conceptRelatives) {
+ 		StringBuilder builder = new StringBuilder();
+ 		builder.append("{* TO ");
+@@ -433,6 +618,27 @@ public class SnomedQueryService {
+ 			super(f, a);
+ 		}
+ 
++		/**
++		 * Turns the complement sentinel into one {@link TermInSetQuery}.
++		 *
++		 * <p>Overridden rather than analysed: the sentinel is not a term and
++		 * must not be passed through the analyzer. The thread local is cleared
++		 * on read, so a query that somehow reaches here twice cannot reuse the
++		 * previous field's terms.
++		 */
++		@Override
++		protected Query getFieldQuery(String field, String queryText, boolean quoted) throws ParseException {
++			if (NOT_IN_TOKEN.equals(queryText)) {
++				List<BytesRef> terms = notInTerms.get();
++				notInTerms.remove();
++				if (terms == null) {
++					throw new ParseException("Complement sentinel reached the parser with no term set for field " + field);
++				}
++				return new TermInSetQuery(field, terms);
++			}
++			return super.getFieldQuery(field, queryText, quoted);
++		}
++
+ 		@Override
+ 		protected Query getRangeQuery(String field, String part1, String part2, boolean startInclusive, boolean endInclusive) throws ParseException {
+ 			if (field.contains("_value") || field.contains(TOTAL_GROUPS)
 diff --git a/src/test/java/org/ihtsdo/otf/sqs/service/ConceptIdDocValuesTest.java b/src/test/java/org/ihtsdo/otf/sqs/service/ConceptIdDocValuesTest.java
 new file mode 100644
 index 0000000..1022bce

@@ -81,7 +81,13 @@ PY
 # $HOME/.m2 and /data/m2, so on any machine using a different local repository -
 # a CI agent at /home/vsts/work/1/.m2, for one - the install succeeded and the
 # gate below reported "did not install".
-REPO="${MAVEN_REPO_LOCAL:-$HOME/.m2/repository}"
+# Default aligned with build-drools-engine.sh and build-mrcm-validator.sh, which
+# both use /data/m2. This one used $HOME/.m2/repository, and since ~/.m2 is a
+# symlink to /data/m2 here, that resolved to /data/m2/REPOSITORY - a second,
+# separate local repository one level down. The install then reported success
+# while the RVF build, which reads /data/m2, could not see the artefact and
+# silently kept resolving the previous version.
+REPO="${MAVEN_REPO_LOCAL:-/data/m2}"
 export MAVEN_OPTS="${MAVEN_OPTS:-} -Dmaven.repo.local=$REPO"
 
 # NOT offline - see build-drools-engine.sh.

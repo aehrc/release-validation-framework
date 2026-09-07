@@ -1158,6 +1158,42 @@ Also note every recent measurement used the **disk-backed** index worker
 (`mrcm.validator.index.directory` set), which is not the default - part of that
 9.3% `sun.nio.ch` is index I/O a RAM-index run would not do.
 
+### The out-of-range query form was the ceiling, and it is fixed, 2026-09-07
+
+`SnomedQueryService.processQueryWithNotEqualTo` rendered "this attribute has
+some value outside set S" as the complement of S, one exclusive `{a TO b}`
+range per member, concatenated into a query STRING. The classic parser compiles
+an automaton per clause, so at the peak of an AU MRCM run the heap held 4.0M
+`TermRangeQuery` and **10.94 GB** of `[I` transition tables. That is also the
+12.9% "parsing query text" - parsing millions of range clauses IS that cost.
+
+Replaced with one `TermInSetQuery` over the terms actually present in that
+field, minus S. Equivalent because only terms present in the index can match.
+Shipped as `snomed-query-service` **6.0.2-aehrc-perf**, with
+`-Dsqs.notin.rangeform=true` as the rollback switch, and a fallback to the
+range chain whenever the owning field cannot be identified.
+
+Measured, MRCM solo on the 853MB AU edition, 14g heap, both content forms
+concurrent - identical binary, the flag the only difference, three runs each:
+
+| | wall | peak heap | outcome |
+|---|---|---|---|
+| term set | 347.5 / 335.5 / 292.2 s | 8.88 / 8.81 / 9.06 GiB | 3 of 3 completed |
+| range chain | - | - | **3 of 3 OOM** |
+
+Against the pre-change baseline that did complete at 14g (497 s, 13.92 GiB):
+**~5.1 GiB off the peak and ~1.45x on the phase.** `inferred 497, stated 481`
+in every run, unchanged. The 134 real out-of-range expressions from a
+production run are identical both ways, and 4.2x faster serially (724.0 s ->
+170.6 s) - `RangeSetProbe` is the gate.
+
+**Trap: the first version of that gate passed vacuously.** All 134 matched
+while BOTH arms silently ran the range chain, because an unidentified field
+returns "keep the old behaviour" and the probe never checked which path ran.
+A parity harness over a feature flag MUST assert the new path executed -
+`termSetQueriesBuilt()` exists for that, and the probe now fails as VACUOUS if
+it reads zero.
+
 #### Remaining levers, ranked by measured size
 
 **1. The index write loop is single-threaded, on 2 of 8 cores.**
