@@ -1,21 +1,29 @@
 package org.ihtsdo.rvf;
 
 import org.ihtsdo.rvf.core.service.RF2ReleaseTypeUnpacker;
+import org.snomed.quality.validator.mrcm.Assertion;
 import org.snomed.quality.validator.mrcm.ContentType;
 import org.snomed.quality.validator.mrcm.ValidationRun;
 import org.snomed.quality.validator.mrcm.ValidationService;
 
 import java.io.File;
 import java.lang.management.ManagementFactory;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
+import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * Times the MRCM phase on its own, and records what it costs in memory.
@@ -134,8 +142,73 @@ public class MrcmSoloProbe {
 		System.out.printf("  validate     : %.1fs  (%dm %02ds)%n",
 				elapsed / 1000.0, elapsed / 60000, (elapsed / 1000) % 60);
 		System.out.printf("  peak heap    : %.2f GiB%n", peak / 1073741824.0);
-		System.out.printf("  assertions   : inferred %d, stated %d%n%n",
+		System.out.printf("  assertions   : inferred %d, stated %d%n",
 				inferred.getCompletedAssertions().size(), stated.getCompletedAssertions().size());
+		digest(label, inferred, stated);
+		System.out.println();
+	}
+
+	/**
+	 * WHICH concepts each assertion flagged, not how many.
+	 *
+	 * <p>MRCM parity has been a pair of counts - "inferred 497, stated 481" -
+	 * and a count is preserved by any change that swaps one finding for
+	 * another. Two of this project's parity results were already wrong for
+	 * related reasons: a probe reported 134 expressions identical while BOTH
+	 * arms ran the old code, and a laterality comparison agreed because both
+	 * forms returned zero violations. A digest over the sorted violated concept
+	 * ids answers the question those numbers only appeared to.
+	 *
+	 * <p>Per assertion AND overall: the total digest changes if anything moves,
+	 * and the per-assertion lines say what. Written to -Dmrcm.digest.out when
+	 * set, so two runs - or two builds of the validator - can be diffed
+	 * directly.
+	 */
+	private static void digest(String label, ValidationRun inferred, ValidationRun stated)
+			throws Exception {
+		StringBuilder out = new StringBuilder();
+		MessageDigest all = MessageDigest.getInstance("SHA-256");
+		long violations = 0;
+		for (var pair : List.of(Map.entry("inferred", inferred), Map.entry("stated", stated))) {
+			// Build every line first, then sort the LINES. Sorting the
+			// assertions by uuid is not enough: getCompletedAssertions() holds
+			// several entries per uuid - the same assertion under different
+			// attributes - so uuid alone leaves ties, and the domain/attribute
+			// checks now run on a pool, which is exactly where an arbitrary tie
+			// order turns into a digest that changes run to run for no content
+			// reason. A digest that moves without the content moving is worse
+			// than no digest: it trains its reader to ignore it.
+			List<String> lines = new ArrayList<>();
+			for (Assertion a : pair.getValue().getCompletedAssertions()) {
+				List<Long> ids = a.getCurrentViolatedConceptIds() == null
+						? List.of() : a.getCurrentViolatedConceptIds().stream().sorted().toList();
+				violations += ids.size();
+				lines.add(pair.getKey() + "\t" + a.getUuid() + "\t"
+						+ a.getFailureType() + "\t" + ids.size() + "\t"
+						+ sha256(ids.stream().map(String::valueOf)
+								.collect(Collectors.joining(","))));
+			}
+			lines.sort(Comparator.naturalOrder());
+			for (String line : lines) {
+				out.append(line).append('\n');
+				all.update(line.getBytes(StandardCharsets.UTF_8));
+			}
+		}
+		String overall = HexFormat.of().formatHex(all.digest());
+		System.out.printf("  violations   : %d concept(s) across both forms%n", violations);
+		System.out.printf("  DIGEST       : %s%n", overall);
+		String path = System.getProperty("mrcm.digest.out");
+		if (path != null) {
+			Path file = Path.of(path.replace("%LABEL%", label));
+			Files.writeString(file, "# form\tassertionUuid\tfailureType\tviolations\t"
+					+ "sha256(sorted concept ids)\n# overall " + overall + "\n" + out);
+			System.out.printf("  wrote        : %s%n", file);
+		}
+	}
+
+	private static String sha256(String s) throws Exception {
+		return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+				.digest(s.getBytes(StandardCharsets.UTF_8)));
 	}
 
 	private static ValidationRun form(ValidationRun base, ContentType type) {
