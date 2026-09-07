@@ -5,15 +5,31 @@ so a divergence means something.
 
 ## What was measured
 
-AU edition (853MB, 45.3M rows), previous release supplied, 8 cores, both legs on
-one host:
+AU edition (853MB, 45.3M rows), previous release supplied, both legs on one
+host. Re-run 2026-09-08 on 10 cores, and this time the agreement is broken down
+by whether the assertions actually ran:
 
 ```
 assertions joined on uuid   149
 identical failureCount      147  (98.7%)
+  both ran, same failures    12
+  both ran, found nothing   135
+  NEITHER ran                 0
+  ONE ran, other did not      0
 divergent                     2   both accounted for, see below
-RVF/MySQL 1380s   DuckDB 120s   11.5x
+RVF/MySQL 1380s   DuckDB 180s   7.7x
 ```
+
+**The 12 is the number that means something.** 135 of the 147 agreements are
+both engines finding nothing, which is worth having but is not the same
+evidence, and the flat "98.7%" hid the difference. See
+`ci/compare_reports_selftest.py` for why that distinction is enforced rather
+than merely printed.
+
+An earlier measurement here read 11.5x on 8 cores. This one is 7.7x on 10, with
+the same release: the MySQL leg is disk-bound loading 45.3M rows and the host
+differs, so treat both numbers as the same finding - roughly an order of
+magnitude - rather than as a trend.
 
 ## Running it
 
@@ -32,6 +48,36 @@ The script brings up MySQL and both RVF instances and then calls
 `az/azure-pipeline.engine-ab.yml` does the same thing with pipeline inputs. It
 contains no comparison logic of its own on purpose: the tested code is the code
 a developer runs.
+
+### What it needs from the host, learned by hitting each one
+
+**Disk: about 40GB free.** The MySQL leg writes ~25GB of MyISAM tables and
+indexes for one AU edition, plus the unzipped release. A full disk does not
+fail cleanly - mysqld logs `Disk is full writing ...MYI` and retries, so the
+run hangs rather than stops.
+
+**Memory: leave the JVMs about 3GB each.** Two RVF instances at `HEAP=6g`
+alongside MySQL's 4GB buffer pool got the MySQL leg killed by the kernel on a
+22GB host, mid-load, with no exception in its log - the log simply stops. If a
+leg dies with the last line being a `load data local infile`, that is this.
+`HEAP=3g` completes.
+
+**A first run must initialise the datadir.** The pipeline does it in its
+install step (`mysqld --initialize-insecure`); the script assumes it exists.
+After initialising, set the password the script expects:
+`ALTER USER 'root'@'localhost' IDENTIFIED BY 'rvfpass'`.
+
+### Two bugs this found by being run
+
+**The group list was never sent.** `GROUPS` is a bash special variable holding
+the caller's group ids, so assigning to it did nothing and the submission
+carried `--groups 1103459` - a gid - which RVF answers with HTTP 412. Renamed
+to `ASSERTION_GROUPS`. A pipeline, a gate and this README all described a
+harness whose submission was malformed.
+
+**libaio.so.1 does not exist on Ubuntu 24.04.** It is `libaio.so.1t64` after
+the time_t rename, and mysqld dies before logging anything, which reads like a
+corrupt download. The script now symlinks it into `$WORK/libs`.
 
 ### Two things the harness does deliberately
 
