@@ -70,31 +70,43 @@ whether it ran plus a sha256 over the sorted `concept_id`, `component_id`,
 clone, no Docker, no network. Golden file
 `src/test/resources/duck/assertion-digests.tsv`; regenerate with
 `-Dduck.digests.write=true` and commit the diff WITH the reason. Baseline: 355
-ran, 221 of them finding something, 2 not run for want of a DEPENDENCY release,
-3 that cannot execute.
+ran, 224 of them finding something, 2 not run for want of a DEPENDENCY release,
+and 0 that cannot execute.
 
 Per-assertion because a total is not a parity check, and a digest rather than a
 count because a transpilation can preserve how MANY rows an assertion finds
 while changing WHICH components it names - the risk carried by all 43 `REGEXP`
 rewrites, since a regex matching the wrong thing still matches something.
 
-**Three latent production defects it found**, all in
-`duck/known-assertion-errors.json` with causes and fixes:
+**Three latent production defects it found, now FIXED** in the publisher
+(`bd61519a`, travelling as `duck/publisher-fixes.patch` because the publisher
+lives in `aehrc/rvf`). `duck/known-assertion-errors.json` is empty and the
+bidirectional gate keeps it that way:
 
 * two `mapGroup = ''` against a SMALLINT column (complexmap, extendedmap) -
-  MySQL coerces the literal to 0, DuckDB refuses to cast it per row. Fix is a
-  transpilation rule in the publisher: numeric column compared to `''` becomes
-  compared to `0`.
-* one statement ending `... ) commit`, because its source script omits the
-  semicolon before its final `commit;`. Fix is upstream (add the semicolon) plus
-  a publisher refusal to emit a statement whose tail is a bare
-  transaction-control token.
+  MySQL coerces the literal to 0, DuckDB refuses the cast per row. `to_duckdb`
+  now rewrites a numeric column compared to `''` into a comparison with `0`.
+* one statement ending `... ) commit`, because its script omits the semicolon
+  before its final `commit;`. The publisher strips a trailing
+  transaction-control token and says so on stderr; the upstream fix is the
+  semicolon, in `IHTSDO/snomed-release-validation-assertions`.
 
-They are invisible in production because an AU release has no complexmap,
-extendedmap or expressionassociation rows, so DuckDB evaluates nothing and
-reports zero findings. Build 16247's only two incomplete assertions are both
+They were invisible in production because an AU release has no complexmap,
+extendedmap or expressionassociation rows, so DuckDB evaluated nothing and
+reported zero findings. Build 16247's only two incomplete assertions are both
 "`<DEPENDENCY>` not supplied". **An assertion that cannot run looks exactly like
 one that ran and found nothing** - which is the whole reason this test exists.
+
+Fixing them also exposed a publisher regression: `ports()` had stopped emitting
+`DUCKDB_PRELUDE`, and since `rvf_duck.py` executes it per connection while the
+Java engine applies `store["ports"]` and nothing else, republishing dropped
+`substring_index` and broke four working assertions. My check for callers
+searched lowercase while the corpus writes `SUBSTRING_INDEX`, so it reported
+zero in both stores - a case-sensitive grep is not evidence.
+
+**The deployed image still carries the old store.** The nightly will not gain
+these three assertions until an image is built from `bd61519a` and rolled out;
+`duck/store.json` is baked in at build time.
 
 It also found that `DuckMaterialiser` could not load RVF's own regression
 fixture at all (fixed, `62132059`): `read_csv` refuses a ragged relation where
