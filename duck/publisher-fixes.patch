@@ -1,0 +1,231 @@
+--- a/rvfsql.py	2026-08-26 10:29:17.000000000 +1000
++++ b/rvfsql.py	2026-09-07 22:43:33.563681167 +1000
+@@ -11,6 +11,7 @@
+                       instead of being rewritten per script.
+ """
+ import re
++import sys
+ 
+ import procedures
+ 
+@@ -575,7 +576,102 @@
+     return pattern.sub(repl, sql)
+ 
+ 
+-def to_duckdb(sql: str) -> str:
++_NUMERIC_TYPE_PREFIXES = ("bigint", "int", "smallint", "tinyint", "mediumint",
++                          "decimal", "numeric", "double", "float", "real")
++
++# `numcol = ''` / `numcol <> ''`, qualified or not. Deliberately anchored on the
++# empty-string literal: a non-empty literal compared to a numeric column is a
++# different question (MySQL would parse a leading number out of it), and no
++# assertion in either corpus does that.
++_EMPTY_STRING_CMP_RE = re.compile(r"\b((?:\w+\.)?(\w+))\s*(=|!=|<>)\s*''")
++
++
++def numeric_column_names(table_columns):
++    """Column names the DDL declares numeric in EVERY table that has them.
++
++    Takes the TYPE-TEXT form - {table: "id BIGINT, mapgroup SMALLINT"} - and
++    raises on the name-only form, because there is a map of each shape in this
++    codebase and they are interchangeable by accident: publish_store's
++    column_names() gives {table: {names}} for procedure unrolling, and its
++    table_columns() gives the type text. Handed the wrong one, a tolerant
++    implementation would find no numeric columns, rewrite nothing, and leave the
++    two assertions this exists to fix erroring exactly as before - a silent
++    no-op, which is the failure mode worth being noisy about.
++
++    Name-keyed rather than table-keyed on purpose. Resolving `a.mapGroup` to a
++    table means alias scope analysis, and RF2 column names are globally
++    type-consistent - mapgroup is SMALLINT wherever it appears. The all() is
++    what keeps that honest: a name declared numeric in one table and VARCHAR in
++    another is left alone rather than guessed at.
++    """
++    types = {}
++    for table, spec in (table_columns or {}).items():
++        if not isinstance(spec, str):
++            raise TypeError(
++                f"numeric_column_names needs the type-text column map, got "
++                f"{type(spec).__name__} for {table}. Pass table_columns(ddl), "
++                f"not column_names(ddl).")
++        for col in spec.split(","):
++            parts = col.strip().split(None, 1)
++            if len(parts) == 2:
++                types.setdefault(parts[0].lower(), set()).add(
++                    parts[1].split("(")[0].strip().lower())
++    return {name for name, seen in types.items()
++            if all(t.startswith(_NUMERIC_TYPE_PREFIXES) for t in seen)}
++
++
++def _numeric_vs_empty_string(sql: str, numeric_columns) -> str:
++    """`mapGroup = ''` -> `mapGroup = 0` where mapGroup is numeric.
++
++    MySQL coerces the empty string to 0 and compares; DuckDB refuses to cast it
++    and the statement dies with "Could not convert string '' to INT16" - per
++    row, so an empty table raises nothing and a populated one fails.
++
++    That cost two assertions silently. component-centric-snapshot-complexmap-
++    group.sql and its extendedmap twin ask `mapGroup IS NULL OR mapGroup = ''`
++    against a SMALLINT column; they errored on every release carrying complexmap
++    rows, and the AU nightly has none, so both reported zero findings and read
++    as passes. AssertionCorpusDigestTest found them against a fixture that does
++    have rows.
++
++    Rewriting rather than leaving it to the corpus: `= ''` is valid MySQL and
++    the corpus is upstream's. The blank it looks for loads as 0 through MySQL's
++    loader, so 0 is what the assertion means.
++    """
++    if not numeric_columns:
++        return sql
++
++    def rewrite(m):
++        return (f"{m.group(1)} {m.group(3)} 0"
++                if m.group(2).lower() in numeric_columns else m.group(0))
++
++    return _EMPTY_STRING_CMP_RE.sub(rewrite, sql)
++
++
++# A statement whose tail is transaction control, because the script before it
++# omitted its semicolon: `insert ... ) commit`. A STANDALONE commit is dropped
++# by the split loops below, but a glued one is part of the statement and DuckDB
++# fails to parse it. One assertion in the international corpus is written this
++# way - release-type-snapshot-delta-validation-expression-association-refset.sql
++# - and it is the only statement in the whole 360-assertion store containing the
++# token, so nothing detected it until a fixture had rows in the table.
++#
++# Stripped rather than refused: the token is meaningless in DuckDB, which
++# autocommits, and refusing would drop the assertion from the store, which the
++# corpus gate would then read as a missing assertion rather than a malformed
++# script. The upstream fix is the missing semicolon.
++_TXN_TAIL_RE = re.compile(r"[\s;]*\b(commit|rollback|begin|start\s+transaction)\s*$", re.I)
++
++
++def strip_transaction_tail(stmt: str):
++    """(statement, stripped_token or None)."""
++    m = _TXN_TAIL_RE.search(stmt)
++    if not m or m.start() == 0:
++        return stmt, None
++    return stmt[:m.start()].rstrip(), m.group(1)
++
++
++def to_duckdb(sql: str, numeric_columns=None) -> str:
+     """Textual pre-passes applied before the sqlglot AST stage.
+ 
+     Order matters: BINARY/COLLATE are stripped FIRST, because they can sit
+@@ -607,6 +703,7 @@
+     sql = _ENGINE_RE.sub("", sql)
+     sql = _DISPLAY_WIDTH_RE.sub(r"\1", sql)
+     sql = _EFFECTIVETIME_NOW_RE.sub(r"\1 \2 strftime(now(), '%Y%m%d')", sql)
++    sql = _numeric_vs_empty_string(sql, numeric_columns)
+     return sql
+ 
+ 
+@@ -670,7 +767,7 @@
+ 
+ 
+ def prepare(raw_sql: str, dialect: str, known_tables=None,
+-            table_columns=None, **kw):
++            table_columns=None, numeric_columns=None, **kw):
+     """Full pipeline -> list of executable statements for the given dialect.
+ 
+     The single-phase path, kept as the reference implementation: precompile()/
+@@ -684,11 +781,12 @@
+     if dialect == "duckdb":
+         if known_tables:
+             sql = strip_schema_qualified_aliases(sql, known_tables)
+-        sql = to_duckdb(sql)
++        sql = to_duckdb(sql, numeric_columns)
+     stmts = []
+     source = (split_with_delimiters(sql) if _DELIMITER_RE.search(sql)
+               else split_statements_routine_aware(sql))
+     for s in source:
++        s, txn = strip_transaction_tail(s)
+         low = s.strip().lower()
+         if not low:
+             continue
+@@ -856,7 +954,8 @@
+     return sql
+ 
+ 
+-def precompile(raw_sql: str, known_tables=None, table_columns=None):
++def precompile(raw_sql: str, known_tables=None, table_columns=None,
++               numeric_columns=None):
+     """Stage 1-3 with no run-specific input -> DuckDB statements with sentinels.
+ 
+     Run once per assertion at PUBLISH time. The result is stable for the lifetime
+@@ -879,11 +978,16 @@
+     if known_tables:
+         sql = strip_schema_qualified_aliases(sql, known_tables,
+                                              schema_names=_SENTINEL_SCHEMAS)
+-    sql = to_duckdb(sql)
++    sql = to_duckdb(sql, numeric_columns)
+     stmts = []
+     source = (split_with_delimiters(sql) if _DELIMITER_RE.search(sql)
+               else split_statements_routine_aware(sql))
+     for s in source:
++        s, txn = strip_transaction_tail(s)
++        if txn:
++            # Not silent: the script is malformed and upstream should fix it.
++            print(f"rvfsql: stripped a trailing {txn.upper()} from a statement - "
++                  f"the script is missing a semicolon before it", file=sys.stderr)
+         low = s.strip().lower()
+         if not low:
+             continue
+--- a/publish_store.py	2026-08-26 10:29:17.000000000 +1000
++++ b/publish_store.py	2026-09-07 22:46:42.060337392 +1000
+@@ -98,6 +98,15 @@
+           derive_uuids=True):
+     tables = known_tables(ddl_path, prereq_dir)
+     tcols = column_names(ddl_path)
++    # The TYPE-text map, not tcols. Two assertions compare a SMALLINT mapGroup
++    # to '' - valid MySQL, which coerces the literal to 0 - and DuckDB refuses
++    # the cast per row, so both errored on every release with complexmap rows
++    # and reported zero findings on the AU releases without them. Rewriting that
++    # needs to know which columns are numeric, which only this map carries.
++    numerics = rvfsql.numeric_column_names(table_columns(ddl_path))
++    if not numerics:
++        raise SystemExit("the DDL yielded no numeric columns - the '' rewrite "
++                         "would silently do nothing")
+ 
+     static = manifest.index_by_basename(manifest.load_scripts(manifest_root))
+     derived = manifest.load_amtv4(scripts_dir, group_id, category)
+@@ -128,7 +137,8 @@
+         uuid = entry["uuid"] if isinstance(entry, dict) else entry
+         try:
+             stmts = rvfsql.precompile(raw, known_tables=tables,
+-                                      table_columns=tcols)
++                                      table_columns=tcols,
++                                      numeric_columns=numerics)
+         except Exception as e:                                  # noqa: BLE001
+             failures.append((path.name, f"{type(e).__name__}: {e}"))
+             continue
+@@ -154,7 +164,8 @@
+                 "file": path.name,
+                 "sha256": hashlib.sha256(raw.encode()).hexdigest()[:16],
+                 "statements": rvfsql.precompile(raw, known_tables=tables,
+-                                               table_columns=tcols),
++                                               table_columns=tcols,
++                                               numeric_columns=numerics),
+             })
+         except Exception as e:                                  # noqa: BLE001
+             failures.append((path.name, f"{type(e).__name__}: {e}"))
+@@ -215,8 +226,17 @@
+     """
+     import amtv4
+     schema = rvfsql._SENTINEL_BY_PLACEHOLDER["<PROSPECTIVE>"]
+-    out = [f"CREATE OR REPLACE TABLE {schema}.dual AS SELECT 1 AS dummy",
+-           amtv4.TRANSITIVE_CLOSURE_SQL.format(s=schema).strip()]
++    # DUCKDB_PRELUDE first. rvf_duck.py executes it per connection, so the
++    # Python runtime gets substring_index whether or not the store carries it;
++    # the JAVA engine has no such channel - store["ports"] is the ONLY setup it
++    # applies. Omitting it published a store on which four assertions died with
++    # "Scalar Function with name substring_index does not exist":
++    # complexmap-ifa-rule, extendedmap-ifa-rule, description-fsn-synonym-text
++    # and description-unique-preferred-terms, all of which call
++    # SUBSTRING_INDEX(a.mapRule, ' ', 2) or the equivalent over a term.
++    out = [s.strip() for s in rvfsql.DUCKDB_PRELUDE.split(";") if s.strip()]
++    out.append(f"CREATE OR REPLACE TABLE {schema}.dual AS SELECT 1 AS dummy")
++    out.append(amtv4.TRANSITIVE_CLOSURE_SQL.format(s=schema).strip())
+     body = re.sub(r"--[^\n]*", "", amtv4.macros(schema))
+     out.extend(s.strip() for s in body.split(";") if s.strip())
+     # The corpus's own scalar CREATE FUNCTIONs, which the routine-definition

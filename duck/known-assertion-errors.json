@@ -6,37 +6,19 @@
     "entry that no longer errors - so a fix cannot land without this file shrinking, and",
     "a new error cannot land at all.",
     "",
-    "Every entry here is a LATENT PRODUCTION DEFECT, not a fixture artefact. Each one",
-    "errors only when its table has rows, and the nightly validates an AU edition whose",
-    "complexmap, extendedmap and expressionassociation refsets are empty - so DuckDB",
-    "evaluates nothing, reports zero findings, and the report reads as a clean pass.",
-    "Build 16247's two incomplete assertions are both '<DEPENDENCY> not supplied'; none",
-    "of these three appears, which is the evidence that an empty table hides them.",
+    "EMPTY, and meant to stay that way. The three entries this file was created for were",
+    "all fixed in the publisher on 2026-09-07 (see duck/publisher-fixes.patch):",
     "",
-    "That is the exact failure mode this corpus test exists to expose: an assertion",
-    "that cannot run looks identical to an assertion that ran and found nothing."
+    "  mapGroup = '' on a SMALLINT column, twice - MySQL coerces the literal to 0,",
+    "  DuckDB refuses the cast per row, so both assertions errored on any release with",
+    "  complexmap rows and the AU nightly has none. Now rewritten to = 0 at publish time.",
+    "",
+    "  a statement ending '... ) commit', because its script omits the semicolon before",
+    "  its final 'commit;'. The publisher now strips a trailing transaction-control",
+    "  token and says so; the upstream fix is the missing semicolon.",
+    "",
+    "An entry here is a defect being carried, not a decision. It needs the error, the",
+    "cause, what MySQL does instead, and the fix - so the next person can finish it."
   ],
-  "errors": {
-    "7e70ea3e-c4dd-4ae3-8b75-f0567e42b580": {
-      "file": "component-centric-snapshot-complexmap-group.sql",
-      "error": "Conversion Error: Could not convert string '' to INT16",
-      "cause": "The assertion asks WHERE a.mapGroup IS NULL OR a.mapGroup = '' against complexmaprefset_s.mapgroup, which create-tables-mysql.sql declares SMALLINT. MySQL coerces '' to 0 and compares; DuckDB refuses to cast the literal, per row, so the statement dies as soon as any row is evaluated. Zero rows evaluate to zero findings without error, which is why an AU release never shows it.",
-      "mysql": "Finds rows whose mapgroup loaded as 0, because MySQL's loader turns a blank RF2 field into 0 in a SMALLINT column.",
-      "fix": "A transpilation rule in the publisher: a comparison between a numeric column and the empty-string literal becomes a comparison with 0. Belongs beside the other MySQL-ism rewrites in publish_store.py rather than in the corpus, since the corpus is upstream's and this SQL is valid MySQL."
-    },
-    "6e70ea3e-c4dd-4ae3-8b75-f0567e42e650": {
-      "file": "component-centric-snapshot-extendedmap-group.sql",
-      "error": "Conversion Error: Could not convert string '' to INT16",
-      "cause": "Same predicate over extendedmaprefset_s.mapgroup, also SMALLINT.",
-      "mysql": "As above.",
-      "fix": "Same rule fixes both."
-    },
-    "6c37bee7-62ad-41f9-93e3-12eb4803e619": {
-      "file": "release-type-snapshot-delta-validation-expression-association-refset.sql",
-      "error": "Parser Error: syntax error at or near \"commit\"",
-      "cause": "The source script's INSERT has no terminating semicolon before its final 'commit;' line, so the publisher's splitter emits ONE statement ending '... ) commit'. The corpus has 200-odd scripts ending in a standalone 'commit;' that split away harmlessly; this is the only one where the semicolon is missing, and it is the only statement in the whole 360-assertion store containing the token.",
-      "mysql": "Untested against the MySQL engine, which splits the same way - so this is likely to fail there too, and the AU nightly cannot say, because expressionassociationrefset_d is empty in an AU release.",
-      "fix": "Two halves. Upstream: add the missing semicolon in IHTSDO/snomed-release-validation-assertions - the script is malformed, not the engine. Here: the publisher should refuse to emit a statement whose tail is a bare transaction-control token rather than emitting SQL it knows cannot parse, since a corpus this size will produce another one."
-    }
-  }
+  "errors": {}
 }

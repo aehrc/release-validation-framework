@@ -173,7 +173,7 @@
 6bff26d3-bfcb-4c3f-b0ce-544774ec6156	file-centric-snapshot-mdrs-violation-mrcmattributerangerefset.sql	RAN	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 6c37bee7-62ad-41f9-93e3-12eb4803e617	release-type-full-delta-validation-expression-association-refset.sql	RAN	1	f59e3feb3237ff29b8c980a5b7f49488b36624f83081add8bd996ccf8c8cd71c
 6c37bee7-62ad-41f9-93e3-12eb4803e618	release-type-full-validation-expression-association-refset.sql	RAN	3	0a9f278fa496f63d4ef63e63ff44d344fd8016d35e3fb71b82137e18fe435b44
-6c37bee7-62ad-41f9-93e3-12eb4803e619	release-type-snapshot-delta-validation-expression-association-refset.sql	ERROR	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+6c37bee7-62ad-41f9-93e3-12eb4803e619	release-type-snapshot-delta-validation-expression-association-refset.sql	RAN	2	56ff7f98935e0ebd93aeeeded1d2d8a2123413ddb02d80844089a71c67367734
 6c37bee7-62ad-41f9-93e3-12eb4803e620	release-type-snapshot-validation-expression-association-refset.sql	RAN	5	b44775d98b307542101d61837598f47803eef9e78418be076a58bcd17891134b
 6cd8d840-370d-40d1-b2e8-4539cd05ec11	file-centric-snapshot-mdrs-violation-moduledependencyrefset.sql	RAN	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 6dbaed71-f031-4290-b74f-f35561c2e283	release-type-snapshot-unique-relationship-id.sql	RAN	1	421f124523f6555fb58fbbfd50e2b24e7f06525993899f0bd6d5a20bf274549d
@@ -181,7 +181,7 @@
 6e620469-14f6-4025-85d3-2a7d34d59336	file-centric-snapshot-association-valid-targetcomponentid_AU_EDITION.sql	RAN	13	af0b5e85d808bed74c630c7ed9f498a87f4e982689ac31c79c0de73e8f0eb26b
 6e70ea3e-c4dd-4ae3-8b75-f0567e41b570	file-centric-snapshot-complexmap-unique-id.sql	RAN	1	0151ff42d35a45099209679058bced555e0c9f0384c80a05212c3d0cbd3827ac
 6e70ea3e-c4dd-4ae3-8b75-f0567e42c620	file-centric-snapshot-extendedmap-unique-id.sql	RAN	1	ebe7c8fd78c69cd20a07579a46b19908f75a3170d1b818eac2589936ef4d6ec8
-6e70ea3e-c4dd-4ae3-8b75-f0567e42e650	component-centric-snapshot-extendedmap-group.sql	ERROR	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+6e70ea3e-c4dd-4ae3-8b75-f0567e42e650	component-centric-snapshot-extendedmap-group.sql	RAN	1	bf8060ac31cd3ea04169fefaea001fceb2a315bb7e89f64200940f60664e3d43
 6e70ea3e-c4dd-4ae3-8b75-f0567e43b590	component-centric-snapshot-complexmap-priority.sql	RAN	2	0a2f30490b23648b1850e24af5c91d863fea80e0fec1833d6c8ad6c79d443293
 6f4aa58c-cc59-4a51-a630-fe4c69bac53b	component-centric-snapshot-mrcm-module-scope-unique-id.sql	RAN	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 70befe18-cb16-4b86-bd49-e624ce5f6ae7	component-centric-snapshot-active-owl-axiom-referencing-inactive-concept.sql	RAN	1	5bbcfb03a0a94f333af7be100810e454d2892ddf191ddf24c7f53ce73245daf6
@@ -204,7 +204,7 @@
 7c87a865-beb5-4e03-a489-2b05a40bd860	release-type-snapshot-validation-mrcm-attribute-range-refset.sql	RAN	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 7d105b20-ce21-49c2-b16d-b49df13fdfea	release-type-full-validation-relationship-concrete-values.sql	RAN	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 7e203a1f-2b6d-462a-a6f9-93cbc3893616	release-type-delta-validation-mapCorrelationOrigin-refset.sql	RAN	1	17064dc026b8e87318fb133f122bb54ba3bae388eb9e8f6cdfd5de5ddf4477a1
-7e70ea3e-c4dd-4ae3-8b75-f0567e42b580	component-centric-snapshot-complexmap-group.sql	ERROR	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+7e70ea3e-c4dd-4ae3-8b75-f0567e42b580	component-centric-snapshot-complexmap-group.sql	RAN	1	0d407b2648724db58c9b7584ca6380b66004a02d2f2aba5a7b4250d95d037d09
 7e70ea3e-c4dd-4ae3-8b75-f0567e42d630	component-centric-snapshot-extendedmap-valid-category.sql	RAN	7	0b56bbc5f714d452d2bf9e98d7e122ebde3efcab65931a22f9c923a5627e4e78
 7e70ea3e-c4dd-4ae3-8b75-f0567e42d640	component-centric-snapshot-extendedmap-category-advice-alignment.sql	RAN	7	bdbd1478566b704e3451b571a8f30817abd278142e6fe6f97febb049ec4b6729
 7e70ea3e-c4dd-4ae3-8b75-f0567e42f660	component-centric-snapshot-extendedmap-priority.sql	RAN	2	0b46a31fbd3aa05be4b7a463f2dc795fd05d59b9ed5c0d97c3d6c50cbcce712f
