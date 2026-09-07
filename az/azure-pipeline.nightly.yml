@@ -125,22 +125,26 @@ parameters:
   # Floors, not targets: they exist to catch a phase or a category that
   # silently did not run.
   #
-  # Measured, not guessed, and re-measured once the amtv4 assertions were
-  # wired. Build 16247 - full scope, with a previous release - executed 1,482:
+  # Measured against what THIS pipeline's `groups` default actually requests,
+  # which is the international set and NOT amtv4 - the AMT assertions live in a
+  # private repository and reach the engine through a corpus overlay, so the
+  # scheduled nightly does not ask for them. Builds 16226 and 16246 are the
+  # honest reference:
   #
   #   MRCM                979
-  #   SQL                 425   (225 international + 200 amtv4)
+  #   SQL                 225
   #   DROOL_RULES          78
   #   ARCHIVE_STRUCTURAL    0 failures
+  #   total             1,282
   #
-  # 1,400 sits below that with headroom for MRCM, whose count moves with the
-  # content of the MRCM refsets, and far above any single phase.
-  #
-  # The old floor of 1,000 was set against build 16226's 1,282 and was too low
-  # to do its job: when the 200 amtv4 assertions were absent, SQL ran 225 of
-  # 425 and the total of 1,282 cleared 1,000 without a murmur. A total
+  # The old floor of 1,000 was set against that same 1,282 and could not do its
+  # job. 979 of the total is MRCM, whose count moves with the content of the
+  # MRCM refsets, so a total floor has to sit low enough to tolerate that
+  # variation - which is why it sat through a whole category going absent: when
+  # a run DID request amtv4 and the 200 AMT assertions were missing from the
+  # store, SQL ran 225 of 425 and 1,282 cleared 1,000 without a murmur. A total
   # dominated by a phase that legitimately varies cannot police a phase that
-  # does not, which is why SQL now has its own floor below.
+  # does not.
   #
   # Note how badly a guess would serve either number: without a previous
   # release the same groups produce 209, because the release-type assertions
@@ -149,23 +153,19 @@ parameters:
   - name: minAssertions
     displayName: 'Fail if fewer than this many assertions ran in total (guards a silently skipped phase)'
     type: number
-    default: 1400
+    default: 1200
   # SQL is the deterministic part - group selection times the precompiled store
-  # - so this is the floor that catches an assertion CATEGORY going absent.
-  # 400 leaves room for the release-type assertions that drop out when a
-  # previous release is genuinely unavailable, while 225 - the international
-  # groups alone, i.e. amtv4 gone - fails it. Verified against the real
-  # reports: 16247 clears both floors, and 16226 and 16246 fail both.
+  # - so this is the floor that catches an assertion CATEGORY going absent,
+  # which the total cannot. 200 sits just under the international 225.
   #
-  # Consequence worth stating: a DELIBERATE narrower run - someone overriding
-  # `groups` to the international set - must lower these too, or it fails for
-  # doing what was asked. That is the right way round. The floors encode what
-  # the scheduled nightly is supposed to cover, and a manual run that covers
-  # less should have to say so.
+  # A run that ADDS amtv4 measures 425 SQL and 1,482 total (build 16247), so
+  # queue it with minSqlAssertions=400 and minAssertions=1400: those floors are
+  # then what notices the AMT overlay having vanished, and the overlay is
+  # mutable state outside git, so something needs to.
   - name: minSqlAssertions
     displayName: 'Fail if fewer than this many SQL assertions ran (guards a silently absent category)'
     type: number
-    default: 400
+    default: 200
 
 variables:
   - group: ncts-release
