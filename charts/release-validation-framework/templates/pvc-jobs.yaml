@@ -3,6 +3,17 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: {{ include "release-validation-framework.jobsPvcName" . }}
+  annotations:
+    # Every validation report ever produced lives here, and the console reads
+    # the run list by walking it. Deleting it does not merely lose history: a
+    # report is the only record that a release was validated at all.
+    # See pvc-releases.yaml for why both annotations are needed and why Retain
+    # has to come from the PV rather than from here.
+    helm.sh/resource-policy: keep
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+    {{- with .Values.persistence.jobs.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
   labels:
     {{- include "release-validation-framework.labels" . | nindent 4 }}
 spec:

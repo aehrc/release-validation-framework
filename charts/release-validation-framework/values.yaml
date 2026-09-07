@@ -66,6 +66,10 @@ env:
 persistence:
   # -- PVC for shared validation jobs (upload handover and reports)
   jobs:
+    # -- Extra annotations for this claim. The chart already sets
+    # helm.sh/resource-policy and the Argo sync-options that stop it being
+    # deleted with the release; this is for anything site-specific.
+    annotations: {}
     # -- Whether to create the jobs PVC
     create: true
     # -- Claim name for the jobs share
@@ -81,6 +85,10 @@ persistence:
     mountPath: /app/jobs
   # -- PVC for published release archives
   releases:
+    # -- Extra annotations for this claim. The chart already sets
+    # helm.sh/resource-policy and the Argo sync-options that stop it being
+    # deleted with the release; this is for anything site-specific.
+    annotations: {}
     # -- Whether to create the releases PVC
     create: true
     # -- Claim name for the releases share

@@ -194,6 +194,9 @@
             },
             "mountPath": {
               "type": "string"
+            },
+            "annotations": {
+              "type": "object"
             }
           },
           "required": [
@@ -229,6 +232,9 @@
             },
             "mountPath": {
               "type": "string"
+            },
+            "annotations": {
+              "type": "object"
             }
           },
           "required": [
