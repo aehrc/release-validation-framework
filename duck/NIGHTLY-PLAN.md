@@ -1360,3 +1360,47 @@ the end-to-end instance lists.
   `ExpressionConstraintListener` and appears under `javap -constants`, not in the
   disassembly. Gate fixed rather than dropped; it now also fails if the parallel
   build is missing, or if `SimpleDateFormat` comes back.
+
+### The MRCM fixes on the cluster, build 16246, 2026-09-07
+
+First nightly carrying `snomed-query-service 6.0.3-aehrc-perf` (out-of-range
+term-set queries) and `mrcm-validator 4.0.5-aehrc-perf` (lateralizable check by
+ancestor set). Verified in the running pod, not inferred - `/app/libs` carries
+both jars.
+
+|  | 16226 | 16246 |
+|---|---|---|
+| start -> complete | 11:36:08 -> 11:49:44 = **816 s** | 10:17:58 -> 10:25:42 = **464 s** |
+| structural done | +76 s | +80 s |
+| SQL done | +373 s | +409 s |
+| tail after SQL, i.e. MRCM still running | **443 s** | **55 s** |
+| failing assertions | SQL 13, DROOL_RULES 23, MRCM 4 | SQL 11, DROOL_RULES 19, **MRCM 4** |
+| oom_kill / restarts | - | 0 / 0 |
+
+**1.76x end to end, and MRCM stops being the critical path** - the tail beyond
+SQL fell from 443 s to 55 s. SQL is now the long pole at 409 s of 464 s, which
+is where the next look belongs.
+
+**MRCM's findings are unchanged, 4 and 4.** That is the parity signal that
+matters here, because the two fixes rewrote how its queries are built.
+
+Two caveats, both honest limits on the comparison:
+
+* The prospective file has the SAME NAME in both runs but NOT the same bytes -
+  892,012,799 vs 892,055,209 - because the daily build was rebuilt and the name
+  encodes the release date, not the build date. So this is near-like-for-like
+  (0.005% of the input), not identical. The six assertions that flipped
+  fail->pass are all preferred-term and FSN checks in DROOL_RULES and SQL,
+  which is what a content fix looks like, and none of them is MRCM.
+* **The memory saving is invisible in `anon` and that is expected.** The worker
+  sat at 18.92 GiB anon with 0.02 GiB page cache, because
+  `MaxRAMPercentage=75` of a 24Gi container gives an ~18 GiB heap and G1
+  expands into it and does not give it back. Locally the peak DEMAND fell from
+  13.92 to ~9 GiB; on the cluster that shows up as headroom - no OOM kills, no
+  restarts - rather than as a smaller number.
+
+So realising the memory win now requires lowering the ceiling, which is
+newly justified: the container was sized at 24Gi when MRCM peaked at 13.9 GiB
+and was OOMKilled at 16Gi. Measure a run at a lower limit before moving it,
+because a smaller worker changes how many fit per node and therefore KEDA's
+arithmetic.
