@@ -544,9 +544,15 @@ function itemHtml(item, kind) {
           <thead><tr>${cols.map((c) => `<th>${esc(c)}</th>`).join('')}</tr></thead>
           <tbody>${instances.map((row) => `<tr>${cols.map((c) => `<td>${esc(row[c])}</td>`).join('')}</tr>`).join('')}</tbody>
         </table>
-        <p class="meta">first ${instances.length} of ${count === -1 ? 'unknown' : num(count)}</p>` : ''}
+        <p class="meta">first ${instances.length} of ${count === -1 ? 'unknown' : num(count)}
+          \u00b7 <a href="#" class="allfail" data-uuid="${esc(item.assertionUuid || '')}">all ${
+            count === -1 ? '' : num(count)} as CSV</a></p>` : ''}
+      ${item.assertionUuid ? `
+        <details class="src" data-uuid="${esc(item.assertionUuid)}">
+          <summary>What this assertion checks</summary>
+          <div class="srcbody"><p class="meta">loading\u2026</p></div>
+        </details>` : ''}
       <p class="meta">${esc(item.testType || '')} \u00b7 ${esc(item.testCategory || '')} \u00b7 ${esc(item.assertionUuid || '')}</p>
-    </div>
   </details>`;
 }
 
@@ -696,6 +702,60 @@ function render(data, runId, storageLocation) {
     const url = `${API}/result/${encodeURIComponent(runId)}/failures`
       + `?storageLocation=${encodeURIComponent(storageLocation)}&format=csv`;
     window.location.assign(url);
+  });
+
+  /* The source is fetched when the section is OPENED, once per assertion.
+   *
+   * A red nightly has 21 failures and a green one has 1,441 passes; fetching
+   * every assertion's SQL up front would be that many requests to show text
+   * nobody has asked to read. Delegated on #items because draw() replaces its
+   * innerHTML on every filter keystroke, so per-element listeners would be
+   * rebound constantly - and `toggle` does not bubble, hence the click. */
+  const sourceCache = new Map();
+  $('#items').addEventListener('click', async (e) => {
+    const link = e.target.closest('a.allfail');
+    if (link) {
+      e.preventDefault();
+      const uuid = link.dataset.uuid;
+      window.location.assign(`${API}/result/${encodeURIComponent(runId)}/failures`
+        + `?storageLocation=${encodeURIComponent(storageLocation)}&format=csv`
+        + (uuid ? `&assertionId=${encodeURIComponent(uuid)}` : ''));
+      return;
+    }
+
+    const summary = e.target.closest('details.src > summary');
+    if (!summary) return;
+    const details = summary.parentElement;
+    // The click precedes the state change, so `open` is still the old value.
+    if (details.open) return;
+
+    const uuid = details.dataset.uuid;
+    const body = details.querySelector('.srcbody');
+    if (sourceCache.has(uuid)) {
+      body.innerHTML = sourceCache.get(uuid);
+      return;
+    }
+    try {
+      const res = await fetch(`${API}/assertions/${encodeURIComponent(uuid)}/source`);
+      const json = await res.json();
+      let html;
+      if (res.ok) {
+        const statements = json.statements || [];
+        html = `
+          <p class="meta">${esc(json.file || '')}${json.severity ? ` \u00b7 ${esc(json.severity)}` : ''}</p>
+          ${statements.map((s) => `<pre class="sql">${esc(s)}</pre>`).join('')}
+          ${statements.length ? '' : '<p class="meta">No statements recorded.</p>'}`;
+      } else {
+        // 404 for a Drools rule or MRCM check, 501 on the MySQL engine. Both
+        // carry a reason, and showing it is the point - "not found" alone reads
+        // as though the assertion itself were unknown.
+        html = `<p class="meta">${esc(json.message || `No source available (${res.status}).`)}</p>`;
+      }
+      sourceCache.set(uuid, html);
+      body.innerHTML = html;
+    } catch (err) {
+      body.innerHTML = `<p class="meta">Could not load the source: ${esc(String(err))}</p>`;
+    }
   });
 
   $('#download').addEventListener('click', () => {

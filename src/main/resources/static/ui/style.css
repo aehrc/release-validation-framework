@@ -377,3 +377,15 @@ table.runs tr.openable:focus-visible { outline: 2px solid var(--accent); outline
 .gname { flex: 1; font-family: var(--mono); font-size: 13px; }
 .gcount { color: var(--ink-2); font-size: 12.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .gbody { padding: 0 10px 8px; }
+
+/* Assertion source, shown beside its failures. Monospace and pre-wrapped:
+   these are real SQL statements out of the store, some of them long, and
+   reflowing them makes them unreadable rather than merely ugly. */
+details.src { margin: 8px 0 4px; }
+details.src > summary { cursor: pointer; font-size: 13px; color: var(--ink-2); }
+details.src > summary:hover { color: var(--ink); }
+pre.sql { margin: 6px 0; padding: 9px 11px; background: var(--bg); border: 1px solid var(--line);
+  border-radius: 6px; font-family: var(--mono); font-size: 12px; line-height: 1.5;
+  white-space: pre-wrap; word-break: break-word; overflow-x: auto; }
+a.allfail { color: var(--accent); text-decoration: none; }
+a.allfail:hover { text-decoration: underline; }
