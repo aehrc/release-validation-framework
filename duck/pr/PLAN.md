@@ -76,6 +76,13 @@ measurement is. Bundled, the safe win waits for the risky review.
 | B | query-service | 4 | - | index-build side, touches no query path |
 | C | mrcm-validator | 5 | **A** | small and decisive; the phase win |
 | D | mrcm-validator | 6 + 7 | B-style review | thread safety, needs its own scrutiny |
+| E | snomed-release-validation-assertions | one missing semicolon | - | one character, no fork made yet |
+
+E is the smallest and the most clearly upstream's: one script omits the `;`
+before its final `commit;`, so every splitter yields one unparseable statement
+and the assertion cannot run - invisible because the table it reads is empty in
+the releases being validated. Patch and body in
+`assertions-missing-semicolon.patch` / `.md`. No fork of that repo exists yet.
 
 C is the one I would want landed first: 145.7s -> 0.2s, identical violated set
 including under forced violations, and it is a dozen lines.
