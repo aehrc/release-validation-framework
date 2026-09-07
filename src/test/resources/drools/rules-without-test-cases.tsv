@@ -1,0 +1,34 @@
+# Rule directories that ship rules and assert nothing about them.
+#
+# DroolsRuleTestCasesTest fails on an unlisted one, and fails on a listed one
+# that has since gained cases - so the list can only shrink, and a new untested
+# rule cannot be added quietly.
+#
+# path	reason
+#
+# Structural placeholders. Each national edition needs a rule directory to
+# exist so the executor has a rule set to load for it, and AlwaysPasses.drl is
+# a rule that fires on nothing. There is no behaviour to assert.
+at-authoring/empty/always-passes	placeholder rule set: AlwaysPasses.drl fires on nothing
+au-authoring/empty/always-passes	placeholder rule set: AlwaysPasses.drl fires on nothing
+be-authoring/empty/always-passes	placeholder rule set: AlwaysPasses.drl fires on nothing
+ch-authoring/empty/always-passes	placeholder rule set: AlwaysPasses.drl fires on nothing
+empty-test/empty/always-passes	placeholder rule set: AlwaysPasses.drl fires on nothing
+fr-authoring/empty/always-passes	placeholder rule set: AlwaysPasses.drl fires on nothing
+ie-authoring/empty/always-passes	placeholder rule set: AlwaysPasses.drl fires on nothing
+kr-authoring/empty/always-passes	placeholder rule set: AlwaysPasses.drl fires on nothing
+loinc-authoring/empty/always-passes	placeholder rule set: AlwaysPasses.drl fires on nothing
+nl-authoring/empty/always-passes	placeholder rule set: AlwaysPasses.drl fires on nothing
+nz-authoring/empty/always-passes	placeholder rule set: AlwaysPasses.drl fires on nothing
+us-authoring/empty/always-passes	placeholder rule set: AlwaysPasses.drl fires on nothing
+zh-authoring/empty/always-passes	placeholder rule set: AlwaysPasses.drl fires on nothing
+#
+# REAL coverage gaps: rules that run against every AU release and have no test
+# case in either direction, so nothing states what they are supposed to find.
+# These are upstream's to fix, and worth a PR - redundant-is-a-relationship in
+# particular, because the AU nightly reports on it (12 findings in build 16247,
+# including two against 64572001) and an untested rule producing findings on
+# real content is the pairing that needs a test most.
+common-authoring/relationships/modelling-change-on-base-substance-concept	no test cases upstream
+common-authoring/relationships/redundant-is-a-relationship	no test cases upstream, and it fires on real AU content
+common-authoring/relationships/relationship-invalid-target	no test cases upstream
