@@ -78,14 +78,6 @@ spec:
             - name: RVF_DUCK_MEMORY_LIMIT
               value: {{ . | quote }}
             {{- end }}
-            {{- with .Values.worker.mrcm.indexDirectory }}
-            # A JVM system property, NOT a Spring property: the mrcm-validator
-            # library reads it with System.getProperty, so an RVF_* env var
-            # never reaches it. JAVA_TOOL_OPTIONS is additive and does not
-            # disturb MaxRAMPercentage, which is baked into the image.
-            - name: JAVA_TOOL_OPTIONS
-              value: {{ printf "-Dmrcm.validator.index.directory=%s" . | quote }}
-            {{- end }}
             {{- with .Values.worker.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

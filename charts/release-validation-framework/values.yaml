@@ -193,22 +193,6 @@ worker:
     memoryLimit: "4GB"
     # -- Number of DuckDB worker threads (must match cpu limit)
     threads: "8"
-  # -- MRCM validation tuning
-  mrcm:
-    # -- Directory for the MRCM Lucene indexes, on the node-local scratch disk.
-    #
-    # MRCM builds a full concept index for the INFERRED and STATED forms, and it
-    # builds them concurrently. Left unset the library keeps both on the heap in
-    # a ByteBuffersDirectory, which is what made this phase the memory ceiling.
-    # Set, it uses an NIOFSDirectory backed by the page cache instead.
-    #
-    # Measured solo against the 853MB AU edition, same 14GiB heap, only this
-    # setting differing: on disk the run COMPLETED in 524s with 10 full GCs and
-    # a 13.93GiB peak; on the heap it died with OutOfMemoryError after 64 full
-    # GCs. The indexes themselves are small on disk - 38MB for that edition.
-    #
-    # Empty disables it and restores the on-heap behaviour.
-    indexDirectory: "/work/mrcm-index"
   # -- Ephemeral work volume configuration
   workVolume:
     emptyDir:
