@@ -73,7 +73,12 @@ public final class DuckMaterialiser {
 	private DuckMaterialiser() {
 	}
 
-	public record Result(int tablesLoaded, int emptyFiles, int placeholders, long rows, long millis) {
+	public record Result(int tablesLoaded, int emptyFiles, int placeholders, long rows,
+			long raggedRows, long millis) {
+	}
+
+	/** One table's load: how many rows, and how many of them were malformed. */
+	private record Loaded(long rows, long ragged) {
 	}
 
 	public static Result materialise(Connection con, Path releaseDir, String schema,
@@ -83,6 +88,7 @@ public final class DuckMaterialiser {
 		List<String> loaded = new ArrayList<>();
 		int emptyFiles = 0;
 		long rows = 0;
+		long ragged = 0;
 
 		try (Statement st = con.createStatement()) {
 			st.execute("CREATE SCHEMA IF NOT EXISTS " + schema);
@@ -119,7 +125,9 @@ public final class DuckMaterialiser {
 					// below still gives it a queryable, zero-row table.
 					continue;
 				}
-				rows += load(st, schema, table, loadable, columns);
+				Loaded l = load(con, schema, table, loadable, columns);
+				rows += l.rows();
+				ragged += l.ragged();
 				loaded.add(table);
 			}
 
@@ -138,10 +146,11 @@ public final class DuckMaterialiser {
 						+ " (" + e.getValue() + ")");
 				placeholders++;
 			}
-			Result r = new Result(loaded.size(), emptyFiles, placeholders, rows,
+			Result r = new Result(loaded.size(), emptyFiles, placeholders, rows, ragged,
 					System.currentTimeMillis() - t0);
-			LOGGER.info("materialised {} tables ({} rows), {} empty files, {} placeholders in {}ms",
-					r.tablesLoaded(), r.rows(), r.emptyFiles(), r.placeholders(), r.millis());
+			LOGGER.info("materialised {} tables ({} rows, {} malformed), {} empty files, "
+					+ "{} placeholders in {}ms", r.tablesLoaded(), r.rows(), r.raggedRows(),
+					r.emptyFiles(), r.placeholders(), r.millis());
 			return r;
 		}
 	}
@@ -165,7 +174,7 @@ public final class DuckMaterialiser {
 	 * file sorted and inserting the others after it would leave DuckDB's
 	 * row-group statistics useless for pruning.
 	 */
-	private static long load(Statement st, String schema, String table, List<Path> files,
+	private static Loaded load(Connection con, String schema, String table, List<Path> files,
 			String columns) throws SQLException, IOException {
 		List<String> ddlNames = columnNames(columns);
 		// read_csv's `columns` parameter turns schema detection OFF: with
@@ -181,7 +190,8 @@ public final class DuckMaterialiser {
 		// defect 8. This is the one place the port deliberately does NOT
 		// reproduce MySQL, because a validator reading a column's data out of a
 		// different column cannot be defended on parity grounds.
-		String spec = columnSpec(columns, fileOrder(files, ddlNames, table));
+		List<String> order = fileOrder(files, ddlNames, table);
+		String spec = columnSpec(columns, order);
 		String sort = sortKey(table, columns);
 		String fileList = files.stream()
 				.map(f -> "'" + f.toAbsolutePath() + "'")
@@ -201,8 +211,96 @@ public final class DuckMaterialiser {
 				// Never skip a bad row. A silently dropped line is a validation
 				// that reports fewer failures than the release actually has.
 				+ "ignore_errors=false) ORDER BY " + sort;
-		st.execute(sql);
-		try (var rs = st.executeQuery("SELECT count(*) FROM " + schema + "." + table)) {
+		long ragged = 0;
+		// A statement per attempt, and never the one that failed. DuckDB's JDBC
+		// driver leaves a failed statement holding an unsuccessful pending
+		// result, and every later execute on it dies with "Statement was
+		// closed" - so reusing one across tables makes the FIRST bad file look
+		// like sixty broken ones, and reusing it for the fallback below makes
+		// the fallback impossible.
+		try (Statement st = con.createStatement()) {
+			st.execute(sql);
+		} catch (SQLException e) {
+			// A file whose rows do not all have the declared number of fields.
+			// read_csv refuses the whole relation; MySQL's `load data infile`
+			// loads every row, padding a short one and truncating a long one,
+			// and reporting warnings. Refusing here would be a worse answer
+			// than MySQL's, and not a theoretical one: RVF's own regression
+			// fixture ships four such files, structural validation runs
+			// CONCURRENTLY with this phase rather than gating it, and a release
+			// whose structure is broken is precisely a release someone needs a
+			// report about. So the strict read stays the fast path - every
+			// well-formed release pays nothing - and a failure falls back to a
+			// read that tolerates what MySQL tolerates.
+			ragged = loadRagged(con, schema, table, files, columns, order, sort);
+			// Two distinct causes reach here and the message has to tell them
+			// apart: a ragged row count above zero is raggedness, and zero means
+			// the strict read refused for a TYPING reason instead - the fixture's
+			// complexmap file carries a blank in a SMALLINT column, which MySQL
+			// loads as 0 and read_csv will not cast. Both are loaded the same
+			// tolerant way; only the diagnosis differs, so the original error
+			// travels with it.
+			LOGGER.warn("{}: strict read refused ({}), reloaded tolerantly - {} of its rows do "
+					+ "not match the {} declared columns, padded and truncated as MySQL would. "
+					+ "Files: {}", table, e.getMessage().replace('\n', ' ').trim(), ragged,
+					ddlNames.size(),
+					files.stream().map(f -> f.getFileName().toString()).toList());
+		}
+		try (Statement st = con.createStatement();
+				var rs = st.executeQuery("SELECT count(*) FROM " + schema + "." + table)) {
+			rs.next();
+			return new Loaded(rs.getLong(1), ragged);
+		}
+	}
+
+	/**
+	 * The tolerant read: one column, split in SQL, projected by position.
+	 *
+	 * <p>DuckDB has no "truncate the row" option - {@code ignore_errors} DROPS a
+	 * malformed row, which would report fewer failures than the release has, and
+	 * {@code null_padding} does not survive a row with too MANY fields. So the
+	 * line is read whole, on a delimiter no RF2 field can contain, and split
+	 * here: an index past the end of the split yields NULL, which pads, and an
+	 * index the projection never mentions is discarded, which truncates.
+	 *
+	 * <p>{@code skip=1} rather than {@code header=true}, because with one
+	 * declared column there is no header to match - and it applies per file, so
+	 * a table fed by several language variants still loses one line each.
+	 *
+	 * <p>Two deliberate divergences from MySQL, both confined to rows that are
+	 * already malformed: a missing field arrives as NULL where MySQL writes ''
+	 * or 0, and a non-numeric id arrives as NULL where MySQL writes 0. Neither
+	 * can match a real component, so neither manufactures a finding; and the row
+	 * is reported by structural validation either way.
+	 */
+	private static long loadRagged(Connection con, String schema, String table, List<Path> files,
+			String columns, List<String> order, String sort) throws SQLException {
+		Map<String, String> types = new java.util.LinkedHashMap<>();
+		for (String col : columns.split(",")) {
+			String[] nameType = col.trim().split("\\s+", 2);
+			types.put(nameType[0].toLowerCase(java.util.Locale.ROOT), nameType[1]);
+		}
+		String fileList = files.stream()
+				.map(f -> "'" + f.toAbsolutePath() + "'")
+				.collect(java.util.stream.Collectors.joining(", "));
+		String split = "SELECT str_split(line, chr(9)) AS f FROM read_csv([" + fileList
+				+ "], header=false, skip=1, delim=chr(1), quote='', escape='', "
+				+ "columns={'line':'VARCHAR'})";
+		List<String> projection = new ArrayList<>();
+		for (String name : columnNames(columns)) {
+			int position = order.indexOf(name) + 1;
+			String type = types.get(name);
+			// try_cast, not cast: a malformed row can hold a non-numeric id, and
+			// a cast would take the whole release down over one bad line.
+			projection.add("try_cast(f[" + position + "] AS " + type + ") AS " + name);
+		}
+		try (Statement st = con.createStatement()) {
+			st.execute("CREATE OR REPLACE TABLE " + schema + "." + table + " AS SELECT "
+					+ String.join(", ", projection) + " FROM (" + split + ") ORDER BY " + sort);
+		}
+		try (Statement st = con.createStatement();
+				var rs = st.executeQuery("SELECT count(*) FROM (" + split + ") WHERE len(f) <> "
+						+ order.size())) {
 			rs.next();
 			return rs.getLong(1);
 		}

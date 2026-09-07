@@ -108,6 +108,91 @@ class DuckMaterialiserTest {
 		}
 	}
 
+	@Test
+	void aRaggedFileLoadsEveryRowRatherThanNone(@TempDir Path release) throws Exception {
+		// RVF's own regression fixture ships four files whose rows do not all
+		// have the declared number of fields, because malformed content is what
+		// a validator is FOR. read_csv refuses such a relation outright, so the
+		// whole release failed to materialise and the SQL phase reported
+		// nothing at all - where MySQL's loader takes every row, padding a
+		// short one and truncating a long one.
+		//
+		// Structural validation runs concurrently with this phase rather than
+		// gating it, so refusing here loses the content report for exactly the
+		// releases someone most needs one about.
+		write(release, "Delta/Terminology/sct2_Description_Delta-en_XX1000000_20260831.txt",
+				DESCRIPTION_HEADER
+				// well-formed
+				+ "101013\t20260831\t1\t900000000000207008\t138875005\ten\t900000000000003001\tSNOMED CT Concept\t900000000000020002\n"
+				// one field short: caseSignificanceId missing
+				+ "101014\t20260831\t1\t900000000000207008\t138875005\ten\t900000000000003001\tShort row\n"
+				// one field too many, as an unescaped tab inside a term does
+				+ "101015\t20260831\t1\t900000000000207008\t138875005\ten\t900000000000003001\tLong row\t900000000000020002\tspill\n");
+
+		try (Connection con = connect()) {
+			DuckMaterialiser.Result r = DuckMaterialiser.materialise(con, release, "prospective", COLUMNS);
+			assertEquals(3, r.rows(), "every row, including the two malformed ones");
+			assertEquals(2, r.raggedRows(), "and it says how many were malformed");
+
+			try (Statement st = con.createStatement();
+					ResultSet rs = st.executeQuery("SELECT term, casesignificanceid "
+							+ "FROM prospective.description_d ORDER BY id")) {
+				assertTrue(rs.next());
+				assertEquals("SNOMED CT Concept", rs.getString(1));
+				assertEquals(900000000000020002L, rs.getLong(2));
+
+				assertTrue(rs.next());
+				assertEquals("Short row", rs.getString(1), "the fields present are still read");
+				rs.getLong(2);
+				assertTrue(rs.wasNull(), "a missing field pads rather than shifting the row");
+
+				assertTrue(rs.next());
+				assertEquals("Long row", rs.getString(1), "the declared fields keep their meaning");
+				assertEquals(900000000000020002L, rs.getLong(2), "the spill is dropped, not shifted in");
+			}
+		}
+	}
+
+	@Test
+	void aWellFormedFileIsNotCountedAsRagged(@TempDir Path release) throws Exception {
+		// The tolerant read is a FALLBACK, and this is what says so: if it ever
+		// became the normal path, every release would report malformed rows it
+		// does not have, and the warning that names a genuinely broken file
+		// would stop meaning anything.
+		write(release, "Snapshot/Terminology/sct2_Concept_Snapshot_XX1000000_20260831.txt",
+				"id\teffectiveTime\tactive\tmoduleId\tdefinitionStatusId\n"
+				+ "138875005\t20260831\t1\t900000000000207008\t900000000000074008\n");
+
+		try (Connection con = connect()) {
+			DuckMaterialiser.Result r = DuckMaterialiser.materialise(con, release, "prospective", COLUMNS);
+			assertEquals(1, r.rows());
+			assertEquals(0, r.raggedRows());
+		}
+	}
+
+	@Test
+	void oneBadFileDoesNotPoisonTheRest(@TempDir Path release) throws Exception {
+		// DuckDB's JDBC driver leaves a failed statement holding an
+		// unsuccessful pending result, and every later execute on it dies with
+		// "Statement was closed". Sharing one statement across a release
+		// therefore turns the FIRST bad file into sixty broken tables - which is
+		// how a 12-statement setup regression once presented, and it is why
+		// load() takes a Connection and not a Statement.
+		write(release, "Delta/Terminology/sct2_Description_Delta-en_XX1000000_20260831.txt",
+				DESCRIPTION_HEADER
+				+ "101014\t20260831\t1\t900000000000207008\t138875005\ten\t900000000000003001\tShort row\n");
+		write(release, "Snapshot/Terminology/sct2_Concept_Snapshot_XX1000000_20260831.txt",
+				"id\teffectiveTime\tactive\tmoduleId\tdefinitionStatusId\n"
+				+ "138875005\t20260831\t1\t900000000000207008\t900000000000074008\n");
+
+		try (Connection con = connect()) {
+			DuckMaterialiser.Result r = DuckMaterialiser.materialise(con, release, "prospective", COLUMNS);
+			assertEquals(2, r.tablesLoaded(), "the good table loads too");
+			assertEquals(1, count(con, "concept_s"));
+			assertEquals(1, count(con, "description_d"));
+		}
+	}
+
 	private static Connection connect() throws Exception {
 		Class.forName("org.duckdb.DuckDBDriver");
 		return DriverManager.getConnection("jdbc:duckdb:");
