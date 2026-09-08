@@ -95,7 +95,9 @@ class AssertionPackReloadTest {
 				 "generator": {"sqlglot": "30.15.0"},
 				 "runIdSentinel": "424242424242424242",
 				 "qaResultToken": "qa_result",
-				 "sentinels": [{"placeholder": "<RUNID>", "sentinel": "424242424242424242"}],
+				 "sentinels": [{"placeholder": "<RUNID>", "sentinel": "424242424242424242"},
+				  {"placeholder": "<ASSERTIONUUID>", "sentinel": "rvfph_assertionuuid_"},
+				  {"placeholder": "<PREVIOUS>", "sentinel": "rvfph_previous_"}],
 				 "knownTables": ["concept_s"],
 				 "tableColumns": {"concept_s": "id BIGINT"},
 				 "ports": ["%s"],
@@ -103,7 +105,7 @@ class AssertionPackReloadTest {
 				 "assertions": {
 				  "%s": {"file": "%s", "sha256": "%s", "text": "%s",
 				         "keywords": "component-centric-validation", "severity": "",
-				         "statements": ["INSERT INTO qa_result SELECT 1"]}
+				         "statements": ["INSERT INTO qa_result (run_id, assertion_id, concept_id) SELECT 424242424242424242, 'rvfph_assertionuuid_', c.id FROM concept_s c"]}
 				 }
 				}
 				""".formatted(macro, uuid, file, sourceHash(file), file);
@@ -227,6 +229,46 @@ class AssertionPackReloadTest {
 		IllegalArgumentException e =
 				assertThrows(IllegalArgumentException.class, service::configuredPackSources);
 		assertTrue(e.getMessage().contains("pinned"), e.getMessage());
+	}
+
+	@Test
+	void aPackThatDoesNotExecuteIsRefusedAndNothingChanges(@TempDir Path dir) throws Exception {
+		// The failure this check exists for. The pack is well-formed, its digest
+		// matches, and it merges cleanly - every guard before this one passes -
+		// but its SQL calls a macro nothing defines. Without the check the swap
+		// succeeds and the assertion fails hours later inside a validation, as
+		// findings that never appeared.
+		//
+		// Not hypothetical: a publisher change dropped substring_index and four
+		// international assertions died with exactly this error. Inside one
+		// store a test caught it; across packs fetched at runtime nothing
+		// would have.
+		String pack = store(UUID_PACK, "pack.sql", MACRO)
+				.replace("c.id FROM concept_s c", "no_such_macro(c.id) FROM concept_s c");
+		serve(pack);
+		DuckAssertionService service = serviceWith(dir, spec(sha256(pack)));
+
+		IOException e = assertThrows(IOException.class, service::refreshConfiguredPacks);
+		assertTrue(e.getMessage().contains("does not execute"), e.getMessage());
+		assertTrue(e.getMessage().contains("pack.sql"), e.getMessage());
+		assertEquals(1, service.findAll().size(), "the bundled corpus is still serving");
+		assertTrue(service.loadedPacks().isEmpty());
+	}
+
+	@Test
+	void aPackNeedingAReleaseThisCheckCannotSupplyIsNotAFailure(@TempDir Path dir)
+			throws Exception {
+		// An assertion comparing against the PREVIOUS release cannot execute
+		// here, and must not be treated as broken: the binder skips it, exactly
+		// as production does when no previous release is configured. Treating a
+		// skip as a failure would make every release-type pack unloadable.
+		String pack = store(UUID_PACK, "pack.sql", MACRO)
+				.replace("FROM concept_s c", "FROM rvfph_previous_.concept_s c");
+		serve(pack);
+		DuckAssertionService service = serviceWith(dir, spec(sha256(pack)));
+
+		service.refreshConfiguredPacks();
+		assertEquals(2, service.findAll().size(), "loaded, with the skip left to the run");
 	}
 
 	@Test

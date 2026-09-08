@@ -227,3 +227,53 @@ and the private-image-layering plan both stop being necessary at that point.
 
 Not done here on purpose: publishing requires a branch on a private repository,
 which is a decision rather than a step.
+
+
+## The reload proves the corpus EXECUTES, 2026-09-08
+
+Digest verification proves a pack is what was approved; the merge proves two
+packs can be combined. Neither proves the combination runs. A pack's SQL can
+call a macro its base defines, and the base can stop defining it - which is not
+hypothetical, because a publisher change dropped `substring_index` and four
+international assertions died with "Scalar Function with name substring_index
+does not exist". Inside one store a test caught that. Across packs fetched at
+runtime, nothing would have: the swap would succeed and the assertions would
+fail hours later, in a validation, as findings that never appeared.
+
+So `reload` applies the merged store to a throwaway in-memory DuckDB with EMPTY
+tables in the shapes it declares, and executes every assertion. **560
+assertions verify in 2.15s; the whole reload is 3.0s.** On any failure the swap
+does not happen and the previous corpus keeps serving.
+
+Three things it has to reproduce about production, each of which it got wrong
+first and each of which is now commented where it matters:
+
+* **`resource` assertions run FIRST**, as `DuckDbValidationService` runs them.
+  They build the shared intermediate tables the rest select from, so in store
+  order four real assertions fail on a table nothing had created.
+* **All three release schemas exist** - prospective, previous, dependency. An
+  assertion may mix statements that read the previous release with statements
+  that do not; with no previous schema the binder skips the first kind and the
+  rest fail on a temporary table the skipped statement would have built.
+* **A skip is not a failure.** An assertion needing a release the check does
+  not supply is skipped by the binder, exactly as production skips it when no
+  previous release is configured.
+
+What it deliberately does NOT catch is anything data-dependent. With no rows,
+`mapGroup = ''` against a SMALLINT never evaluates its cast and passes here -
+and that exact assertion errored in production for years. Empty tables answer
+"is this corpus coherent"; a real release answers "is it correct", which is
+`AssertionCorpusDigestTest`'s job against a committed fixture at build time.
+Two questions, two checks: conflating them would make this one slow enough to
+skip.
+
+### A production behaviour this surfaced
+
+An assertion that mixes previous-release-dependent statements with independent
+ones does not cleanly skip when no previous release is supplied - it FAILS,
+because the later statements reference a temporary table the skipped statement
+would have created. `component-centric-snapshot-description-active-inactive-term-match.sql`
+is one. Runs in this configuration report it as an execution error rather than
+as not-run.
+
+Still to build: publishing the AMT pack from its own repository.
