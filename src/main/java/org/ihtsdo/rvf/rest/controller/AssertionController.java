@@ -4,6 +4,7 @@ import org.ihtsdo.rvf.core.service.duck.DuckAssertionService;
 import org.ihtsdo.rvf.core.service.duck.DuckStorePacks;
 import org.springframework.beans.factory.ObjectProvider;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -254,11 +255,39 @@ public class AssertionController {
 		return new ResponseEntity<>(assertion, HttpStatus.OK);
 	}
 
+	/**
+	 * The assertions, with their group membership, in a list the CALLER owns.
+	 *
+	 * <p>Both halves of that sentence were wrong and Attila found them. This
+	 * returned whatever {@code findAll()} returned, and {@code getAssertions}
+	 * then called {@code addAll} on it to append Drools rules. On the MySQL
+	 * engine {@code findAll()} runs a query, so the endpoint did own a private
+	 * list and nothing showed. On the DuckDB engine the corpus is loaded once
+	 * and held as {@code List.copyOf}, so the append threw
+	 * {@code UnsupportedOperationException} and the endpoint answered 500 -
+	 * three frames away from anything that mentions a list.
+	 *
+	 * <p>The immutable corpus is the correct half of that. Had {@code findAll()}
+	 * handed out a mutable internal list, the rules would have been appended to
+	 * the LIVE corpus, every later validation would have enumerated them, and
+	 * the engine - which has no statements for a Drools rule - would have
+	 * reported each as "store and assertion corpus are out of step". A page
+	 * view would have degraded every subsequent run. So the copy belongs here.
+	 *
+	 * <p>The group join also writes to the assertion OBJECTS, which the DuckDB
+	 * engine shares between requests. It is idempotent - the store-backed
+	 * source resolves membership when it loads, so every name being added is
+	 * already there - but "idempotent" is not "thread-safe", and two concurrent
+	 * requests mutating one {@code LinkedHashSet} is a data race for no gain.
+	 * So the group is only added when it is missing, which on the DuckDB path
+	 * means never.
+	 */
 	private List<Assertion> getAssertionsAndJoinGroups() {
-		List<Assertion> assertions = assertionService.findAll();
+		List<Assertion> assertions = new ArrayList<>(assertionService.findAll());
 		List<AssertionGroup> assertionGroups = assertionService.getAllAssertionGroups();
 		assertionGroups.forEach(assertionGroup -> assertionGroup.getAssertions().forEach(a -> assertions.forEach(b -> {
-			if (a.getUuid().toString().equals(b.getUuid().toString())) {
+			if (a.getUuid().toString().equals(b.getUuid().toString())
+					&& (b.getGroups() == null || !b.getGroups().contains(assertionGroup.getName()))) {
 				b.addGroup(assertionGroup.getName());
 			}
 		})));

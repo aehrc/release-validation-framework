@@ -154,7 +154,24 @@ public final class DuckAssertionSource {
 		return out;
 	}
 
-	/** Every assertion the store holds, in store order. */
+	/**
+	 * Every assertion the store holds, in store order, as an IMMUTABLE list.
+	 *
+	 * <p>Immutable on purpose, and it has already earned it. The corpus is
+	 * loaded once and shared by every request and every validation, so a caller
+	 * that appends to this list is editing the assertion set the next run will
+	 * execute. {@code GET /assertions?includeDroolsRules=true} did exactly that
+	 * - it appended Drools rules to the list it was given - and because this is
+	 * a {@code List.copyOf} it failed with an {@code UnsupportedOperationException}
+	 * instead of quietly adding rules the engine has no statements for, which
+	 * every later validation would have reported as "store and assertion corpus
+	 * are out of step".
+	 *
+	 * <p>The MySQL implementation returns a fresh list from a query, so it
+	 * tolerates the same caller. That difference is why the endpoint's
+	 * assumption survived: it was only ever tested against the implementation
+	 * that hides it.
+	 */
 	public List<Assertion> findAll() {
 		return assertions;
 	}

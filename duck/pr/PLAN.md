@@ -77,6 +77,14 @@ measurement is. Bundled, the safe win waits for the risky review.
 | C | mrcm-validator | 5 | **A** | small and decisive; the phase win |
 | D | mrcm-validator | 6 + 7 | B-style review | thread safety, needs its own scrutiny |
 | E | snomed-release-validation-assertions | one missing semicolon | - | one character, no fork made yet |
+| F | release-validation-framework | GET /assertions owns its list | - | Attila's report; upstream is fragile, we were broken |
+
+F is Attila's: `getAssertionsAndJoinGroups` returns the list `findAll()` gave
+it and the endpoint then appends to it. Harmless upstream, where `findAll()` is
+a repository query returning a fresh list; against a corpus loaded once and
+shared it threw and answered HTTP 500. Fixed here in `AssertionController`
+with a defensive copy plus a group join that only writes when the group is
+missing. Body in `assertion-endpoint-owns-its-list.md`.
 
 E is the smallest and the most clearly upstream's: one script omits the `;`
 before its final `commit;`, so every splitter yields one unparseable statement
