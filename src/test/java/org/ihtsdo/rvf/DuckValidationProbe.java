@@ -102,7 +102,8 @@ public final class DuckValidationProbe {
 				System.getProperty("probe.memory", ""), false,
 				// Cache knobs too, so the probe can measure it as a benchmark point.
 				System.getProperty("probe.cache.dir", ""),
-				Double.parseDouble(System.getProperty("probe.cache.gb", "0")));
+				Double.parseDouble(System.getProperty("probe.cache.gb", "0")),
+				noAssertionService());
 
 		long t0 = System.currentTimeMillis();
 		ValidationStatusReport status = service.runValidations(config,
@@ -203,5 +204,33 @@ public final class DuckValidationProbe {
 	private static Path optionalPath(String key) {
 		String value = System.getProperty(key, "");
 		return value.isBlank() ? null : Path.of(value);
+	}
+
+	/**
+	 * No corpus owner, so the service falls back to the locator - which is what
+	 * these tests exercise: the store they hand it directly.
+	 */
+	private static org.springframework.beans.factory.ObjectProvider<org.ihtsdo.rvf.core.service.duck.DuckAssertionService> noAssertionService() {
+		return new org.springframework.beans.factory.ObjectProvider<>() {
+			@Override
+			public org.ihtsdo.rvf.core.service.duck.DuckAssertionService getObject(Object... args) {
+				return null;
+			}
+
+			@Override
+			public org.ihtsdo.rvf.core.service.duck.DuckAssertionService getObject() {
+				return null;
+			}
+
+			@Override
+			public org.ihtsdo.rvf.core.service.duck.DuckAssertionService getIfAvailable() {
+				return null;
+			}
+
+			@Override
+			public org.ihtsdo.rvf.core.service.duck.DuckAssertionService getIfUnique() {
+				return null;
+			}
+		};
 	}
 }

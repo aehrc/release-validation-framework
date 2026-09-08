@@ -331,7 +331,7 @@ class DuckDbValidationServiceExtensionTest {
 		new DuckDbValidationService(reportService, whitelistService,
 				new ReleaseAcquisitionService(),
 				new DuckStoreLocator(storeFile.toString(), corpus.toString()),
-				corpus.toString(), work.toString(), "qa_result", 0, "", false, "", 0)
+				corpus.toString(), work.toString(), "qa_result", 0, "", false, "", 0, noAssertionService())
 				.runValidations(config, releases, "storage/", status);
 		return status;
 	}
@@ -364,5 +364,33 @@ class DuckDbValidationServiceExtensionTest {
 		Path file = releaseRoot.resolve(relativePath);
 		Files.createDirectories(file.getParent());
 		Files.writeString(file, content);
+	}
+
+	/**
+	 * No corpus owner, so the service falls back to the locator - which is what
+	 * these tests exercise: the store they hand it directly.
+	 */
+	private static org.springframework.beans.factory.ObjectProvider<org.ihtsdo.rvf.core.service.duck.DuckAssertionService> noAssertionService() {
+		return new org.springframework.beans.factory.ObjectProvider<>() {
+			@Override
+			public org.ihtsdo.rvf.core.service.duck.DuckAssertionService getObject(Object... args) {
+				return null;
+			}
+
+			@Override
+			public org.ihtsdo.rvf.core.service.duck.DuckAssertionService getObject() {
+				return null;
+			}
+
+			@Override
+			public org.ihtsdo.rvf.core.service.duck.DuckAssertionService getIfAvailable() {
+				return null;
+			}
+
+			@Override
+			public org.ihtsdo.rvf.core.service.duck.DuckAssertionService getIfUnique() {
+				return null;
+			}
+		};
 	}
 }

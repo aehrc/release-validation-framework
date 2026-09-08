@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -157,7 +158,10 @@ class AssertionPackReloadTest {
 		serve(pack);
 		DuckAssertionService service = serviceWith(dir, spec(sha256(pack)));
 
-		assertEquals(1, service.findAll().size(), "the bundled store alone, before the swap");
+		// First use loads the configured packs by itself. It used to serve the
+		// bundled store alone until someone POSTed a refresh, which meant a pod
+		// restart quietly dropped the pack.
+		assertEquals(2, service.findAll().size(), "configured packs load on first use");
 
 		String description = service.refreshConfiguredPacks();
 
@@ -182,7 +186,10 @@ class AssertionPackReloadTest {
 
 		IOException e = assertThrows(IOException.class, service::refreshConfiguredPacks);
 		assertTrue(e.getMessage().contains("pinned"), e.getMessage());
-		assertEquals(1, service.findAll().size(), "the bundled corpus is still serving");
+		// And with nothing loaded yet it REFUSES to serve, rather than falling
+		// back to the bundled corpus: fewer assertions validating a release is
+		// indistinguishable from a clean pass.
+		assertThrows(UncheckedIOException.class, service::findAll);
 		assertTrue(service.loadedPacks().isEmpty());
 	}
 
@@ -191,7 +198,8 @@ class AssertionPackReloadTest {
 		String pack = store(UUID_PACK, "pack.sql", MACRO);
 		serve(pack);
 		DuckAssertionService service = serviceWith(dir, spec(sha256(pack)));
-		assertEquals(2, service.refreshConfiguredPacks().isEmpty() ? 0 : service.findAll().size());
+		service.refreshConfiguredPacks();
+		assertEquals(2, service.findAll().size(), "loaded once, successfully");
 
 		// The release asset moves, as they do.
 		status = 404;
@@ -214,7 +222,7 @@ class AssertionPackReloadTest {
 		var conflict = assertThrows(DuckStorePacks.ConflictException.class,
 				service::refreshConfiguredPacks);
 		assertTrue(conflict.getMessage().contains("redefines"), conflict.getMessage());
-		assertEquals(1, service.findAll().size(), "the bundled corpus is untouched");
+		assertThrows(DuckStorePacks.ConflictException.class, service::findAll);
 		assertTrue(service.loadedPacks().isEmpty());
 	}
 
@@ -251,7 +259,7 @@ class AssertionPackReloadTest {
 		IOException e = assertThrows(IOException.class, service::refreshConfiguredPacks);
 		assertTrue(e.getMessage().contains("does not execute"), e.getMessage());
 		assertTrue(e.getMessage().contains("pack.sql"), e.getMessage());
-		assertEquals(1, service.findAll().size(), "the bundled corpus is still serving");
+		assertThrows(UncheckedIOException.class, service::findAll);
 		assertTrue(service.loadedPacks().isEmpty());
 	}
 

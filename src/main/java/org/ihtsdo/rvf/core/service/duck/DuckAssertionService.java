@@ -130,21 +130,100 @@ public class DuckAssertionService implements AssertionService {
 			return current;
 		}
 		synchronized (this) {
-			if (loaded == null) {
-				try {
-					DuckStore read = storeLocator.load();
-					loaded = DuckAssertionSource.from(read, Path.of(corpusRoot));
-					store = read;
-				} catch (IOException e) {
-					throw new UncheckedIOException("Failed to read the DuckDB assertion store "
-							+ storeLocator.description(), e);
-				}
-				LOGGER.info("DuckDB assertion corpus: {} assertions in {} groups from {}",
-						loaded.findAll().size(), loaded.populatedGroupNames().size(),
-						storeLocator.description());
+			if (loaded != null) {
+				return loaded;
 			}
+			if (!packSpecs.isEmpty()) {
+				// Configured packs are part of the corpus, so first use has to
+				// load them. Without this a pod restart served the bundled
+				// store ALONE until someone remembered to POST a refresh - the
+				// AMT assertions silently absent, every report looking healthy,
+				// which is the exact failure this project has spent its time
+				// removing.
+				//
+				// And it refuses rather than falling back. A smaller corpus
+				// validating a release is indistinguishable from a clean pass,
+				// so a run that cannot have the assertions it was configured
+				// with must fail loudly instead.
+				try {
+					reload(new AssertionPackFetcher().fetch(configuredPackSources()));
+					return loaded;
+				} catch (IOException e) {
+					throw new UncheckedIOException("The configured assertion packs could not "
+							+ "be loaded, and serving the bundled corpus alone would validate a "
+							+ "release against fewer assertions than this deployment asked for, "
+							+ "which reads as a clean pass. Fix the packs or remove "
+							+ "rvf.assertion.packs.", e);
+				}
+			}
+			try {
+				DuckStore read = storeLocator.load();
+				loaded = DuckAssertionSource.from(read, Path.of(corpusRoot));
+				store = read;
+			} catch (IOException e) {
+				throw new UncheckedIOException("Failed to read the DuckDB assertion store "
+						+ storeLocator.description(), e);
+			}
+			LOGGER.info("DuckDB assertion corpus: {} assertions in {} groups from {}",
+					loaded.findAll().size(), loaded.populatedGroupNames().size(),
+					storeLocator.description());
 			return loaded;
 		}
+	}
+
+	/**
+	 * The store the loaded corpus was built from - bundled, or bundled merged
+	 * with the configured packs.
+	 *
+	 * <p>This is what a validation must EXECUTE. Until now
+	 * {@code DuckDbValidationService} called the locator itself and built its
+	 * own source, so a deployment could load packs, see them on
+	 * {@code GET /assertions}, and still validate every release against the
+	 * bundled corpus alone. One owner of "the current corpus", and this is it.
+	 */
+	public DuckStore currentStore() {
+		source();
+		return store;
+	}
+
+	/** The loaded corpus itself, for a run that must not re-resolve it. */
+	public DuckAssertionSource currentSource() {
+		return source();
+	}
+
+	/**
+	 * Do the configured pins differ from what is loaded?
+	 *
+	 * <p>The one staleness question this service can answer alone, and worth
+	 * answering: a values file can be updated without anyone POSTing a refresh,
+	 * and until they do the engine runs assertions the deployment no longer
+	 * describes.
+	 *
+	 * <p>It cannot answer the other one - whether a NEWER pack exists somewhere -
+	 * because a pinned digest is all it knows. That needs a registry query, and
+	 * it belongs where update decisions are made rather than in a validation
+	 * engine.
+	 */
+	public List<String> pendingPackChanges() {
+		Map<String, String> loadedByName = new java.util.LinkedHashMap<>();
+		for (DuckStorePacks.Pack pack : packs) {
+			loadedByName.put(pack.name(), pack.digest());
+		}
+		List<String> pending = new ArrayList<>();
+		for (AssertionPackFetcher.Source configured : configuredPackSources()) {
+			String have = loadedByName.remove(configured.name());
+			String want = "sha256:" + configured.sha256().replaceFirst("^sha256:", "");
+			if (have == null) {
+				pending.add(configured.name() + " " + configured.version()
+						+ " is configured and not loaded");
+			} else if (!have.equalsIgnoreCase(want)) {
+				pending.add(configured.name() + " is loaded at " + have
+						+ " and configured as " + want);
+			}
+		}
+		loadedByName.forEach((name, digest) ->
+				pending.add(name + " is loaded and no longer configured"));
+		return pending;
 	}
 
 	/** The packs the current corpus was assembled from, newest swap wins. */
@@ -329,7 +408,10 @@ public class DuckAssertionService implements AssertionService {
 	 * produced a report.
 	 */
 	public List<DuckStorePacks.Pack> loadedPacks() {
-		source();
+		// Deliberately does NOT force a load. An inspection method that can
+		// throw - or that quietly fetches packs over the network - is not
+		// usable from a health endpoint or an error path, and this one is called
+		// from both.
 		return packs;
 	}
 

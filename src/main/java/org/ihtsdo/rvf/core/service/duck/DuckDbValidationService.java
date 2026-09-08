@@ -9,6 +9,7 @@ import org.ihtsdo.rvf.core.data.model.SeverityLevel;
 import org.ihtsdo.rvf.core.data.model.TestRunItem;
 import org.ihtsdo.rvf.core.data.model.TestType;
 import org.ihtsdo.rvf.core.data.model.ValidationReport;
+import org.springframework.beans.factory.ObjectProvider;
 import org.ihtsdo.rvf.core.service.ReleaseAcquisitionService;
 import org.ihtsdo.rvf.core.service.ValidationReportService;
 import org.ihtsdo.rvf.core.service.ValidationVersionLoader;
@@ -161,6 +162,19 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 	private final String duckMemoryLimit;
 	private final boolean archiveFailures;
 	private final DuckReleaseCache releaseCache;
+	/**
+	 * Who owns the current corpus.
+	 *
+	 * <p>This service used to call the locator itself and build its own source,
+	 * which meant a deployment could load assertion packs, see them on
+	 * GET /assertions, and still validate every release against the bundled
+	 * corpus alone. Now there is one owner and a run reads from it, so what a
+	 * report describes is what executed.
+	 *
+	 * <p>ObjectProvider because both beans are conditional on the DuckDB engine
+	 * and Spring resolves them in an order this class must not depend on.
+	 */
+	private final ObjectProvider<DuckAssertionService> assertionService;
 
 	public DuckDbValidationService(ValidationReportService reportService,
 			WhitelistService whitelistService,
@@ -173,8 +187,10 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 			@Value("${rvf.duck.memory.limit:}") String duckMemoryLimit,
 			@Value("${rvf.duck.archive.failures:true}") boolean archiveFailures,
 			@Value("${rvf.duck.cache.directory:}") String cacheDirectory,
-			@Value("${rvf.duck.cache.max-gb:0}") double cacheMaxGb) {
+			@Value("${rvf.duck.cache.max-gb:0}") double cacheMaxGb,
+			ObjectProvider<DuckAssertionService> assertionService) {
 		this.reportService = reportService;
+		this.assertionService = assertionService;
 		this.whitelistService = whitelistService;
 		this.acquisitionService = acquisitionService;
 		this.storeLocator = storeLocator;
@@ -453,9 +469,14 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 	private ValidationStatusReport run(Connection connection, MysqlExecutionConfig executionConfig,
 			ReleaseDirectories releases, String reportStorage, ValidationStatusReport statusReport,
 			long timeStart) throws IOException {
-		DuckStore store = storeLocator.load();
-		LOGGER.info("DuckDB assertion store loaded from {}: {}", storeLocator.description(),
-				store.generatorDescription());
+		// Captured ONCE, at the start of the run, from whoever owns the corpus.
+		// Once: a refresh partway through a validation must not change which
+		// assertions it is running, or the report describes neither corpus.
+		DuckAssertionService owner = assertionService.getIfAvailable();
+		DuckStore store = owner != null ? owner.currentStore() : storeLocator.load();
+		LOGGER.info("DuckDB assertion store loaded from {}: {}{}", storeLocator.description(),
+				store.generatorDescription(),
+				store.packs().isEmpty() ? "" : " plus packs " + store.packs());
 
 		String lastItemLoadAttempted = "Item Unknown";
 		try {
@@ -488,7 +509,7 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 			return statusReport;
 		}
 
-		DuckAssertionSource source = assertionSource(store);
+		DuckAssertionSource source = owner != null ? owner.currentSource() : assertionSource(store);
 		Selection selection = selectAssertions(source, executionConfig);
 		LOGGER.info("Total assertions to run {} for groups {}", selection.total(),
 				executionConfig.getGroupNames());

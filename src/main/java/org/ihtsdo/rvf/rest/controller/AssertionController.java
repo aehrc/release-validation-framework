@@ -156,6 +156,15 @@ public class AssertionController {
 		Map<String, Object> body = new LinkedHashMap<>();
 		body.put("assertions", duck.findAll().size());
 		body.put("packs", packs);
+		// The one staleness question the server can answer alone: the values
+		// file may have been updated without anyone POSTing a refresh, and
+		// until they do the engine runs assertions the deployment no longer
+		// describes. It cannot tell you a NEWER pack exists somewhere - that
+		// needs a registry query, and it belongs where update decisions are
+		// made rather than in a validation engine.
+		List<String> pending = duck.pendingPackChanges();
+		body.put("pendingRefresh", !pending.isEmpty());
+		body.put("pending", pending);
 		return ResponseEntity.ok(body);
 	}
 
