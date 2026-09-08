@@ -90,10 +90,25 @@ parameters:
   # has - the string had been truncated, and `resource-centric-validation` does
   # not exist here either. RVF rejects the whole submission when any named group
   # is unknown, so every run would have died on HTTP 412. Build 16220 did.
+  # amtv4 is in here because the AMT assertions are meant to run every night,
+  # and until now they only ran when someone queued a build by hand: the commit
+  # that first added this group was one of the four AMT-bearing commits purged
+  # from this repository's history on 2026-09-07, and the purge took the wiring
+  # with it. Build 16283 (2026-09-08, resource-triggered) validated 1,282
+  # records with SQL 225 and ZERO amtv4 - correct for what it was asked, and
+  # not what anyone wanted.
+  #
+  # The group NAME is not AMT content: AMT v4 is a published product and the
+  # name reveals nothing about an assertion. The assertions themselves reach
+  # the engine from a corpus overlay outside this repository.
+  #
+  # Asking for it makes the floors below load-bearing: with amtv4 requested and
+  # the overlay missing, SQL falls to 225 and a floor of 200 would let that
+  # through. They move together or not at all.
   - name: groups
     displayName: 'Assertion groups (comma separated)'
     type: string
-    default: 'AustralianEdition,file-centric-validation,component-centric-validation,release-type-validation'
+    default: 'amtv4,AustralianEdition,file-centric-validation,component-centric-validation,release-type-validation'
   - name: enableDrools
     displayName: 'Run the Drools rules'
     type: boolean
@@ -126,16 +141,14 @@ parameters:
   # silently did not run.
   #
   # Measured against what THIS pipeline's `groups` default actually requests,
-  # which is the international set and NOT amtv4 - the AMT assertions live in a
-  # private repository and reach the engine through a corpus overlay, so the
-  # scheduled nightly does not ask for them. Builds 16226 and 16246 are the
-  # honest reference:
+  # which now includes amtv4. Build 16247 is the reference - the only run so
+  # far that asked for the AMT assertions and got them:
   #
   #   MRCM                979
-  #   SQL                 225
+  #   SQL                 425   (225 international + 200 amtv4)
   #   DROOL_RULES          78
   #   ARCHIVE_STRUCTURAL    0 failures
-  #   total             1,282
+  #   total             1,482
   #
   # The old floor of 1,000 was set against that same 1,282 and could not do its
   # job. 979 of the total is MRCM, whose count moves with the content of the
@@ -153,19 +166,24 @@ parameters:
   - name: minAssertions
     displayName: 'Fail if fewer than this many assertions ran in total (guards a silently skipped phase)'
     type: number
-    default: 1200
+    default: 1400
   # SQL is the deterministic part - group selection times the precompiled store
   # - so this is the floor that catches an assertion CATEGORY going absent,
-  # which the total cannot. 200 sits just under the international 225.
+  # which the total cannot. 400 sits just under the 425 that amtv4 plus the
+  # international groups produce.
   #
-  # A run that ADDS amtv4 measures 425 SQL and 1,482 total (build 16247), so
-  # queue it with minSqlAssertions=400 and minAssertions=1400: those floors are
-  # then what notices the AMT overlay having vanished, and the overlay is
-  # mutable state outside git, so something needs to.
+  # This is the floor that notices the AMT overlay having vanished. The overlay
+  # is mutable state outside git - a directory on a shared volume - so with
+  # amtv4 requested and the overlay gone, SQL falls to 225 and the report looks
+  # entirely healthy. 400 fails it. That is the whole reason this parameter
+  # exists, and it only works while the groups above ask for amtv4.
+  #
+  # A deliberately narrower run - international only - must lower both floors,
+  # which is the right way round: a manual run that covers less should say so.
   - name: minSqlAssertions
     displayName: 'Fail if fewer than this many SQL assertions ran (guards a silently absent category)'
     type: number
-    default: 200
+    default: 400
 
 variables:
   - group: ncts-release
