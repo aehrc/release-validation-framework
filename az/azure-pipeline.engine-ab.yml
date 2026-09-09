@@ -89,6 +89,28 @@ stages:
             fetchDepth: 1
 
           - task: Bash@3
+            displayName: 'Install JDK 25'
+            # Build 16305 compiled the forks with the agent's default JDK 17 and
+            # died in maven-compiler-plugin. The parent BOM sets
+            # java.version=25, and this pool ships 17 - the image pipeline has
+            # always installed 25 explicitly and this one inherited a host where
+            # JAVA_HOME already pointed at it.
+            #
+            # Adoptium's API resolves the current GA build for a feature
+            # version, so no patch release is pinned that later disappears.
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                URL='https://api.adoptium.net/v3/binary/latest/25/ga/linux/x64/jdk/hotspot/normal/eclipse'
+                curl -fsSL -o /tmp/jdk25.tar.gz "$URL"
+                sudo mkdir -p /opt/jdk25
+                sudo tar -xzf /tmp/jdk25.tar.gz -C /opt/jdk25 --strip-components=1
+                echo "##vso[task.setvariable variable=JAVA_HOME]/opt/jdk25"
+                echo "##vso[task.prependpath]/opt/jdk25/bin"
+                /opt/jdk25/bin/java -version
+
+          - task: Bash@3
             displayName: 'Preflight: disk and memory this run needs'
             # BEFORE anything downloads. Today's run filled the disk mid-load
             # and MySQL reported it as "Disk is full writing
@@ -281,6 +303,23 @@ stages:
               testResultsFiles: '$(workdir)/engine-ab.xml'
               testRunTitle: 'MySQL vs DuckDB'
               failTaskOnFailedTests: false
+
+          - task: Bash@3
+            displayName: 'Make sure there is something to publish'
+            condition: always()
+            # A failure before the A/B ran leaves $(workdir) absent, and the
+            # publish below then fails with "Path does not exist" - a second red
+            # X that is not the cause and reads like one. Build 16305 showed
+            # both: the real failure was the JDK, and this was the louder of the
+            # two errors.
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                mkdir -p "$(workdir)"
+                [ -n "$(ls -A "$(workdir)" 2>/dev/null)" ] || \
+                  echo "The A/B did not get far enough to write anything." \
+                    > "$(workdir)/nothing-ran.txt"
 
           - task: PublishPipelineArtifact@1
             displayName: 'Publish both reports and the comparison'
