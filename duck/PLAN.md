@@ -161,10 +161,29 @@ supplied; MySQL 4020s vs DuckDB 120s, 33.5x):
 or fixed. Note that baseline is keyed to the international nightly, so an
 AU/AMT run needs its own.
 
-**3.7 Schedule the differential arm.** `az/azure-pipeline.engine-ab.yml` exists
-and has been run by hand. Parity that is re-proven weekly is worth more than
-parity proven once.
-*Acceptance:* a scheduled trigger, and one green scheduled run.
+**3.7 Schedule the differential arm. WIRED 2026-09-09, one run still queued.**
+`az/azure-pipeline.engine-ab.yml` had **no ADO definition at all** - it had only
+ever been run by hand, locally. Now: definition **69 `rvf-duckdb-engine-ab`**,
+authorised for the `ncts-release` variable group and the dedicated pool, and
+scheduled weekly (Sunday 14:00 UTC = Monday midnight Sydney, four hours clear of
+daily-rvf's 18:00 UTC).
+
+Registering it found **nine things a developer's host had been providing**, each
+presenting as something other than its cause - authorization, the `-aehrc-perf`
+forks, JDK 17 against a BOM wanting 25, no xz-utils, empty apt lists, a 22.04
+pool where `libaio1t64` does not exist plus a missing `libnuma`, symlinks the
+artifact publisher cannot follow, absent MySQL data directories, an account key
+appended to a URL as though it were a SAS against a container that does not
+exist, `az storage file list` without `--recursive`, GUID directories sorting
+after timestamps, and a fresh datadir with no root password. The table in
+[ci/README-engine-ab.md](../ci/README-engine-ab.md) lists each with its build
+number and its symptom.
+
+Every step now passes up to the comparison itself: JDK, forks, jar, MySQL,
+release fetch (it resolves and downloads the newest AU edition, 892MB, by
+walking the share the nightly reads), and the selftest. The A/B step is queued
+behind tonight's `daily-rvf`, which holds the pool's one online agent.
+*Remaining:* one green run of the comparison step.
 
 **3.8 Console: show what produced the report. DONE 2026-09-09.** The report card
 carries an `assertions from` row, verified in a browser against two real

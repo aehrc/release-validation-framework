@@ -62,10 +62,38 @@ alongside MySQL's 4GB buffer pool got the MySQL leg killed by the kernel on a
 leg dies with the last line being a `load data local infile`, that is this.
 `HEAP=3g` completes.
 
-**A first run must initialise the datadir.** The pipeline does it in its
-install step (`mysqld --initialize-insecure`); the script assumes it exists.
-After initialising, set the password the script expects:
-`ALTER USER 'root'@'localhost' IDENTIFIED BY 'rvfpass'`.
+**A first run must initialise the datadir** (`mysqld --initialize-insecure`),
+which the pipeline does in its install step. The script then sets the root
+password and creates `rvf_master` itself: an insecure datadir has no password,
+every statement below authenticates with one, and the version query discards
+stderr - so its failure took the whole script down with a log showing only a
+SHUTDOWN sent by the script's own cleanup.
+
+### What a CI AGENT needs, each learned from a red build
+
+The pipeline had never had a definition. Registering one and running it found
+nine things a developer's host had been quietly providing. Every one presented
+as something other than its cause:
+
+| build | symptom | cause |
+|---|---|---|
+| 16302 | `Checkpoint.Authorization` pending forever | a new pipeline is not authorised for the variable group or the pool |
+| 16302 | `Could not find artifact snomed-drools-engine:6.1.3-aehrc-perf in ihtsdo-releases` | four `-aehrc-perf` forks exist in no remote repository; `duck/build-pinned-forks.sh` builds them |
+| 16305 | `Fatal error compiling: release version 25 not supported` | the pool ships JDK 17 and the parent BOM sets `java.version=25` |
+| 16306 | `tar (child): xz: Cannot exec` | no xz-utils on the agent image; python's `lzma` needs no package |
+| 16307 | `E: Unable to locate package libaio1` | apt lists are empty until `apt-get update`; a missing index reading as a missing package |
+| 16308 | `error while loading shared libraries: libaio.so.1`, exit 127 | this pool is 22.04, where `libaio1t64` does NOT exist - and `libnuma.so.1` was missing too |
+| 16308 | `Unable to load symbolic/hard linked file` | `PublishPipelineArtifact` cannot follow symlinks inside the published directory |
+| 16310 | `The designated data directory ... is unusable` | `mysqldata` and `mysqltmp` absent, and `--initialize-insecure` needs the datadir empty |
+| 16312 | azcopy `NoAuthenticationInformation` | an ACCOUNT KEY appended to a URL as though it were a SAS, against a blob container the account does not have |
+| 16313 | `unrecognized arguments: --recursive` | `az storage file list` on this CLI has no recursion; the layout is `<run>/output-files/<zip>` |
+| 16314 | `ResourceNotFound` on `<run>/output-files` | the share holds 684 directories, timestamp-named plus GUIDs, and GUIDs sort LAST |
+| 16315 | mysqld ready, then SHUTDOWN with no reason | the fresh datadir had no root password (above) |
+
+Two general lessons in that list. Every listing the resolver makes is now
+printed, because four of those cost a 25-minute round trip to learn one line of
+fact. And the release is chosen by walking the share the nightly already reads
+with the key it already has, rather than from a layout nobody had checked.
 
 ### Two bugs this found by being run
 
