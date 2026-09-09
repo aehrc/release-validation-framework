@@ -53,3 +53,41 @@ tests:
       - hasDocuments:
           count: 0
         template: pvc-releases.yaml
+
+  # The shape the NCTS deployment actually runs: static PVs on
+  # blob.csi.azure.com, created in aehrc/ncts-argo because a PV is
+  # cluster-scoped and outlives the release, and bound by name from here.
+  - it: should bind a pre-created volume when volumeName is set
+    set:
+      fullnameOverride: "rvf"
+      persistence.jobs.storageClassName: ""
+      persistence.jobs.volumeName: "rvf-jobs-pv"
+      persistence.releases.storageClassName: ""
+      persistence.releases.volumeName: "rvf-releases-pv"
+    asserts:
+      - equal:
+          path: spec.volumeName
+          value: rvf-jobs-pv
+        template: pvc-jobs.yaml
+      # Empty, not absent: with the key absent the cluster's default class
+      # provisions a NEW empty volume, and a job store that has silently lost
+      # every report reads exactly like a fresh install.
+      - equal:
+          path: spec.storageClassName
+          value: ""
+        template: pvc-jobs.yaml
+      - equal:
+          path: spec.volumeName
+          value: rvf-releases-pv
+        template: pvc-releases.yaml
+
+  - it: should omit volumeName when provisioning dynamically
+    set:
+      fullnameOverride: "rvf"
+    asserts:
+      - notExists:
+          path: spec.volumeName
+        template: pvc-jobs.yaml
+      - notExists:
+          path: spec.volumeName
+        template: pvc-releases.yaml

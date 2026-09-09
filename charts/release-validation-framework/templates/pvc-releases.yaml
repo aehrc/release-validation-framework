@@ -25,6 +25,12 @@ spec:
   accessModes:
     {{- toYaml .Values.persistence.releases.accessModes | nindent 4 }}
   storageClassName: {{ .Values.persistence.releases.storageClassName | quote }}
+  {{- with .Values.persistence.releases.volumeName }}
+  # Static binding: the PV is created outside this chart - it is cluster-scoped
+  # and outlives the release - and named here so a re-created claim binds to the
+  # SAME volume rather than to whatever the provisioner offers.
+  volumeName: {{ . | quote }}
+  {{- end }}
   resources:
     requests:
       storage: {{ .Values.persistence.releases.size | quote }}

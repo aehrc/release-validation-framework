@@ -197,6 +197,10 @@
             },
             "annotations": {
               "type": "object"
+            },
+            "volumeName": {
+              "type": "string",
+              "description": "Bind to this pre-created PersistentVolume by name. Set with an empty storageClassName for a static volume; empty means dynamic provisioning."
             }
           },
           "required": [
@@ -235,6 +239,10 @@
             },
             "annotations": {
               "type": "object"
+            },
+            "volumeName": {
+              "type": "string",
+              "description": "Bind to this pre-created PersistentVolume by name. Set with an empty storageClassName for a static volume; empty means dynamic provisioning."
             }
           },
           "required": [

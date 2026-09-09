@@ -1,13 +1,34 @@
-# RVF on AKS: one API deployment, a worker pool, and a shared Azure Files mount.
+# RVF on AKS: one API deployment, a worker pool, and a shared job store.
 #
 # The difference from k8s/rvf.yaml, which is the Docker Desktop proof, is storage.
 # That one uses hostPath, so every pod must land on the same node and the worker
-# pool cannot actually span the cluster. Here the job store is an Azure Files
-# share with ReadWriteMany, which is what makes the split real:
+# pool cannot actually span the cluster. Here the job store is a ReadWriteMany
+# volume, which is what makes the split real:
 #
 #   the API writes an uploaded release and reads reports it never produced,
 #   a worker reads that release and writes the report,
 #   any API replica can then serve it - which is what a dashboard link needs.
+#
+# STORAGE AS DEPLOYED, 2026-09-08 (Attila): STATIC PersistentVolumes on
+# `blob.csi.azure.com` with `protocol: fuse3`, against containers `rvf-jobs` and
+# `rvf-releases` on the `nctsdevstorage` account in resource group `ncts`. This
+# file previously asked for DYNAMIC `azurefile-csi-premium` claims; that is not
+# what runs, and the difference is not cosmetic:
+#
+#   * blobfuse3 needs no SMB, which suits an environment where SMB is not
+#     available and keeps the mount options in our hands;
+#   * the account and its resource group are ones the platform team owns, so a
+#     namespace delete cannot destroy the reports - `Retain`, not `Delete`;
+#   * EVERY CACHE IS OFF. Default blobfuse3 caching lets a reader see a stale
+#     or absent file, and this volume exists precisely so one pod reads what
+#     another just wrote. The mount options below are the live ones.
+#
+# A third consumer mounts the same `rvf-jobs` container READ-ONLY:
+# `ncts-indexer-server` reads reports directly from it (`RVF_JOBS_ROOT=
+# /mnt/blob/rvf-jobs`) as well as calling the API. Its claim is defined in its
+# own namespace and is not this file's to create, but the coupling is: the
+# DIRECTORY NAME under this container is the key it joins a run to its report
+# on, so the `storageLocation` naming convention is a published interface.
 #
 # Verified locally with two JVMs sharing one directory and one broker: the worker
 # read a release the API staged, and the API served the report the worker wrote.
@@ -29,33 +50,94 @@ apiVersion: v1
 kind: Namespace
 metadata: { name: rvf }
 ---
-# The handoff. ReadWriteMany is the requirement; azurefile-csi provides it.
-# Premium is worth it here: the API writes an 853MB release to this share and a
-# worker reads it back, and Standard tops out well below what that wants.
+# The handoff, as deployed: a STATIC PV per container, bound by name. The
+# mountOptions are the live ones and every cache is off - see the header.
+#
+# No secret and no service account: with no `nodeStageSecretRef` the CSI driver
+# resolves the account key through the cluster identity, which therefore needs
+# rights on `nctsdevstorage` in resource group `ncts`. That is the one
+# out-of-band requirement in this file.
+apiVersion: v1
+kind: PersistentVolume
+metadata: { name: rvf-jobs-pv }
+spec:
+  capacity: { storage: 1Ti }
+  accessModes: [ReadWriteMany]
+  persistentVolumeReclaimPolicy: Retain
+  # Claimed by name so a re-created claim binds to the SAME container rather
+  # than to whichever volume the scheduler offers.
+  claimRef: { namespace: rvf, name: rvf-jobs }
+  mountOptions:
+    - "-o allow_other"
+    - "--file-cache-timeout=0"
+    - "--attr-cache-timeout=0"
+    - "--disable-kernel-cache"
+    - "--attr-timeout=0"
+    - "--entry-timeout=0"
+    - "--negative-timeout=0"
+  csi:
+    driver: blob.csi.azure.com
+    volumeHandle: rvf-jobs-vol
+    volumeAttributes:
+      containerName: rvf-jobs
+      protocol: fuse3
+      resourceGroup: ncts
+      storageAccount: nctsdevstorage
+---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata: { name: rvf-jobs, namespace: rvf }
 spec:
   accessModes: [ReadWriteMany]
-  storageClassName: azurefile-csi-premium
+  # Empty, not omitted: an empty class means "bind only to a matching PV" and
+  # stops the default StorageClass provisioning a new empty volume, which would
+  # present as a job store that has silently lost every report.
+  storageClassName: ""
+  volumeName: rvf-jobs-pv
   resources:
     requests:
       # Uploaded releases dominate: 853MB each, and the reaper keeps 7 days of
       # them by default (rvf.validation.job.retention.days). Reports are 37KB.
-      storage: 100Gi
+      storage: 1Ti
 ---
 # Published releases kept so a nightly can validate against the last one. Under
 # the DuckDB engine this is the whole of "RVF already has last month's release":
 # previousRelease resolves a FILENAME from here.
 apiVersion: v1
+kind: PersistentVolume
+metadata: { name: rvf-releases-pv }
+spec:
+  capacity: { storage: 1Ti }
+  accessModes: [ReadWriteMany]
+  persistentVolumeReclaimPolicy: Retain
+  claimRef: { namespace: rvf, name: rvf-releases }
+  mountOptions:
+    - "-o allow_other"
+    - "--file-cache-timeout=0"
+    - "--attr-cache-timeout=0"
+    - "--disable-kernel-cache"
+    - "--attr-timeout=0"
+    - "--entry-timeout=0"
+    - "--negative-timeout=0"
+  csi:
+    driver: blob.csi.azure.com
+    volumeHandle: rvf-releases-vol
+    volumeAttributes:
+      containerName: rvf-releases
+      protocol: fuse3
+      resourceGroup: ncts
+      storageAccount: nctsdevstorage
+---
+apiVersion: v1
 kind: PersistentVolumeClaim
 metadata: { name: rvf-releases, namespace: rvf }
 spec:
   accessModes: [ReadWriteMany]
-  storageClassName: azurefile-csi-premium
+  storageClassName: ""
+  volumeName: rvf-releases-pv
   resources:
     requests:
-      storage: 50Gi
+      storage: 1Ti
 ---
 apiVersion: apps/v1
 kind: Deployment

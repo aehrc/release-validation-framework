@@ -74,8 +74,23 @@ persistence:
     create: true
     # -- Claim name for the jobs share
     claimName: "rvf-jobs"
-    # -- Storage class name (azurefile-csi-premium provides ReadWriteMany)
+    # -- Storage class. EMPTY STRING means "bind only to a pre-created
+    # PersistentVolume", which is what the NCTS deployment does: the PVs are
+    # static, on `blob.csi.azure.com` with `protocol: fuse3` against containers
+    # on an account the platform team owns, and they live in `aehrc/ncts-argo`
+    # (`apps/rvf-duckdb/templates`) rather than in this chart, because a PV is
+    # cluster-scoped and outlives any release.
+    #
+    # Omitting this key entirely is the dangerous option: the cluster's DEFAULT
+    # class would then provision a NEW empty volume, and a job store that has
+    # silently lost every report reads exactly like a fresh install.
+    #
+    # `azurefile-csi-premium` is what a self-contained install wants, and is
+    # kept as the default for that reason.
     storageClassName: "azurefile-csi-premium"
+    # -- Bind to this PersistentVolume by name. Set together with an empty
+    # storageClassName for a static volume. Empty means dynamic provisioning.
+    volumeName: ""
     # -- Access modes for the PVC
     accessModes:
       - ReadWriteMany
@@ -93,8 +108,12 @@ persistence:
     create: true
     # -- Claim name for the releases share
     claimName: "rvf-releases"
-    # -- Storage class name (azurefile-csi-premium provides ReadWriteMany)
+    # -- Storage class. See persistence.jobs.storageClassName: empty binds to a
+    # pre-created PV, and omitting it lets the default class provision an empty
+    # one.
     storageClassName: "azurefile-csi-premium"
+    # -- Bind to this PersistentVolume by name, with an empty storageClassName.
+    volumeName: ""
     # -- Access modes for the PVC
     accessModes:
       - ReadWriteMany
