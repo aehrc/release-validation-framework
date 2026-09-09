@@ -166,9 +166,17 @@ and has been run by hand. Parity that is re-proven weekly is worth more than
 parity proven once.
 *Acceptance:* a scheduled trigger, and one green scheduled run.
 
-**3.8 Console: show what produced the report.** Reports now carry pack name,
-version, digest and count; the UI does not show them.
-*Acceptance:* the report header names the packs, and a packless run says so.
+**3.8 Console: show what produced the report. DONE 2026-09-09.** The report card
+carries an `assertions from` row, verified in a browser against two real
+reports:
+
+    assertions from   international 2026.07.27 · d6f0a930e8ac · 360 assertions
+                      amtv4 2026.09.1 · ef49b93a0600 · 200 assertions
+
+and for a report without them, the row says *"not recorded - this report
+predates pack provenance, so which assertions produced it cannot be answered"*
+rather than staying silent. Silence there reads as "the usual ones", which is
+the assumption recording provenance exists to remove.
 
 **3.9 Decide on the partial-skip behaviour.** An assertion mixing
 previous-release-dependent statements with independent ones FAILS rather than

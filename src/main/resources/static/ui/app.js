@@ -599,6 +599,30 @@ function groupRows(rows) {
     b.instances - a.instances || a.name.localeCompare(b.name));
 }
 
+// Which assertion packs produced this report.
+//
+// Named because the image tag stopped answering it: the corpus used to be baked
+// in, so the tag said which assertions ran; packs are fetched at run time and a
+// tag cannot describe them. A report that cannot say is worth saying so about -
+// silence there reads as "the usual ones", and the whole point of recording
+// provenance is that nobody has to assume that.
+function packProvenance(packs) {
+  if (!Array.isArray(packs) || !packs.length) {
+    return '<span class="muted">not recorded - this report predates pack '
+      + 'provenance, so which assertions produced it cannot be answered</span>';
+  }
+  return packs.map((pack) => {
+    const digest = String(pack.digest || '').replace(/^sha256:/, '').slice(0, 12);
+    const bits = [];
+    if (pack.version) bits.push(esc(pack.version));
+    if (digest) bits.push(esc(digest));
+    if (pack.assertions) bits.push(`${num(pack.assertions)} assertions`);
+    return `<div><b>${esc(pack.name || '(unnamed)')}</b>`
+      + (bits.length ? ` <span class="muted">${bits.join(' \u00b7 ')}</span>` : '')
+      + '</div>';
+  }).join('');
+}
+
 function render(data, runId, storageLocation) {
   const result = data.rvfValidationResult || {};
   const test = result.TestResult || {};
@@ -632,6 +656,7 @@ function render(data, runId, storageLocation) {
         <dt>run id</dt><dd>${esc(runId)}</dd>
         <dt>storage</dt><dd>${esc(storageLocation)}</dd>
         <dt>package</dt><dd>${esc(result.validationConfig?.testFileName || '')}</dd>
+        <dt>assertions from</dt><dd>${packProvenance(test.assertionPacks)}</dd>
         <dt>started</dt><dd>${esc(result.startTime || '')}</dd>
         <dt>ended</dt><dd>${esc(result.endTime || '')}</dd>
         <dt>duration</dt><dd>${test.timeTakenInSeconds ? `${num(test.timeTakenInSeconds)} s` : ''}</dd>
