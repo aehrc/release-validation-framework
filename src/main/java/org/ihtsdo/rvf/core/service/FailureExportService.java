@@ -73,6 +73,33 @@ public class FailureExportService {
 	}
 
 	/**
+	 * How many rows the archive holds for one assertion.
+	 *
+	 * <p>Cheap enough to run before deciding to stream - a COUNT over a
+	 * million-row parquet measures at about 1ms, because DuckDB reads the column
+	 * statistics rather than the rows. That matters because a filtered export
+	 * that matches nothing must not come back as a 200 carrying a header line
+	 * and no data: a file like that reads as "no failures" while the report on
+	 * screen says thousands.
+	 *
+	 * <p>It happens for a run archived before every test type reached the
+	 * archive, where a Drools or MRCM assertion id matches no row.
+	 */
+	public long countFor(File archive, String assertionId) throws IOException {
+		try (Connection connection = DriverManager.getConnection("jdbc:duckdb:");
+				PreparedStatement statement = connection.prepareStatement(
+						"SELECT COUNT(*) FROM read_parquet(?) WHERE assertion_id = ?")) {
+			statement.setString(1, archive.getAbsolutePath());
+			statement.setString(2, assertionId);
+			try (ResultSet rows = statement.executeQuery()) {
+				return rows.next() ? rows.getLong(1) : 0L;
+			}
+		} catch (SQLException e) {
+			throw new IOException("Could not read the failure archive " + archive.getName(), e);
+		}
+	}
+
+	/**
 	 * Streams the archive out as CSV, optionally for one assertion only.
 	 *
 	 * <p>Written row by row from a bounded fetch rather than collected: the point

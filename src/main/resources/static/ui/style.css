@@ -389,3 +389,8 @@ pre.sql { margin: 6px 0; padding: 9px 11px; background: var(--bg); border: 1px s
   white-space: pre-wrap; word-break: break-word; overflow-x: auto; }
 a.allfail { color: var(--accent); text-decoration: none; }
 a.allfail:hover { text-decoration: underline; }
+
+/* Shown in place of the CSV link when the run archived no rows for that
+   assertion - a Drools or MRCM failure on a run from before every test type
+   reached the archive. Muted, because it is an explanation and not a warning. */
+.nofail { color: var(--muted, #888); font-style: italic; }

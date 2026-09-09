@@ -64,6 +64,9 @@ public class DroolsRulesValidationService {
 	@Autowired
 	private WhitelistService whitelistService;
 
+	@Autowired
+	private FailureArchiveCollector archiveCollector;
+
 	private ResourceManager testResourceManager;
 
 	private static final Logger LOGGER = LoggerFactory.getLogger(DroolsRulesValidationService.class);
@@ -219,6 +222,8 @@ public class DroolsRulesValidationService {
 		invalidContents.clear();
 		List<TestRunItem> failedAssertions = new ArrayList<>();
 		List<TestRunItem> warningAssertions = new ArrayList<>();
+		List<FailureArchiveRow> archiveRows = new ArrayList<>();
+		long runId = validationConfig.getRunId() == null ? 0L : validationConfig.getRunId();
 		int failureExportMax = validationConfig.getFailureExportMax() != null ? validationConfig.getFailureExportMax() : 10;
 		Map<UUID, Assertion> uuidToAssertionMap = assertions.stream().collect(Collectors.toMap(Assertion::getUuid, Function.identity()));
 		Set<UUID> failedAssertionUUIDs = new HashSet<>();
@@ -236,6 +241,22 @@ public class DroolsRulesValidationService {
 				validationRule.setAssertionText(invalidContentList.get(0).getMessage().replaceAll("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}","<UUID>").replaceAll("\\d{6,20}","<SCTID>"));
 			}
 			validationRule.setFailureCount((long) invalidContentList.size());
+
+			// EVERY violation goes to the archive, not just the exported sample.
+			// failureExportMax caps what the report carries - 10 by default, 100
+			// on the NCTS nightly - and until now that cap was the only record
+			// that survived a run, so "5,158 failed" could never be turned back
+			// into which 5,158. Raw fields only: the getAdditionalFields
+			// enrichment below stays capped, because it feeds whitelist matching
+			// rather than the archive.
+			for (InvalidContent item : invalidContentList) {
+				archiveRows.add(new FailureArchiveRow(
+						runId,
+						validationRule.getAssertionUuid() == null ? "" : validationRule.getAssertionUuid().toString(),
+						FailureArchiveRow.conceptIdOf(item.getConceptId()),
+						item.getMessage(),
+						item.getComponentId()));
+			}
 			if (!whitelistService.isWhitelistDisabled()) {
 				validationRule.setFirstNInstances(invalidContentList.stream().limit(failureExportMax)
 						.map(item -> new FailureDetail(item.getConceptId(), item.getMessage(), item.getConceptFsn()).setComponentId(item.getComponentId()).setFullComponent(getAdditionalFields(item.getComponent())))
@@ -254,6 +275,12 @@ public class DroolsRulesValidationService {
 			}
 			failedAssertionUUIDs.add(validationRule.getAssertionUuid());
 		});
+		// Staged now, while the rows still exist. They are dropped the moment
+		// this method returns, and the collector unions every validator's
+		// fragment into failures.parquet after the parallel merge.
+		archiveCollector.register(validationConfig.getStorageLocation(),
+				archiveCollector.writeFragment("rvf_drools_failures", archiveRows));
+
 		ValidationReport validationReport = new ValidationReport();
 		validationReport.addFailedAssertions(failedAssertions);
 		validationReport.addWarningAssertions(warningAssertions);

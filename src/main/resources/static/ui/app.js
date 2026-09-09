@@ -545,7 +545,8 @@ function itemHtml(item, kind) {
           <tbody>${instances.map((row) => `<tr>${cols.map((c) => `<td>${esc(row[c])}</td>`).join('')}</tr>`).join('')}</tbody>
         </table>
         <p class="meta">first ${instances.length} of ${count === -1 ? 'unknown' : num(count)}
-          \u00b7 <a href="#" class="allfail" data-uuid="${esc(item.assertionUuid || '')}">all ${
+          \u00b7 <a href="#" class="allfail" data-uuid="${esc(item.assertionUuid || '')}" data-testtype="${esc(item.testType || '')}" data-count="${
+            count === -1 ? '' : num(count)}">all ${
             count === -1 ? '' : num(count)} as CSV</a></p>` : ''}
       ${item.assertionUuid ? `
         <details class="src" data-uuid="${esc(item.assertionUuid)}">
@@ -717,9 +718,46 @@ function render(data, runId, storageLocation) {
     if (link) {
       e.preventDefault();
       const uuid = link.dataset.uuid;
-      window.location.assign(`${API}/result/${encodeURIComponent(runId)}/failures`
+      const url = `${API}/result/${encodeURIComponent(runId)}/failures`
         + `?storageLocation=${encodeURIComponent(storageLocation)}&format=csv`
-        + (uuid ? `&assertionId=${encodeURIComponent(uuid)}` : ''));
+        + (uuid ? `&assertionId=${encodeURIComponent(uuid)}` : '');
+
+      /* Asked for before it is navigated to, so an archive that cannot answer
+       * says so instead of saving an empty file.
+       *
+       * This link was rendered for every failure and the export reads
+       * failures.parquet, which until recently held SQL assertion rows and
+       * nothing else - so on a Drools or MRCM failure it downloaded a header
+       * line with no rows. That reads as "no failures" while the report right
+       * beside it says 5,158. New runs archive every test type; a run archived
+       * before that still cannot, and answers 404. */
+      /* Only SQL assertions were ever certain to be in the archive, so only the
+       * other two are worth a check. The check costs a second stage of
+       * failures.parquet out of the job store when it passes, which is why it is
+       * not done for every failure on the page. */
+      if ((link.dataset.testtype || '') === 'SQL') {
+        window.location.assign(url);
+        return;
+      }
+      link.textContent = 'checking\u2026';
+      try {
+        const head = await fetch(url, { method: 'HEAD' });
+        if (head.status === 404) {
+          link.replaceWith(Object.assign(document.createElement('span'), {
+            className: 'nofail',
+            textContent: 'no archived rows for this assertion',
+            title: 'This run archived SQL assertion failures only, so the full list '
+              + 'was never kept for this one. The instances above are what RVF exported.',
+          }));
+          return;
+        }
+        window.location.assign(url);
+      } catch (err) {
+        // A HEAD that could not be made is not a reason to withhold the export.
+        window.location.assign(url);
+      } finally {
+        if (link.isConnected) link.textContent = `all ${link.dataset.count || ''} as CSV`.replace('  ', ' ');
+      }
       return;
     }
 

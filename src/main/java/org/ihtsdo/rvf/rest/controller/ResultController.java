@@ -136,6 +136,17 @@ public class ResultController {
 			return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
 		}
 
+		// A filtered export that matches nothing is a 404, not a 200 carrying a
+		// header line and no rows. The report UI offers "all N as CSV" beside
+		// every failure, and for a run archived before Drools and MRCM rows
+		// reached the archive that link produced an empty file - which reads as
+		// "no failures" while the report beside it says 5,158. The count is a
+		// column-statistics read, about a millisecond on a million rows.
+		if (assertionId != null && !assertionId.isBlank() && failureService.countFor(archive, assertionId) == 0) {
+			Files.deleteIfExists(archive.toPath());
+			return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+		}
+
 		boolean parquet = "parquet".equalsIgnoreCase(format);
 		String filename = "failures-" + runId + (parquet ? ".parquet" : ".csv");
 		StreamingResponseBody body = out -> {

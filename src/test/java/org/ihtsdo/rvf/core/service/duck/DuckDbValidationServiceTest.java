@@ -1,5 +1,6 @@
 package org.ihtsdo.rvf.core.service.duck;
 
+import org.ihtsdo.rvf.core.service.FailureArchiveCollector;
 import org.ihtsdo.rvf.core.data.model.TestRunItem;
 import org.ihtsdo.rvf.core.data.model.TestType;
 import org.ihtsdo.rvf.core.data.model.ValidationReport;
@@ -296,14 +297,14 @@ class DuckDbValidationServiceTest {
 	}
 
 	private DuckDbValidationService service() {
-		return new DuckDbValidationService(reportService, whitelistService,
+		return new DuckDbValidationService(reportService, archiveCollector(), whitelistService,
 				new ReleaseAcquisitionService(),
 				new DuckStoreLocator(storeFile.toString(), corpus.toString()),
 				corpus.toString(), work.toString(), "qa_result", 0, "", false, "", 0, noAssertionService());
 	}
 
 	private DuckDbValidationService service(String memoryLimit) {
-		return new DuckDbValidationService(reportService, whitelistService,
+		return new DuckDbValidationService(reportService, archiveCollector(), whitelistService,
 				new ReleaseAcquisitionService(),
 				new DuckStoreLocator(storeFile.toString(), corpus.toString()),
 				corpus.toString(), work.toString(), "qa_result", 0, memoryLimit, false, "", 0, noAssertionService());
@@ -394,5 +395,20 @@ class DuckDbValidationServiceTest {
 				return null;
 			}
 		};
+	}
+
+	/**
+	 * A collector that stages into the test's temp area and uploads nowhere.
+	 *
+	 * <p>The service registers its qa_result parquet here instead of uploading it
+	 * directly; assembly is ValidationRunner's job, after the parallel merge, so
+	 * these tests never reach it.
+	 */
+	private static FailureArchiveCollector archiveCollector() {
+		FailureArchiveCollector collector = new FailureArchiveCollector();
+		collector.setArchiveFailures(true);
+		collector.setReportService(new ValidationReportService());
+		collector.setWorkDirectory(System.getProperty("java.io.tmpdir"));
+		return collector;
 	}
 }

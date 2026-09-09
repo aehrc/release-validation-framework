@@ -45,6 +45,9 @@ public class MRCMValidationService {
 	@Autowired
 	private WhitelistService whitelistService;
 
+	@Autowired
+	private FailureArchiveCollector archiveCollector;
+
 	@Value("${rvf.assertion.whitelist.batchsize:1000}")
 	private int whitelistBatchSize;
 
@@ -64,6 +67,8 @@ public class MRCMValidationService {
 
 	public ValidationStatusReport runMRCMAssertionTests(final ValidationStatusReport statusReport, ValidationRunConfig validationConfig) {
 		Set<String> extractedRF2FilesDirectory = new HashSet<>();
+		archiveRows.clear();
+		archiveRunId = validationConfig.getRunId() == null ? 0L : validationConfig.getRunId();
 		try {
 			boolean fullSnapshotRelease = !validationConfig.isRf2DeltaOnly() && CollectionUtils.isEmpty(validationConfig.getExtensionDependencies());
 			int maxFailureExports = validationConfig.getFailureExportMax() != null ? validationConfig.getFailureExportMax() : 100;
@@ -171,6 +176,12 @@ public class MRCMValidationService {
 			if (!CollectionUtils.isEmpty(extractedRF2FilesDirectory)) {
 				extractedRF2FilesDirectory.forEach(s -> FileUtils.deleteQuietly(new File(s)));
 			}
+			// Staged in the finally block so a run that stopped part-way still
+			// archives what it did find. The rows are dropped either way when
+			// this method returns.
+			archiveCollector.register(validationConfig.getStorageLocation(),
+					archiveCollector.writeFragment("rvf_mrcm_failures", new ArrayList<>(archiveRows)));
+			archiveRows.clear();
 		}
 		return statusReport;
 	}
@@ -265,6 +276,17 @@ public class MRCMValidationService {
 		report.addPassedAssertions(passedAssertions);
 	}
 
+	/**
+	 * This run's archive rows, and the run they belong to.
+	 *
+	 * <p>Per-invocation state on a singleton service, which is only safe because
+	 * one validation run owns this service for its duration - the same
+	 * assumption the existing {@code testRunItem} local reuse already makes. Set
+	 * in {@code runMRCMAssertionTests} and cleared there.
+	 */
+	private final List<FailureArchiveRow> archiveRows = new ArrayList<>();
+	private long archiveRunId;
+
 	private TestRunItem createTestRunItem(Assertion mrcmAssertion, ContentType contentType) {
 		TestRunItem testRunItem = new TestRunItem();
 		testRunItem.setTestType(TestType.MRCM);
@@ -319,7 +341,44 @@ public class MRCMValidationService {
 		}
 
 		testRunItem.setFirstNInstances(failedDetails);
+
+		// EVERY violated concept goes to the archive, not just the firstNCount
+		// the report carries. The loops above are capped at failureExportMax and
+		// enrich each row with getAdditionalFields for whitelist matching; this
+		// stays raw and uncapped, so an MRCM assertion reporting 5,158 failures
+		// can finally answer WHICH 5,158.
+		archiveAll(mrcmAssertion, archiveRows);
 		return testRunItem;
+	}
+
+	/**
+	 * Appends one assertion's complete violation set to the run's archive rows.
+	 *
+	 * <p>Concept violations first, and reference-set member violations when
+	 * there are no concept ones - which is the same order
+	 * {@link #createTestRunItemWithFailures} uses to decide the failure count, so
+	 * the archived row count and the reported count agree.
+	 */
+	private void archiveAll(Assertion mrcmAssertion, List<FailureArchiveRow> archiveRows) {
+		String assertionId = mrcmAssertion.getUuid() == null ? "" : mrcmAssertion.getUuid().toString();
+		String details = mrcmAssertion.getDetails();
+		List<ConceptResult> concepts = mrcmAssertion.getCurrentViolatedConcepts();
+		if (concepts != null && !concepts.isEmpty()) {
+			for (ConceptResult concept : concepts) {
+				archiveRows.add(new FailureArchiveRow(archiveRunId, assertionId,
+						FailureArchiveRow.conceptIdOf(concept.getId()), details, concept.getId()));
+			}
+			return;
+		}
+		if (mrcmAssertion.getCurrentViolatedReferenceSetMembers() != null) {
+			// `var`, because the element type lives in the MRCM validator fork
+			// and importing it here would pin this file to that library's package.
+			for (var member : mrcmAssertion.getCurrentViolatedReferenceSetMembers()) {
+				archiveRows.add(new FailureArchiveRow(archiveRunId, assertionId,
+						FailureArchiveRow.conceptIdOf(member.referencedComponentId()),
+						details, member.memberId()));
+			}
+		}
 	}
 
 	private String getAdditionalFields(ConceptResult conceptResult) {

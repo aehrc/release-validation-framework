@@ -11,6 +11,7 @@ import org.ihtsdo.rvf.core.data.model.TestType;
 import org.ihtsdo.rvf.core.data.model.ValidationReport;
 import org.springframework.beans.factory.ObjectProvider;
 import org.ihtsdo.rvf.core.service.ReleaseAcquisitionService;
+import org.ihtsdo.rvf.core.service.FailureArchiveCollector;
 import org.ihtsdo.rvf.core.service.ValidationReportService;
 import org.ihtsdo.rvf.core.service.ValidationVersionLoader;
 import org.ihtsdo.rvf.core.service.WhitelistService;
@@ -176,7 +177,11 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 	 */
 	private final ObjectProvider<DuckAssertionService> assertionService;
 
+	/** Where this task's failure rows are staged for the run-wide archive. */
+	private final FailureArchiveCollector collector;
+
 	public DuckDbValidationService(ValidationReportService reportService,
+			FailureArchiveCollector collector,
 			WhitelistService whitelistService,
 			ReleaseAcquisitionService acquisitionService,
 			DuckStoreLocator storeLocator,
@@ -190,6 +195,7 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 			@Value("${rvf.duck.cache.max-gb:0}") double cacheMaxGb,
 			ObjectProvider<DuckAssertionService> assertionService) {
 		this.reportService = reportService;
+		this.collector = collector;
 		this.assertionService = assertionService;
 		this.whitelistService = whitelistService;
 		this.acquisitionService = acquisitionService;
@@ -1065,12 +1071,22 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 				st.execute("COPY (SELECT * FROM " + qaResultTable + ") TO '" + parquet
 						+ "' (FORMAT PARQUET, COMPRESSION ZSTD)");
 			}
-			reportService.writeFailureArchive(reportStorage, parquet.toFile());
-			LOGGER.info("Archived failure detail to {}failures.parquet ({} KB)", reportStorage,
-					Files.size(parquet) / 1024);
+			// Registered rather than uploaded. This used to write
+			// failures.parquet straight to the job store from here, which put the
+			// whole archive in the hands of the one validator that runs SQL
+			// assertions - so Drools and MRCM failures were absent from it and
+			// the uncapped export returned a bare header for them.
+			//
+			// The three validators run in parallel (ValidationRunner), and this
+			// task finishes before the other two, so there is no moment here at
+			// which all three sets of rows exist. Each now stages its own
+			// fragment and FailureArchiveCollector.assemble unions them after the
+			// merge. The run database's connection lifetime is untouched, which
+			// is what makes this safe to do inside a parallel phase.
+			collector.register(reportStorage, parquet);
+			LOGGER.info("Staged {} KB of SQL failure detail for {}", Files.size(parquet) / 1024, reportStorage);
 		} catch (Exception e) {
 			LOGGER.warn("Could not archive failure detail for {}: {}", reportStorage, e.toString());
-		} finally {
 			FileUtils.deleteQuietly(parquet.toFile());
 		}
 	}

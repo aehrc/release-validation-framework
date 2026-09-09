@@ -80,6 +80,12 @@ class ValidationRunnerPhaseConcurrencyTest {
 		ReflectionTestUtils.setField(runner, "structuralTestRunner", structuralTestRunner);
 		ReflectionTestUtils.setField(runner, "sqlAssertionValidationService", sqlService);
 		ReflectionTestUtils.setField(runner, "reportService", reportService);
+		// The runner assembles the failure archive once every phase has merged,
+		// which is the only point at which all three validators' rows exist.
+		// Archiving off, because this test is about phase concurrency and an
+		// archive write would put a parquet in the work directory for it.
+		ReflectionTestUtils.setField(runner, "failureArchiveCollector",
+				new FailureArchiveCollector(reportService, null, false));
 	}
 
 	private ValidationRunConfig config() {

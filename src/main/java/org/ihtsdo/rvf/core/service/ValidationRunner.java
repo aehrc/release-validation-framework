@@ -72,6 +72,9 @@ public class ValidationRunner {
 	private MRCMValidationService mrcmValidationService;
 
 	@Autowired
+	private FailureArchiveCollector failureArchiveCollector;
+
+	@Autowired
 	private TraceabilityComparisonService traceabilityComparisonService;
 
 	@Autowired
@@ -229,6 +232,20 @@ public class ValidationRunner {
 				mergeValidationStatusReports(statusReport, entry.getValue().get());
 			}
 		}
+
+		// After the merge, and only here.
+		//
+		// Each validator stages its own failure rows while it still holds them -
+		// the SQL task straight out of qa_result, Drools and MRCM from the lists
+		// they otherwise discard past failureExportMax - and this unions them
+		// into the one failures.parquet the export endpoint reads. It cannot
+		// happen inside a task, because the tasks above run in PARALLEL and no
+		// one of them can see another's rows.
+		//
+		// Outside the `if` deliberately: a run that skipped every optional
+		// validator still has SQL rows staged, and leaving them unassembled would
+		// both lose the archive and leak the fragment.
+		failureArchiveCollector.assemble(validationConfig.getStorageLocation());
 	}
 
 	private void updateRvfState(final ValidationRunConfig config, final State state) throws JsonProcessingException, JMSException {

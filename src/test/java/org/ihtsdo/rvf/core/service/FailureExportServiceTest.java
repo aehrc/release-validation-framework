@@ -117,4 +117,26 @@ class FailureExportServiceTest {
 		String csv = csv(parquet.toFile(), null);
 		assertLinesMatch(List.of("run_id,assertion_id"), csv.lines().toList());
 	}
+
+	/*
+	 * The gap that made the report UI's "all N as CSV" link lie.
+	 *
+	 * The archive held qa_result and nothing else, so a Drools or MRCM assertion
+	 * id matched no row, writeCsv emitted the header and stopped, and the browser
+	 * saved a file that read as "no failures" beside a report saying 5,158. New
+	 * runs archive every test type; a run archived before that cannot, so the
+	 * count is what the controller checks before it streams anything.
+	 */
+	@Test
+	void countsNothingForAnAssertionTheArchiveDoesNotCover() throws Exception {
+		File archive = archive(50);
+		assertEquals(0L, new FailureExportService().countFor(archive, "fbd4bbb5-3e62-4ccb-824a-e82d9771c0ee"),
+				"a Drools rule id is in no qa_result row");
+	}
+
+	@Test
+	void countsEveryRowForAnAssertionItDoesCover() throws Exception {
+		File archive = archive(50);
+		assertEquals(50L, new FailureExportService().countFor(archive, "a-1"));
+	}
 }
