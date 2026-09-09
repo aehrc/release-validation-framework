@@ -218,10 +218,25 @@ stages:
                 if ! ldd mysql8/bin/mysqld 2>/dev/null | grep -q 'libaio.*not found'; then
                   echo "libaio already satisfied"
                 else
-                  apt-get download libaio1t64 2>/dev/null || apt-get download libaio1
+                  # Build 16307: "E: Unable to locate package libaio1". BOTH
+                  # names failed because the container agent's package lists are
+                  # empty until apt-get update runs - the t64 attempt's error
+                  # was hidden by 2>/dev/null, so only the fallback's message
+                  # surfaced and it read as a missing package rather than a
+                  # missing index.
+                  #
+                  # Downloaded and shimmed rather than installed: this pool is
+                  # shared, and a build that mutates the agent's packages is a
+                  # side effect the next build inherits.
+                  sudo apt-get update -qq
+                  # Ubuntu 24.04 renamed libaio1 to libaio1t64 for the 64-bit
+                  # time_t transition, and MySQL's tarball still asks for
+                  # libaio.so.1 - so the shim below is not optional on 24.04.
+                  apt-get download libaio1t64 || apt-get download libaio1
                   dpkg-deb -x libaio*.deb aio
                   ln -sf "$PWD/aio/usr/lib/x86_64-linux-gnu/libaio.so.1t64" libs/libaio.so.1 2>/dev/null \
                     || ln -sf "$PWD/aio/lib/x86_64-linux-gnu/libaio.so.1" libs/libaio.so.1
+                  ldd mysql8/bin/mysqld | grep -E 'libaio|not found' || true
                 fi
                 LD_LIBRARY_PATH="$PWD/libs" mysql8/bin/mysqld --initialize-insecure \
                   --basedir="$PWD/mysql8" --datadir="$PWD/mysqldata" --tmpdir="$PWD/mysqltmp"
