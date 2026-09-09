@@ -37,3 +37,5 @@ snomed-drools-rules
 # Local validation job store (uploads, state and reports written at runtime)
 shared-jobs/
 bench/duckdb-cp.txt
+ab-corpus
+__pycache__/

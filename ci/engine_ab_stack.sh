@@ -24,7 +24,23 @@ MYSQL_SOCKET="${MYSQL_SOCKET:-$WORK/mysql.sock}"
 MYSQL_PASSWORD="${MYSQL_PASSWORD:-rvfpass}"
 JOB_STORE="${JOB_STORE:-shared-jobs/}"
 RELEASE_STORE="${RELEASE_STORE:-store/previous/}"
+# RELATIVE, always. RVF's ResourceManager resolves this through Spring's
+# FileSystemResource, which drops a leading slash: given
+# /data/work/amt-build/corpus it looked for data/work/amt-build/corpus/manifest.xml
+# and the MySQL leg died in bean creation before serving anything. A symlink in
+# the working directory is the way to point at a corpus that lives elsewhere.
 CORPUS="${CORPUS:-./snomed-release-validation-assertions/}"
+# The DuckDB store to run against. Unset means the one baked into the jar, which
+# is right for the international corpus and WRONG for any other: the locator
+# would serve 360 international assertions while the MySQL leg imported an
+# extension corpus from $CORPUS, and the A/B would compare two different
+# assertion sets and call the difference a divergence.
+DUCK_STORE="${DUCK_STORE:-}"
+# How many failing components each report carries per assertion. The default is
+# a sample, which is enough to compare COUNTS - and counts are not parity: a
+# transpiled regex can match the wrong rows and still match as many. Raise it
+# and the two reports can be compared on component ids.
+FAILURE_EXPORT_MAX="${FAILURE_EXPORT_MAX:-}"
 MYSQL_URL="${MYSQL_URL:-http://localhost:8090}"
 DUCK_URL="${DUCK_URL:-http://localhost:8091}"
 HEAP="${HEAP:-8g}"
@@ -58,6 +74,13 @@ done
 export JAVA_HOME
 export AWS_REGION="${AWS_REGION:-us-east-1}"
 export AWS_DEFAULT_REGION="$AWS_REGION"
+# Cleared, not just created. RVF extracts a release into
+# $tmpdir/<version>/ and removes it with deleteIfExists, which throws
+# DirectoryNotEmptyException on a partial extract left by an aborted run - so
+# one failed attempt makes every later attempt fail with an error about the
+# PREVIOUS release rather than about anything current. Two aborted runs cost a
+# 15-minute leg to diagnose exactly that.
+rm -rf "$WORK/tmp-mysql" "$WORK/tmp-duck"
 mkdir -p "$WORK/tmp-mysql" "$WORK/tmp-duck" "$WORK/duckwork-ab" "$WORK/release-cache-ab"
 
 PIDS=()
@@ -143,6 +166,7 @@ echo "=== RVF, duckdb engine ==="
 "$JAVA_HOME/bin/java" -Djava.io.tmpdir="$WORK/tmp-duck" -Xmx"$HEAP" \
   --add-opens=java.base/java.lang=ALL-UNNAMED -jar "$JAR" \
   --rvf.execution.engine=duckdb \
+  ${DUCK_STORE:+--rvf.duck.store="$DUCK_STORE"} \
   --rvf.assertion.resource.local.path="$CORPUS" \
   --rvf.validation.job.storage.local.path="$JOB_STORE" \
   --rvf.release.storage.local.path="$RELEASE_STORE" --rvf.release.storage.useCloud=false \
@@ -159,6 +183,7 @@ ARGS=(--mysql-url "$MYSQL_URL" --duck-url "$DUCK_URL" --release "$RELEASE"
       --groups $ASSERTION_GROUPS --release-as-edition
       --out "$WORK/engine-ab.json" --junit "$WORK/engine-ab.xml"
       --mysql-report "$WORK/engine-ab-mysql.json" --duck-report "$WORK/engine-ab-duck.json")
+[ -n "$FAILURE_EXPORT_MAX" ] && ARGS+=(--failure-export-max "$FAILURE_EXPORT_MAX")
 [ -n "$PREVIOUS" ] && ARGS+=(--previous-release "$PREVIOUS")
 [ -n "$DEPENDENCY" ] && ARGS+=(--dependency-release "$DEPENDENCY")
 [ -n "$EFFECTIVE_TIME" ] && ARGS+=(--effective-time "$EFFECTIVE_TIME")

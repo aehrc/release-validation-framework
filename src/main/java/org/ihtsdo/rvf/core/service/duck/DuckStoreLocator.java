@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
@@ -127,6 +128,17 @@ public class DuckStoreLocator {
 			return;
 		}
 		Map<String, Path> corpus = indexByFileName(Path.of(corpusRoot));
+		if (corpus.isEmpty()) {
+			// Every assertion would now look "absent" and the message would say
+			// republish the store, which is the wrong instruction: the store is
+			// probably fine and the corpus is unreadable. That mistake cost a
+			// 25-minute A/B run to diagnose.
+			throw new IllegalStateException("Found no .sql files under the assertion corpus '"
+					+ corpusRoot + "', so the store " + description() + " cannot be verified "
+					+ "against it. The store is probably fine: check the path, and check "
+					+ "whether it is a symlink to a directory on a filesystem this process "
+					+ "cannot walk.");
+		}
 		List<String> missing = new ArrayList<>();
 		List<String> changed = new ArrayList<>();
 		for (Map.Entry<String, String> e : expected.entrySet()) {
@@ -182,9 +194,14 @@ public class DuckStoreLocator {
 	 * on the incumbent path. A later duplicate would make this check compare
 	 * against an arbitrary one of the two, so it is rejected rather than
 	 * silently resolved.
+	 *
+	 * <p>FOLLOWING LINKS, because a corpus root is routinely a symlink - a
+	 * Kubernetes volume mount, or a checkout linked into place. {@code
+	 * Files.walk} treats an unfollowed symlink as a plain file and yields
+	 * nothing, which reads as a corpus where every assertion is missing.
 	 */
 	private static Map<String, Path> indexByFileName(Path root) {
-		try (Stream<Path> files = Files.walk(root)) {
+		try (Stream<Path> files = Files.walk(root, FileVisitOption.FOLLOW_LINKS)) {
 			return files.filter(p -> p.getFileName().toString().endsWith(".sql"))
 					.collect(java.util.stream.Collectors.toMap(
 							p -> p.getFileName().toString(),

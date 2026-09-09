@@ -12,6 +12,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -74,6 +75,32 @@ class DuckStoreLocatorTest {
 				() -> new DuckStoreLocator(store.toString(), corpus.toString()).load());
 		assertTrue(e.getMessage().contains("two.sql"), e.getMessage());
 		assertTrue(e.getMessage().contains("1 are absent"), e.getMessage());
+	}
+
+	@Test
+	void aCorpusReachedThroughASymlinkIsWalked() throws IOException {
+		// A corpus root is routinely a symlink: a volume mount, or a checkout
+		// linked into place. Files.walk without FOLLOW_LINKS yields the link
+		// itself and nothing under it, so every assertion reads as absent.
+		Path corpus = corpusWith(ONE, TWO);
+		Path link = Files.createSymbolicLink(dir.resolve("linked-corpus"), corpus);
+		Path store = writeStore(sha(ONE), sha(TWO));
+		assertEquals(2, new DuckStoreLocator(store.toString(), link.toString())
+				.load().assertions().size());
+	}
+
+	@Test
+	void anUnreadableCorpusSaysSoRatherThanBlamingTheStore() throws IOException {
+		// A directory with no scripts in it makes every assertion look absent,
+		// and "republish the store" is then the wrong instruction - the store
+		// is fine and the corpus path is what is wrong.
+		Path empty = Files.createDirectories(dir.resolve("empty-corpus"));
+		Path store = writeStore(sha(ONE), sha(TWO));
+		IllegalStateException e = assertThrows(IllegalStateException.class,
+				() -> new DuckStoreLocator(store.toString(), empty.toString()).load());
+		assertTrue(e.getMessage().contains("no .sql files"), e.getMessage());
+		assertTrue(e.getMessage().contains("store is probably fine"), e.getMessage());
+		assertFalse(e.getMessage().contains("Republish"), e.getMessage());
 	}
 
 	@Test

@@ -75,13 +75,49 @@ available, 2026.09.1 loaded". A notification, never an action - the moment the
 server follows a channel we have reinvented `latest`.
 *Acceptance:* the job reports drift on a stale pin and is silent otherwise.
 
-**3.6 The 43 REGEXP transpilations against the MySQL oracle.** The last
-unchecked parity surface, and a regex that silently matches nothing yields zero
-findings and reads as a pass. Runnable here: both engines exist locally and the
-AMT corpus is at `/data/work/amt-build/corpus`, so `ci/engine_ab_stack.sh` with
-the amtv4 group gives the differential.
-*Acceptance:* every REGEXP assertion either agrees with MySQL on failing
-component ids or is in `ci/known-engine-divergences.json` with evidence.
+**3.6 The REGEXP transpilations against the MySQL oracle. DONE 2026-09-09.**
+**84 calls, 83 identical on 1,826,331 real terms, 0 divergences**, after fixing
+the one real defect: `[[:alnum:]]` is Unicode-aware in MySQL's ICU and
+ASCII-only in DuckDB's RE2, so "vertigo/Ménière disease" escaped the check.
+Fixed in the publisher (`duck/publisher-fixes.patch`), which now refuses any
+POSIX class it has no measured equivalent for. Full write-up, including the
+three harness bugs that each produced a confident wrong answer, in
+[REGEXP-PARITY.md](REGEXP-PARITY.md).
+
+The assertion-level A/B could not have found it: all 46 regex-bearing
+assertions agreed, 44 of them by matching nothing on either engine. Counting
+failures per assertion cannot tell "both engines answered the same" from
+"neither engine was given content to answer".
+
+**3.6a An AMT pack must declare its prerequisite in the corpus.** The AMT
+`pre-requisites.sql` builds the 13 `*_active` views its assertions read. It was
+carried in the store for the DuckDB path but never declared in the corpus
+manifest, so the incumbent engine never built them: **192 of 258 assertions came
+back incomplete** with `Table 'rvf_au_...description_active' doesn't exist`, and
+every one of them read as "not run" rather than as a wiring error. Declaring it
+`category="resource"` - which is how the international corpus declares its 16,
+and the filename RVF's own importer special-cases - took the run to 1 incomplete
+and 259 assertions. The publisher now skips that entry as an assertion, since
+the ports stand in for it on the DuckDB side.
+*Acceptance:* the pack build emits the entry, and an A/B of the pack shows no
+`*_active` table errors.
+
+**3.6b Three AMT-run divergences, none yet in a baseline.** From the same A/B
+(AU edition, amtv4 + component-centric-validation, no dependency release
+supplied; MySQL 4020s vs DuckDB 120s, 33.5x):
+
+* `17b6c41e` "Language refset members have the wrong module" - **MySQL reports
+  1,405,850 findings; DuckDB refuses to run it**, saying `requires <DEPENDENCY>,
+  which was not supplied`. DuckDB is right and MySQL's 1.4M are junk from
+  comparing against an absent release. Baseline-worthy as a MySQL defect.
+* `fc0f240c` "Any refset with a refsetDescriptor record, that is a subset..." -
+  MySQL 8, DuckDB 0. Undiagnosed.
+* `5451f5c6` "Full ccsRefset validation - 01..." - MySQL errored (-1), DuckDB 0.
+  Undiagnosed.
+
+*Acceptance:* each classified with a cause in `ci/known-engine-divergences.json`
+or fixed. Note that baseline is keyed to the international nightly, so an
+AU/AMT run needs its own.
 
 **3.7 Schedule the differential arm.** `az/azure-pipeline.engine-ab.yml` exists
 and has been run by hand. Parity that is re-proven weekly is worth more than

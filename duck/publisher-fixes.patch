@@ -1,5 +1,5 @@
 --- a/rvfsql.py	2026-08-26 10:29:17.000000000 +1000
-+++ b/rvfsql.py	2026-09-07 22:43:33.563681167 +1000
++++ b/rvfsql.py	2026-09-09 22:19:51.955222150 +1000
 @@ -11,6 +11,7 @@
                        instead of being rewritten per script.
  """
@@ -8,7 +8,103 @@
  
  import procedures
  
-@@ -575,7 +576,102 @@
+@@ -406,6 +407,40 @@
+     return changed
+ 
+ 
++def _unicode_posix_classes(tree):
++    """Rewrite POSIX classes in every regex pattern the tree carries.
++
++    An AST pass, not a textual one, because sqlglot - not `_regexp_to_duckdb` -
++    is what converts `x REGEXP 'p'` for a statement it can parse, so a textual
++    pass over the input never sees the pattern that reaches DuckDB.
++
++    Both node shapes are handled: sqlglot's own `RegexpLike`, and the
++    `regexp_matches` Anonymous that `_case_insensitive_on_function_results`
++    produces - so this pass is order-independent with respect to it.
++    """
++    from sqlglot import exp
++
++    def rewrite(literal):
++        if not isinstance(literal, exp.Literal) or not literal.is_string:
++            return False
++        translated = unicode_posix_classes(literal.this)
++        if translated == literal.this:
++            return False
++        literal.set("this", translated)
++        return True
++
++    changed = False
++    for node in list(tree.find_all(exp.RegexpLike)):
++        changed = rewrite(node.expression) or changed
++    for node in list(tree.find_all(exp.Anonymous)):
++        if str(node.this).lower() != "regexp_matches":
++            continue
++        args = node.expressions
++        if len(args) >= 2:
++            changed = rewrite(args[1]) or changed
++    return changed
++
++
+ def _fix_loose_group_by(tree):
+     import sqlglot
+     from sqlglot import exp
+@@ -524,9 +559,53 @@
+     return "".join(out)
+ 
+ 
++# MySQL 8's regex is ICU, whose POSIX classes are UNICODE-aware; DuckDB's is
++# RE2, whose POSIX classes are ASCII-ONLY. Measured on the AU edition's 1,826,331
++# active terms, `[[:alnum:]]+/[[:alnum:]]+` selects 76,165 rows on MySQL and
++# 76,164 on DuckDB - the missing one being "History of - vertigo/Meniere
++# disease", whose accented letter RE2 does not count as alphanumeric.
++#
++# One row today, but the shape is a silent blind spot: an assertion that checks
++# term formatting stops seeing accented content, reports nothing, and reads as a
++# pass. `[\p{L}\p{N}]` restores it exactly - 76,165, including that row.
++#
++# Only the classes the corpora actually use are translated. An untranslated one
++# is REFUSED rather than passed through, because passing it through is the
++# failure this comment describes.
++_POSIX_TO_RE2 = {
++    "alnum": r"\p{L}\p{N}",
++    "alpha": r"\p{L}",
++    "digit": r"\p{Nd}",
++    "lower": r"\p{Ll}",
++    "upper": r"\p{Lu}",
++}
++_POSIX_CLASS_RE = re.compile(r"\[:([a-z]+):\]")
++
++
++def unicode_posix_classes(pattern: str) -> str:
++    """ICU's Unicode-aware POSIX classes, as RE2 property classes.
++
++    Applied to the pattern INSIDE its brackets: `[[:alnum:]]` is a bracket
++    expression containing the class, so the replacement is the property set
++    without its own brackets and the surrounding ones are kept - which also
++    makes `[[:alnum:]_-]` come out right.
++    """
++    def repl(m):
++        name = m.group(1)
++        replacement = _POSIX_TO_RE2.get(name)
++        if replacement is None:
++            raise ValueError(
++                f"POSIX class [:{name}:] has no verified RE2 equivalent. "
++                "MySQL's ICU classes are Unicode-aware and RE2's are ASCII-only, "
++                "so passing it through would silently narrow the match. Add it to "
++                "_POSIX_TO_RE2 with a measurement.")
++        return replacement
++    return _POSIX_CLASS_RE.sub(repl, pattern)
++
++
+ def _regexp_to_duckdb(m):
+     col, negate, lit = m.group(1), m.group(2), m.group(3)
+-    decoded = decode_mysql_string(lit[1:-1])
++    decoded = unicode_posix_classes(decode_mysql_string(lit[1:-1]))
+     call = f"regexp_matches({col}, '{decoded.replace(chr(39), chr(39) * 2)}')"
+     # `term not regexp '...'` must become NOT regexp_matches(term, '...'), not
+     # regexp_matches(not, '...') - the old pattern captured `not` as the column.
+@@ -575,7 +654,102 @@
      return pattern.sub(repl, sql)
  
  
@@ -112,7 +208,7 @@
      """Textual pre-passes applied before the sqlglot AST stage.
  
      Order matters: BINARY/COLLATE are stripped FIRST, because they can sit
-@@ -607,6 +703,7 @@
+@@ -607,6 +781,7 @@
      sql = _ENGINE_RE.sub("", sql)
      sql = _DISPLAY_WIDTH_RE.sub(r"\1", sql)
      sql = _EFFECTIVETIME_NOW_RE.sub(r"\1 \2 strftime(now(), '%Y%m%d')", sql)
@@ -120,7 +216,15 @@
      return sql
  
  
-@@ -670,7 +767,7 @@
+@@ -635,6 +810,7 @@
+         _having_without_group_by(tree)
+         _fix_loose_group_by(tree)
+         _case_insensitive_on_function_results(tree)
++        _unicode_posix_classes(tree)
+     try:
+         return ";\n".join(t.sql(dialect="duckdb") for t in trees)
+     except Exception:
+@@ -670,7 +846,7 @@
  
  
  def prepare(raw_sql: str, dialect: str, known_tables=None,
@@ -129,7 +233,7 @@
      """Full pipeline -> list of executable statements for the given dialect.
  
      The single-phase path, kept as the reference implementation: precompile()/
-@@ -684,11 +781,12 @@
+@@ -684,11 +860,12 @@
      if dialect == "duckdb":
          if known_tables:
              sql = strip_schema_qualified_aliases(sql, known_tables)
@@ -143,7 +247,7 @@
          low = s.strip().lower()
          if not low:
              continue
-@@ -856,7 +954,8 @@
+@@ -856,7 +1033,8 @@
      return sql
  
  
@@ -153,7 +257,7 @@
      """Stage 1-3 with no run-specific input -> DuckDB statements with sentinels.
  
      Run once per assertion at PUBLISH time. The result is stable for the lifetime
-@@ -879,11 +978,16 @@
+@@ -879,11 +1057,16 @@
      if known_tables:
          sql = strip_schema_qualified_aliases(sql, known_tables,
                                               schema_names=_SENTINEL_SCHEMAS)
@@ -172,8 +276,16 @@
          if not low:
              continue
 --- a/publish_store.py	2026-08-26 10:29:17.000000000 +1000
-+++ b/publish_store.py	2026-09-07 22:46:42.060337392 +1000
-@@ -98,6 +98,15 @@
++++ b/publish_store.py	2026-09-09 22:21:45.613471204 +1000
+@@ -36,6 +36,7 @@
+ import procedures
+ import rvfsql
+ 
++PREREQUISITES_SQL = "pre-requisites.sql"
+ FORMAT_VERSION = 1
+ 
+ # pre-requisites.sql materialises tables the DDL does not declare. They are real
+@@ -98,6 +99,15 @@
            derive_uuids=True):
      tables = known_tables(ddl_path, prereq_dir)
      tcols = column_names(ddl_path)
@@ -189,7 +301,21 @@
  
      static = manifest.index_by_basename(manifest.load_scripts(manifest_root))
      derived = manifest.load_amtv4(scripts_dir, group_id, category)
-@@ -128,7 +137,8 @@
+@@ -111,6 +121,13 @@
+     # doing it. DuckStore then reads that as an empty corpus, and an empty
+     # corpus reports no findings and PASSES.
+     for path in sorted(scripts_dir.rglob("*.sql")):
++        if path.name.lower() == PREREQUISITES_SQL:
++            # Declared in the manifest so the INCUMBENT engine builds the *_active
++            # views - RVF's importer special-cases this exact filename - but it is
++            # not an assertion, and on this path the ports below stand in for it.
++            # Transpiling it as one would put MySQL DDL (DELIMITER, MyISAM) in the
++            # store under a uuid RVF also uses for the real prerequisite.
++            continue
+         raw = path.read_text(errors="replace")
+         entry = static.get(path.name)
+         if entry is None and derive_uuids:
+@@ -128,7 +145,8 @@
          uuid = entry["uuid"] if isinstance(entry, dict) else entry
          try:
              stmts = rvfsql.precompile(raw, known_tables=tables,
@@ -199,7 +325,7 @@
          except Exception as e:                                  # noqa: BLE001
              failures.append((path.name, f"{type(e).__name__}: {e}"))
              continue
-@@ -154,7 +164,8 @@
+@@ -154,7 +172,8 @@
                  "file": path.name,
                  "sha256": hashlib.sha256(raw.encode()).hexdigest()[:16],
                  "statements": rvfsql.precompile(raw, known_tables=tables,
@@ -209,7 +335,7 @@
              })
          except Exception as e:                                  # noqa: BLE001
              failures.append((path.name, f"{type(e).__name__}: {e}"))
-@@ -215,8 +226,17 @@
+@@ -215,8 +234,17 @@
      """
      import amtv4
      schema = rvfsql._SENTINEL_BY_PLACEHOLDER["<PROSPECTIVE>"]
