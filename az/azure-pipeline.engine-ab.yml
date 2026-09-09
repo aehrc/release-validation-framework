@@ -212,33 +212,63 @@ stages:
                   rm -f mysql.tar
                 fi
                 mv "mysql-$V-linux-glibc2.28-x86_64" mysql8
-                # The generic tarball wants libaio; fetch it without root rather
-                # than requiring a package install on the agent.
-                mkdir -p libs
-                if ! ldd mysql8/bin/mysqld 2>/dev/null | grep -q 'libaio.*not found'; then
-                  echo "libaio already satisfied"
+                # The generic tarball links against libraries the agent image
+                # does not ship. Build 16308 named two - libaio.so.1 AND
+                # libnuma.so.1 - and died with "error while loading shared
+                # libraries", exit 127, which reads like a broken binary.
+                #
+                # Driven by ldd rather than by a fixed list, so a library added
+                # by a later MySQL is reported by name instead of failing the
+                # same way. Downloaded and shimmed rather than installed: the
+                # pool is shared, and a build that mutates the agent's packages
+                # is a side effect the next build inherits.
+                #
+                # LIBS lives outside the work directory on purpose: it is
+                # symlinks, and PublishPipelineArtifact cannot follow them
+                # ("Unable to load symbolic/hard linked file", also 16308).
+                LIBS="$(Agent.TempDirectory)/mysql-libs"
+                rm -rf "$LIBS" && mkdir -p "$LIBS" aio
+                missing() { ldd mysql8/bin/mysqld 2>/dev/null | awk '/not found/ {print $1}'; }
+                NEEDED="$(missing)"
+                if [ -z "$NEEDED" ]; then
+                  echo "every library mysqld needs is already present"
                 else
-                  # Build 16307: "E: Unable to locate package libaio1". BOTH
-                  # names failed because the container agent's package lists are
-                  # empty until apt-get update runs - the t64 attempt's error
-                  # was hidden by 2>/dev/null, so only the fallback's message
-                  # surfaced and it read as a missing package rather than a
-                  # missing index.
-                  #
-                  # Downloaded and shimmed rather than installed: this pool is
-                  # shared, and a build that mutates the agent's packages is a
-                  # side effect the next build inherits.
+                  echo "mysqld is missing: $NEEDED"
+                  # apt-get download cannot find anything until the lists exist,
+                  # and 16307 showed that as "Unable to locate package" - a
+                  # missing index reading as a missing package.
                   sudo apt-get update -qq
-                  # Ubuntu 24.04 renamed libaio1 to libaio1t64 for the 64-bit
-                  # time_t transition, and MySQL's tarball still asks for
-                  # libaio.so.1 - so the shim below is not optional on 24.04.
-                  apt-get download libaio1t64 || apt-get download libaio1
-                  dpkg-deb -x libaio*.deb aio
-                  ln -sf "$PWD/aio/usr/lib/x86_64-linux-gnu/libaio.so.1t64" libs/libaio.so.1 2>/dev/null \
-                    || ln -sf "$PWD/aio/lib/x86_64-linux-gnu/libaio.so.1" libs/libaio.so.1
-                  ldd mysql8/bin/mysqld | grep -E 'libaio|not found' || true
+                  for soname in $NEEDED; do
+                    # Both names, because 24.04 renamed these for the 64-bit
+                    # time_t transition and this pool is still 22.04: on jammy
+                    # only libaio1 exists, on noble only libaio1t64.
+                    case "$soname" in
+                      libaio.so.1) CANDIDATES='libaio1t64 libaio1' ;;
+                      libnuma.so.1) CANDIDATES='libnuma1t64 libnuma1' ;;
+                      *) echo "##vso[task.logissue type=error]no package known for $soname"; exit 1 ;;
+                    esac
+                    GOT=''
+                    for pkg in $CANDIDATES; do
+                      if apt-get download "$pkg" 2>/dev/null; then GOT="$pkg"; break; fi
+                    done
+                    [ -n "$GOT" ] || { echo "##vso[task.logissue type=error]none of [$CANDIDATES] could be downloaded for $soname"; exit 1; }
+                    echo "  $soname <- $GOT"
+                    dpkg-deb -x "$GOT"_*.deb aio
+                  done
+                  # By SEARCH, not by a guessed path: jammy puts these under
+                  # usr/lib/x86_64-linux-gnu and the t64 packages name the file
+                  # libX.so.1t64, so 16308's hardcoded pair matched neither.
+                  for soname in $NEEDED; do
+                    FOUND="$(find aio -name "${soname}*" | head -1)"
+                    [ -n "$FOUND" ] || { echo "##vso[task.logissue type=error]$GOT contained no $soname"; exit 1; }
+                    ln -sf "$PWD/$FOUND" "$LIBS/$soname"
+                  done
                 fi
-                LD_LIBRARY_PATH="$PWD/libs" mysql8/bin/mysqld --initialize-insecure \
+                export LD_LIBRARY_PATH="$LIBS"
+                STILL="$(missing)"
+                [ -z "$STILL" ] || { echo "##vso[task.logissue type=error]still missing after shimming: $STILL"; exit 1; }
+                echo "##vso[task.setvariable variable=mysqlLibs]$LIBS"
+                mysql8/bin/mysqld --initialize-insecure \
                   --basedir="$PWD/mysql8" --datadir="$PWD/mysqldata" --tmpdir="$PWD/mysqltmp"
                 echo "mysqld initialised"
 
@@ -287,6 +317,12 @@ stages:
                 export WORK="$(workdir)"
                 export MYSQL_HOME="$(workdir)/mysql8"
                 export JAR=$(ls target/release-validation-framework-*.jar | head -1)
+                # The shim the install step built. Without it mysqld starts
+                # here exactly as it failed there - "error while loading shared
+                # libraries" - and the stack script's own wait would report it
+                # as "mysql engine did not come up", which names the symptom
+                # two steps from the cause.
+                export LD_LIBRARY_PATH="$(mysqlLibs)${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
                 ARGS=(--release "releases/${{ parameters.release }}" --groups '${{ parameters.groups }}')
                 if [ -n '${{ parameters.previousRelease }}' ]; then
                   ARGS+=(--previous "${{ parameters.previousRelease }}")
