@@ -21,6 +21,22 @@ were measured today.
 | 1.5 | Storage: static or dynamic | `STATE.md` | Attila's preference - keep dynamic provisioning or move to a static share in a resource group he owns. |
 | 1.6 | `STORAGE_LOCATION` naming | `STATE.md` | Needs the exact key the indexer joins on. Rename drafted, not applied. |
 
+### Two runs are queued and will answer themselves
+
+Both wait on the same thing: the dedicated pool has **one online agent**, and
+tonight's `daily-rvf` (**16317**, started 2026-09-09T18:00Z) holds it.
+
+* **3.1** needs definition 66 to resource-trigger off 16317's `RvfStage` and to
+  show `amtv4` in `groupsList` with SQL 425. Everything checkable without the
+  trigger is checked: no definition-level variable overrides the YAML, the
+  `groups` default leads with `amtv4`, and the trigger is on the stage rather
+  than on overall success.
+* **3.7** needs run **16318** (`engine-ab-20260909.12`) to reach its comparison
+  step. Every step before it is green, including resolving and downloading the
+  newest AU edition, 892MB.
+
+Neither needs a decision - just the agent.
+
 ## 2. Attila's - DONE, 2026-09-09
 
 **2.1 Non-SQL CSV export: landed** as `6fd43a9f` and `e39314c3`, and it fixes
