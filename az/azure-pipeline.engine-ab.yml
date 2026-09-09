@@ -26,6 +26,25 @@ pr:
       - catchup-upgraded
       - upstream/*
 
+schedules:
+  # WEEKLY, not nightly. The differential arm is the expensive proof - the MySQL
+  # leg took 4020s against the AU edition with the AMT corpus today, against
+  # DuckDB's 120s - and it answers a question that changes only when the
+  # transpiler or the corpus does. Parity re-proven every week is worth far more
+  # than parity proven once, and cheap enough at that cadence to keep.
+  #
+  # Sunday 14:00 UTC is Monday 00:00 in Sydney: off the nightly's path entirely,
+  # so the two never contend for the dedicated pool or the release container.
+  - cron: '0 14 * * 0'
+    displayName: 'Weekly, off the nightly path'
+    branches:
+      include:
+        - catchup-upgraded
+    # Runs whether or not anything changed: the point is to catch a divergence
+    # that appears without a commit here - a MySQL upgrade, a corpus repin, a
+    # release whose content exercises a path no earlier release did.
+    always: true
+
 parameters:
   - name: release
     displayName: 'Release blob to validate (within the releases container)'
@@ -68,6 +87,39 @@ stages:
         steps:
           - checkout: self
             fetchDepth: 1
+
+          - task: Bash@3
+            displayName: 'Preflight: disk and memory this run needs'
+            # BEFORE anything downloads. Today's run filled the disk mid-load
+            # and MySQL reported it as "Disk is full writing
+            # ...owlexpressionrefset_f.MYI" followed by a dead server and a log
+            # that simply stops - which reads like a corrupt download, not a
+            # full disk. Two stale scratch directories were enough to do it.
+            #
+            # Measured, not guessed: the MySQL leg writes ~25GB of MyISAM tables
+            # and indexes for one AU edition, the release unzips to ~5GB, and
+            # DuckDB's scratch is ~1.6GB per materialised edition plus spill.
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                NEED_GB=40
+                FREE_GB="$(df -BG --output=avail "$(dirname "$(workdir)")" | tail -1 | tr -dc '0-9')"
+                MEM_GB="$(free -g | awk 'NR==2 {print $7}')"
+                echo "free disk : ${FREE_GB}GB (need ${NEED_GB}GB)"
+                echo "available memory : ${MEM_GB}GB (two 3GB JVMs plus MySQL's 4GB pool)"
+                if [ "$FREE_GB" -lt "$NEED_GB" ]; then
+                  echo "##vso[task.logissue type=error]only ${FREE_GB}GB free, and the MySQL leg needs about ${NEED_GB}GB"
+                  echo "Stale scratch from an earlier run is the usual cause. Clear"
+                  echo "$(workdir) and any tmp-mysql/tmp-duck directories beside it."
+                  exit 1
+                fi
+                # Not fatal: the kernel killed a leg at 22GB with two 6g JVMs, so
+                # this is worth saying loudly and not worth blocking on, since
+                # the heaps are parameters.
+                if [ "$MEM_GB" -lt 12 ]; then
+                  echo "##vso[task.logissue type=warning]${MEM_GB}GB available - a 22GB host with 6g heaps had the MySQL leg OOM-killed mid-load"
+                fi
 
           - task: Bash@3
             displayName: 'Show what is being compared'
