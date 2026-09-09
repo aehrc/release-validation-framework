@@ -229,6 +229,47 @@ One ordering trap, since the endpoint hit it: `loadedProvenance()` reads what is
 serving and never forces a load, so asking it before `findAll()` on a cold
 server reports no provenance beside a count of 360.
 
+## A pack can say what it needs, 2026-09-09
+
+The failure this makes impossible happened for real: when the publisher
+regression dropped `substring_index`, four assertions died at RUN time with
+"Scalar Function with name substring_index does not exist". The pack had
+fetched cleanly, matched its digest and merged without a single conflict —
+every check passed and the corpus was broken. A pack that states what it needs
+of its base fails at merge instead:
+
+    "requires": [{"pack": "international", "atLeast": "2026.07.27"}]
+
+`atLeast` for a floor, `digest` for an exact corpus, exactly one per entry.
+Published with `--requires international:atLeast=2026.07.27`, repeatable.
+
+Proven on the real 360 + 560 pair:
+
+    requires international atLeast 2026.07.27  ->  MERGED 560 assertions
+    requires international atLeast 2026.08.01  ->  REFUSED
+      amtv4@2026.09.1 requires international at least 2026.08.01, but this
+      merge has international@2026.07.27 - the older corpus may not define
+      what this pack calls
+
+**Versions are dates, so the comparison is defined rather than assumed.**
+`YYYY.MM.DD` is parsed field by field; anything else is **refused as
+uncomparable**, not sorted. A lexicographic compare happens to order that exact
+shape and silently mis-orders everything else — `2026.9.1` above `2026.10.1` —
+and "it happens to sort correctly" is not a comparison.
+
+**An unknown requirement key is refused, not ignored**, at publish and at load.
+An ignored requirement is worse than no requirement: it reads as a checked
+combination and is an unchecked one. Same rule as the POSIX classes in
+[REGEXP-PARITY.md](REGEXP-PARITY.md), for the same reason.
+
+Two things a merged store must get right, since it is a legitimate base for a
+later merge: the requirements its packs declared **survive the merge** (the
+merged JSON starts as the base's, so they are easy to drop), and they remain
+**satisfiable** — a merged store arrives as one pack under one name while
+containing several, so the check looks at nested provenance too. Otherwise a
+carried `requires international` would be refused by a base that contains
+international.
+
 **The pack itself is not committed here, and must not be.** This repository is
 public; the AMT assertions are not. That is not a hypothetical constraint - the
 SQL and the 200 assertion names were briefly committed here on 2026-09-07 and

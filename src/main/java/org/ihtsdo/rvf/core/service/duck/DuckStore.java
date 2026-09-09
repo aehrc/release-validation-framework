@@ -211,6 +211,75 @@ public final class DuckStore {
 	}
 
 	/**
+	 * One thing this pack requires of another pack in the same merge.
+	 *
+	 * <p>{@code atLeast} is a version; {@code digest} is exact. Both are needed:
+	 * a pack whose SQL calls a macro the base only defines from some date needs
+	 * a floor, and a pack validated against one exact corpus needs equality.
+	 */
+	public record Requirement(String pack, Kind kind, String value) {
+
+		public enum Kind { AT_LEAST, DIGEST }
+
+		/** How this requirement should read in a refusal. */
+		public String describe() {
+			return pack + (kind == Kind.AT_LEAST ? " at least " : " at digest ") + value;
+		}
+	}
+
+	/**
+	 * What this pack requires of the rest of the merge, empty when it says
+	 * nothing.
+	 *
+	 * <p>The failure this exists for: when the publisher regression dropped
+	 * {@code substring_index}, four assertions died at RUN time with "Scalar
+	 * Function with name substring_index does not exist" - a pack fetched
+	 * cleanly, verified against its digest, merged without conflict, and broke
+	 * at 4am. A pack that can state what it needs of its base turns that into a
+	 * refusal at merge, naming both versions.
+	 *
+	 * <p>An UNKNOWN requirement key is refused rather than ignored. An ignored
+	 * requirement is worse than no requirement: it reads as a checked
+	 * combination and is an unchecked one.
+	 */
+	public List<Requirement> requirements() throws IOException {
+		List<Requirement> out = new ArrayList<>();
+		for (JsonNode node : root.path("requires")) {
+			String pack = node.path("pack").asText("");
+			if (pack.isBlank()) {
+				throw new IOException("a requires entry names no pack: " + node);
+			}
+			// The unknown key FIRST: an entry saying `atMost` has neither
+			// atLeast nor digest either, and "exactly one of atLeast or digest"
+			// describes a consequence while `atMost` is the author's actual
+			// mistake - and the one that would otherwise be silently dropped.
+			List<String> unknown = new ArrayList<>();
+			node.fieldNames().forEachRemaining(field -> {
+				if (!List.of("pack", "atLeast", "digest", "reason").contains(field)) {
+					unknown.add(field);
+				}
+			});
+			if (!unknown.isEmpty()) {
+				throw new IOException("the requires entry for " + pack + " uses "
+						+ unknown + ", which this runtime does not understand. Ignoring "
+						+ "it would make an unchecked pack combination read as a checked "
+						+ "one, so the store is refused instead.");
+			}
+			boolean atLeast = node.hasNonNull("atLeast");
+			boolean digest = node.hasNonNull("digest");
+			if (atLeast == digest) {
+				throw new IOException("the requires entry for " + pack + " must have "
+						+ "exactly one of atLeast or digest, and has "
+						+ (atLeast ? "both" : "neither") + ": " + node);
+			}
+			out.add(new Requirement(pack,
+					atLeast ? Requirement.Kind.AT_LEAST : Requirement.Kind.DIGEST,
+					atLeast ? node.path("atLeast").asText() : node.path("digest").asText()));
+		}
+		return Collections.unmodifiableList(out);
+	}
+
+	/**
 	 * What produced this store, whether or not anything was merged.
 	 *
 	 * <p>{@link #packs()} is empty for an unmerged store, which is every

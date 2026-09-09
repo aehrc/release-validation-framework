@@ -26,6 +26,7 @@ class DuckStorePacksTest {
 
 	private static final String UUID_A = "11111111-1111-1111-1111-111111111111";
 	private static final String UUID_B = "22222222-2222-2222-2222-222222222222";
+	private static final String UUID_C = "33333333-3333-3333-3333-333333333333";
 
 	/** A pack with one assertion, one port and one prerequisite. */
 	private static String pack(String uuid, String file, String statement, String port,
@@ -292,6 +293,145 @@ class DuckStorePacksTest {
 		IOException e = assertThrows(IOException.class,
 				() -> DuckStore.parse(tampered).identity());
 		assertTrue(e.getMessage().contains("declares digest"), e.getMessage());
+	}
+
+
+	/** A pack that declares what it needs of another. */
+	private static String requiring(String uuid, String file, String requires) {
+		return pack(uuid, file, "SELECT 1", MACRO_B, "h1")
+				.replace(" \"assertions\": {",
+						" \"requires\": [" + requires + "],\n \"assertions\": {");
+	}
+
+	@Test
+	void aSatisfiedRequirementMergesSilently() throws Exception {
+		DuckStore merged = DuckStorePacks.merge(List.of(
+				packOf("international", "2026.07.27",
+						pack(UUID_A, "a.sql", "SELECT 1", MACRO_A, "h1")),
+				packOf("amtv4", "2026.09.1", requiring(UUID_B, "b.sql",
+						"{\"pack\": \"international\", \"atLeast\": \"2026.07.01\"}"))));
+		assertEquals(2, merged.assertions().size());
+	}
+
+	@Test
+	void anOlderBaseIsRefusedNamingBothVersions() throws Exception {
+		// The failure this prevents happened for real: the publisher regression
+		// dropped substring_index and four assertions died at RUN time. The pack
+		// fetched cleanly, matched its digest and merged without conflict.
+		DuckStorePacks.ConflictException e = assertThrows(
+				DuckStorePacks.ConflictException.class,
+				() -> DuckStorePacks.merge(List.of(
+						packOf("international", "2026.06.01",
+								pack(UUID_A, "a.sql", "SELECT 1", MACRO_A, "h1")),
+						packOf("amtv4", "2026.09.1", requiring(UUID_B, "b.sql",
+								"{\"pack\": \"international\", \"atLeast\": \"2026.07.27\"}")))));
+		String message = String.join("\n", e.getConflicts());
+		assertTrue(message.contains("amtv4@2026.09.1"), message);
+		assertTrue(message.contains("international at least 2026.07.27"), message);
+		assertTrue(message.contains("international@2026.06.01"), message);
+	}
+
+	@Test
+	void anEqualVersionSatisfiesAtLeast() throws Exception {
+		assertEquals(2, DuckStorePacks.merge(List.of(
+				packOf("international", "2026.07.27",
+						pack(UUID_A, "a.sql", "SELECT 1", MACRO_A, "h1")),
+				packOf("amtv4", "2026.09.1", requiring(UUID_B, "b.sql",
+						"{\"pack\": \"international\", \"atLeast\": \"2026.07.27\"}"))))
+				.assertions().size());
+	}
+
+	@Test
+	void aVersionThatIsNotADateIsRefusedRatherThanSorted() throws Exception {
+		// A lexicographic compare orders YYYY.MM.DD and silently mis-orders
+		// anything else - 2026.9.1 above 2026.10.1 - so "it happens to sort" is
+		// not a comparison.
+		DuckStorePacks.ConflictException e = assertThrows(
+				DuckStorePacks.ConflictException.class,
+				() -> DuckStorePacks.merge(List.of(
+						packOf("international", "v2",
+								pack(UUID_A, "a.sql", "SELECT 1", MACRO_A, "h1")),
+						packOf("amtv4", "2026.09.1", requiring(UUID_B, "b.sql",
+								"{\"pack\": \"international\", \"atLeast\": \"2026.07.27\"}")))));
+		assertTrue(String.join("", e.getConflicts()).contains("cannot be checked"),
+				e.getMessage());
+	}
+
+	@Test
+	void aRequirementOnAPackNotInTheMergeIsRefused() throws Exception {
+		DuckStorePacks.ConflictException e = assertThrows(
+				DuckStorePacks.ConflictException.class,
+				() -> DuckStorePacks.merge(List.of(
+						packOf("international", "2026.07.27",
+								pack(UUID_A, "a.sql", "SELECT 1", MACRO_A, "h1")),
+						packOf("amtv4", "2026.09.1", requiring(UUID_B, "b.sql",
+								"{\"pack\": \"nz-edition\", \"atLeast\": \"2026.01.01\"}")))));
+		String message = String.join("", e.getConflicts());
+		assertTrue(message.contains("no pack called nz-edition"), message);
+		assertTrue(message.contains("international"), "names what IS here: " + message);
+	}
+
+	@Test
+	void anExactDigestRequirementIsCheckedToo() throws Exception {
+		DuckStorePacks.ConflictException e = assertThrows(
+				DuckStorePacks.ConflictException.class,
+				() -> DuckStorePacks.merge(List.of(
+						packOf("international", "2026.07.27",
+								pack(UUID_A, "a.sql", "SELECT 1", MACRO_A, "h1")),
+						packOf("amtv4", "2026.09.1", requiring(UUID_B, "b.sql",
+								"{\"pack\": \"international\", \"digest\": \"sha256:nope\"}")))));
+		assertTrue(String.join("", e.getConflicts()).contains("nobody validated"),
+				e.getMessage());
+	}
+
+	@Test
+	void aRequirementThisRuntimeCannotUnderstandIsRefusedNotIgnored() throws Exception {
+		// An ignored requirement is worse than no requirement: it reads as a
+		// checked combination and is an unchecked one.
+		IOException e = assertThrows(IOException.class,
+				() -> DuckStore.parse(requiring(UUID_B, "b.sql",
+						"{\"pack\": \"international\", \"atMost\": \"2026.09.01\"}"))
+						.requirements());
+		assertTrue(e.getMessage().contains("atMost"), e.getMessage());
+		assertTrue(e.getMessage().contains("does not understand"), e.getMessage());
+	}
+
+	@Test
+	void aRequirementMustSayExactlyOneOfAtLeastOrDigest() throws Exception {
+		assertTrue(assertThrows(IOException.class,
+				() -> DuckStore.parse(requiring(UUID_B, "b.sql",
+						"{\"pack\": \"international\"}")).requirements())
+				.getMessage().contains("neither"));
+		assertTrue(assertThrows(IOException.class,
+				() -> DuckStore.parse(requiring(UUID_B, "b.sql",
+						"{\"pack\": \"international\", \"atLeast\": \"2026.01.01\","
+								+ " \"digest\": \"sha256:x\"}")).requirements())
+				.getMessage().contains("both"));
+	}
+
+	@Test
+	void aMergedStoreKeepsEveryInputsRequirementsAndCanSatisfyThem() throws Exception {
+		// A merged store is a legitimate base for a later merge. Two things have
+		// to hold: the requirements the packs on top declared must survive - the
+		// merged JSON starts as the BASE's, so they are easy to drop - and they
+		// must still be satisfiable, since the merged store arrives as ONE pack
+		// under one name while containing several.
+		DuckStore merged = DuckStorePacks.merge(List.of(
+				packOf("international", "2026.07.27",
+						pack(UUID_A, "a.sql", "SELECT 1", MACRO_A, "h1")),
+				packOf("amtv4", "2026.09.1", requiring(UUID_B, "b.sql",
+						"{\"pack\": \"international\", \"atLeast\": \"2026.07.01\"}"))));
+
+		assertEquals(1, merged.requirements().size(), "the pack's requirement survived");
+		assertEquals("international", merged.requirements().get(0).pack());
+
+		DuckStore again = DuckStorePacks.merge(List.of(
+				new DuckStorePacks.Pack("au-combined", "2026.09.2",
+						"sha256:combined", merged),
+				packOf("nz-edition", "2026.09.3",
+						pack(UUID_C, "c.sql", "SELECT 3", null, "h1"))));
+		assertEquals(3, again.assertions().size(),
+				"the carried requirement is satisfied by the merged store's own packs");
 	}
 
 	@Test

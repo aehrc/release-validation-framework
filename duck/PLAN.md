@@ -65,13 +65,22 @@ is no behavioural risk in the shipped artefact. 30 tests green across
 `DuckStorePacksTest` and `AssertionPackReloadTest`, including a cold-server
 ordering trap the endpoint hit.
 
-**3.3 Declared pack dependencies.** With 3.2 done, a pack can say
-`requires: {international: {atLeast: <version>}}` or an exact digest, and the
-merge can refuse a combination nobody tested with a named cause instead of
-`no_such_macro`. Versions are dates, not semver, so the comparison has to be
-defined rather than assumed.
-*Acceptance:* a pack requiring a newer base is refused at merge, naming both
-versions; a satisfied requirement merges silently.
+**3.3 Declared pack dependencies. DONE 2026-09-09.** A pack declares
+`"requires": [{"pack": "international", "atLeast": "2026.07.27"}]` - `atLeast`
+for a floor, `digest` for an exact corpus - published with
+`--requires international:atLeast=2026.07.27`. Proven on the real 360 + 560
+pair: the satisfied requirement merges to 560 assertions, and
+`atLeast 2026.08.01` is refused with **both versions named**.
+
+Versions are dates, so the comparison is defined: `YYYY.MM.DD` parsed field by
+field, anything else **refused as uncomparable** rather than sorted - a
+lexicographic compare mis-orders `2026.9.1` against `2026.10.1`. An unknown
+requirement key is refused at publish and at load, never ignored: an ignored
+requirement reads as a checked combination and is an unchecked one.
+
+A merged store keeps every input's requirements and can still satisfy them from
+its nested provenance, because it is a legitimate base for a later merge while
+arriving as one pack under one name. 39 tests green.
 
 **3.4 Per-run pack pins.** So an old report can be reproduced: the submission
 names pins, the engine fetches/verifies/merges/verifies-executable per run and

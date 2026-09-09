@@ -204,6 +204,8 @@ public final class DuckStorePacks {
 			});
 		}
 
+		checkRequirements(packs, conflicts);
+
 		if (!conflicts.isEmpty()) {
 			throw new ConflictException(conflicts);
 		}
@@ -217,11 +219,123 @@ public final class DuckStorePacks {
 		ArrayNode prereqArray = out.putArray("prerequisites");
 		prerequisites.values().forEach(prereqArray::add);
 
+		// Every input's requirements, not just the base's. `out` starts as the
+		// base's JSON, so without this a merged store keeps only the base's and
+		// silently drops what the packs on top of it demanded - and a later
+		// merge against that store would not re-check them.
+		ArrayNode requires = out.putArray("requires");
+		Set<String> seen = new LinkedHashSet<>();
+		for (Pack pack : packs) {
+			for (JsonNode need : toObject(pack.store()).path("requires")) {
+				if (seen.add(need.toString())) {
+					requires.add(need);
+				}
+			}
+		}
+		if (requires.isEmpty()) {
+			out.remove("requires");
+		}
+
 		return DuckStore.parse(out.toString());
 	}
 
 	private static JsonNode toObject(DuckStore store) throws IOException {
 		return new ObjectMapper().readTree(store.toJson());
+	}
+
+	/** {@code YYYY.MM.DD} - the only version shape this can order. */
+	private static final Pattern DATE_VERSION = Pattern.compile(
+			"(\\d{4})\\.(\\d{2})\\.(\\d{2})");
+
+	/**
+	 * Every pack's declared requirements against what this merge actually holds.
+	 *
+	 * <p>The failure this turns into a refusal: when the publisher regression
+	 * dropped {@code substring_index}, four assertions died at RUN time with
+	 * "Scalar Function with name substring_index does not exist". The pack had
+	 * fetched cleanly, matched its digest and merged without conflict - every
+	 * check passed and the corpus was broken. A pack that states what it needs
+	 * of its base fails at merge instead, with both versions named.
+	 */
+	private static void checkRequirements(List<Pack> packs, List<String> conflicts)
+			throws IOException {
+		// Everything the merge HOLDS, not just what was handed in by name. A
+		// merged store is a legitimate base for a later merge - see
+		// DuckStore.toJson - and it arrives as ONE pack under one name while
+		// containing several. Keying only on the given names would refuse a
+		// carried `requires international` against a base that contains
+		// international, which is the opposite of the intent.
+		Map<String, DuckStore.PackRecord> present = new LinkedHashMap<>();
+		for (Pack pack : packs) {
+			present.put(pack.name(), new DuckStore.PackRecord(pack.name(),
+					pack.version(), pack.digest(), pack.store().assertions().size()));
+			for (DuckStore.PackRecord nested : pack.store().packs()) {
+				present.putIfAbsent(nested.name(), nested);
+			}
+		}
+		for (Pack pack : packs) {
+			for (DuckStore.Requirement need : pack.store().requirements()) {
+				DuckStore.PackRecord target = present.get(need.pack());
+				if (target == null) {
+					conflicts.add(pack.label() + " requires " + need.describe()
+							+ ", but this merge has no pack called " + need.pack()
+							+ " - it holds " + present.keySet());
+					continue;
+				}
+				if (need.kind() == DuckStore.Requirement.Kind.DIGEST) {
+					if (!need.value().equals(target.digest())) {
+						conflicts.add(pack.label() + " requires " + need.describe()
+								+ ", but " + label(target) + " is " + target.digest()
+								+ " - this is a combination nobody validated");
+					}
+					continue;
+				}
+				Integer ordered = compareDateVersions(target.version(), need.value());
+				if (ordered == null) {
+					// Versions are DATES here, not semver, so the comparison has
+					// to be defined rather than assumed. A lexicographic compare
+					// happens to order YYYY.MM.DD and silently mis-orders
+					// everything else - 2026.9.1 above 2026.10.1 - so anything
+					// this cannot parse is refused rather than guessed at.
+					conflicts.add(pack.label() + " requires " + need.describe()
+							+ " and " + label(target) + " is " + target.version()
+							+ ", but versions are compared as YYYY.MM.DD dates and one "
+							+ "of these is not one, so the requirement cannot be checked");
+				} else if (ordered < 0) {
+					conflicts.add(pack.label() + " requires " + need.describe()
+							+ ", but this merge has " + label(target)
+							+ " - the older corpus may not define what this pack calls");
+				}
+			}
+		}
+	}
+
+	/** How a pack present in the merge should read in a refusal. */
+	private static String label(DuckStore.PackRecord pack) {
+		return pack.name() + (pack.version() == null || pack.version().isBlank()
+				? "" : "@" + pack.version());
+	}
+
+	/**
+	 * {@code left <=> right} as dates, or null when either is not one.
+	 *
+	 * <p>Null rather than a fallback: the caller refuses on it, and the whole
+	 * point of this method existing is that "it happens to sort correctly" is
+	 * not a comparison.
+	 */
+	private static Integer compareDateVersions(String left, String right) {
+		Matcher l = DATE_VERSION.matcher(left == null ? "" : left);
+		Matcher r = DATE_VERSION.matcher(right == null ? "" : right);
+		if (!l.matches() || !r.matches()) {
+			return null;
+		}
+		for (int group = 1; group <= 3; group++) {
+			int diff = Integer.parseInt(l.group(group)) - Integer.parseInt(r.group(group));
+			if (diff != 0) {
+				return diff < 0 ? -1 : 1;
+			}
+		}
+		return 0;
 	}
 
 	private static Map<String, String> portsByName(Pack pack, List<String> conflicts) {

@@ -276,7 +276,7 @@
          if not low:
              continue
 --- a/publish_store.py	2026-08-26 10:29:17.000000000 +1000
-+++ b/publish_store.py	2026-09-09 22:49:31.973593011 +1000
++++ b/publish_store.py	2026-09-09 22:57:53.216575107 +1000
 @@ -29,6 +29,7 @@
  import json
  import pathlib
@@ -363,7 +363,7 @@
      body = re.sub(r"--[^\n]*", "", amtv4.macros(schema))
      out.extend(s.strip() for s in body.split(";") if s.strip())
      # The corpus's own scalar CREATE FUNCTIONs, which the routine-definition
-@@ -225,6 +254,58 @@
+@@ -225,6 +254,77 @@
      return out
  
  
@@ -419,10 +419,29 @@
 +            "digest": "sha256:" + digest, "assertions": len(assertions)}
 +
 +
++def requirements(specs):
++    """`PACK:atLeast=VERSION` or `PACK:digest=sha256:...` -> store entries.
++
++    Exactly one constraint per entry, and nothing else accepted: the runtime
++    refuses a requirement it does not understand rather than ignoring it, so a
++    typo here must fail at publish rather than travel in the artefact.
++    """
++    out = []
++    for spec in specs:
++        pack, _, rest = spec.partition(":")
++        key, _, value = rest.partition("=")
++        if not pack or key not in ("atLeast", "digest") or not value:
++            raise SystemExit(
++                f"FATAL: --requires {spec!r} is not PACK:atLeast=VERSION or "
++                "PACK:digest=sha256:...")
++        out.append({"pack": pack, key: value})
++    return out
++
++
  def main():
      ap = argparse.ArgumentParser()
      ap.add_argument("--scripts", required=True, type=pathlib.Path)
-@@ -240,6 +321,10 @@
+@@ -240,6 +340,15 @@
                           "derived amtv4 uuid (correct for any corpus but amtv4's own)")
      ap.add_argument("--stamp", default="",
                      help="optional build stamp recorded in the store")
@@ -430,24 +449,34 @@
 +                    help="this store's identity in a report and in a merge")
 +    ap.add_argument("--pack-version", default="",
 +                    help="override the version taken from the corpus commit date")
++    ap.add_argument("--requires", action="append", default=[],
++                    metavar="PACK:atLeast=VERSION|digest=SHA",
++                    help="what this pack needs of another in the same merge; "
++                         "repeatable. Refused at merge with both versions named, "
++                         "rather than failing at run time on a missing macro.")
      a = ap.parse_args()
  
      root = a.manifest_root or a.scripts.parent
-@@ -248,6 +333,8 @@
+@@ -248,6 +357,10 @@
                                        derive_uuids=not a.no_derive_uuids)
      if a.stamp:
          store["generator"]["stamp"] = a.stamp
 +    store["pack"] = pack_identity(a.pack_name, a.pack_version, root,
 +                                  store["assertions"], store["prerequisites"])
++    if a.requires:
++        store["requires"] = requirements(a.requires)
  
      # A store with no assertions is never a valid outcome - it is what a wrong
      # --scripts path produces, and it is indistinguishable downstream from a
-@@ -261,6 +348,8 @@
+@@ -261,6 +374,11 @@
      a.out.write_text(json.dumps(store, indent=1))
      n_stmt = sum(len(v["statements"]) for v in store["assertions"].values())
      n_pre = sum(len(p["statements"]) for p in store["prerequisites"])
 +    print(f"pack         {store['pack']['name']} {store['pack']['version']} "
 +          f"{store['pack']['digest'][:23]} (corpus {store['pack']['corpusRef'][:12] or 'not a checkout'})")
++    for need in store.get("requires", []):
++        key = "atLeast" if "atLeast" in need else "digest"
++        print(f"requires     {need['pack']} {key} {need[key]}")
      print(f"assertions   {len(store['assertions'])}")
      print(f"statements   {n_stmt} (+{n_pre} pre-requisite)")
      print(f"knownTables  {len(store['knownTables'])}")
