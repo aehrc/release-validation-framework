@@ -313,20 +313,40 @@ stages:
                     --only-show-errors >/dev/null
                 }
 
+                # `az storage file list` on this CLI has no --recursive (build
+                # 16313: "unrecognized arguments: --recursive"), and the layout
+                # is two levels - <run>/output-files/<zip> - so it is walked
+                # explicitly. Every listing is printed: when this picks the
+                # wrong thing, or nothing, the log has to show what it saw.
+                ls_share() {   # [path]
+                  az storage file list \
+                    --account-name '$(storageAccount)' --account-key "$SOURCE_KEY" \
+                    --share-name "$SHARE" ${1:+--path "$1"} --only-show-errors \
+                    --query '[].{n:name,t:type}' -o tsv
+                }
+
                 REL='${{ parameters.release }}'
                 if [ -z "$REL" ]; then
-                  # Newest AU edition on the share, so a weekly run needs no
-                  # parameter and no pointer artifact. Sorted by name because
-                  # these carry their effective time - SnomedCT_..._20260831.zip
-                  # - which orders correctly and does not depend on when a file
-                  # happened to be copied.
-                  REL="$(az storage file list \
-                          --account-name '$(storageAccount)' --account-key "$SOURCE_KEY" \
-                          --share-name "$SHARE" --recursive --only-show-errors \
-                          --query "[?ends_with(name, '.zip')].name" -o tsv \
-                        | grep -iE 'AU[0-9]*_[0-9]{8}\.zip$' | sort | tail -1)"
-                  [ -n "$REL" ] || { echo "##vso[task.logissue type=error]no AU edition zip found on share $SHARE"; exit 1; }
-                  echo "no release given; newest on the share is $REL"
+                  echo "--- top level of $SHARE ---"
+                  ls_share | sed 's/^/    /'
+                  RUN="$(ls_share | awk -F'\t' '$2 == "dir" {print $1}' | sort | tail -1)"
+                  [ -n "$RUN" ] || { echo "##vso[task.logissue type=error]$SHARE has no directories to search"; exit 1; }
+                  echo "--- newest run directory: $RUN ---"
+                  # output-files if it is there, the run directory itself if not:
+                  # the pointer the nightly reads names <run>/output-files/<zip>,
+                  # but that is SI's layout to change, not ours to require.
+                  for SUB in "$RUN/output-files" "$RUN"; do
+                    echo "  looking in $SUB"
+                    CAND="$(ls_share "$SUB" | awk -F'\t' '{print $1}' \
+                            | grep -iE '\.zip$' | grep -iE 'AU' | sort | tail -1)"
+                    if [ -n "$CAND" ]; then REL="$SUB/$CAND"; break; fi
+                    ls_share "$SUB" | sed 's/^/      /'
+                  done
+                  [ -n "$REL" ] || { echo "##vso[task.logissue type=error]no AU edition zip under $RUN"; exit 1; }
+                  # Sorted by NAME, since these carry their effective time -
+                  # SnomedCT_..._20260831.zip - which orders correctly and does
+                  # not depend on when a file happened to be copied.
+                  echo "no release given; using $REL"
                 fi
                 fetch "$REL" shared-jobs/releases
                 if [ -n '${{ parameters.previousRelease }}' ]; then
