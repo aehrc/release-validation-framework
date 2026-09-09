@@ -1,5 +1,8 @@
 # Where things stand, 2026-09-07
 
+**The ordered plan of what happens next is `duck/PLAN.md`.** This file is the
+state it starts from.
+
 Written so context can be dropped without losing anything. The reasoning lives
 in the commits; this is the state and the open threads.
 

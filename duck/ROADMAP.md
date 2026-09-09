@@ -1,5 +1,8 @@
 # Where this is going, and what is left
 
+**Superseded as a work list by `duck/PLAN.md`** (2026-09-08). Kept as the
+history of how the deployment got here, including the phases that closed.
+
 Written 2026-09-01. The goal has not changed: **a nightly AMT validation against
 the last published release, on our own infrastructure, cheap enough to run every
 night**, with results a human can read and a build can gate on.
