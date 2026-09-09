@@ -18,8 +18,8 @@ were measured today.
 | 1.2 | Publish the AMT pack | `duck/ASSERTION-PACKS.md` | A branch on the private `aehrc/rvf`. Pack built and verified at `/data/work/amt-pack.json`: 200 assertions, merges to 560, no conflicts. |
 | 1.3 | Lower the worker ceiling | `duck/WORKER-MEMORY.md` | 24Gi -> 16Gi changes KEDA's arithmetic. Experiment written out; findings comparison is the deliverable, not the memory number. |
 | 1.4 | GitHub Support purge | `STATE.md` | Only you can raise it: `5ba5586c` and `f5d1e652` on `aehrc/release-validation-framework`. |
-| 1.5 | Storage: static or dynamic | `STATE.md` | Attila's preference - keep dynamic provisioning or move to a static share in a resource group he owns. |
-| 1.6 | `STORAGE_LOCATION` naming | `STATE.md` | Needs the exact key the indexer joins on. Rename drafted, not applied. |
+| ~~1.5~~ | ~~Storage~~ **DONE by Attila, 2026-09-08** | live cluster | Static PVs on `blob.csi.azure.com`, containers `rvf-jobs`/`rvf-releases` on `nctsdevstorage` in resource group `ncts`, `ReadWriteMany`, `Retain`, every blobfuse cache disabled. PVs live in `aehrc/ncts-argo`; this repo's chart and manifests now match. |
+| ~~1.6~~ | ~~`STORAGE_LOCATION` join key~~ **ANSWERED, 2026-09-09** | indexer DB | The indexer keys `rvf_runs` on `(storage_location, rvf_run_id)` and PARSES the name: `ncts-<version>-<siBuild>-rvf<rvfBuild>` yields `release_run_id=<version>-<siBuild>`. Anything else is indexed with a NULL release_run_id - orphaned from its release. The nightly already emits the right shape. |
 
 ### Two runs are queued and will answer themselves
 

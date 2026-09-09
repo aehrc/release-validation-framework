@@ -227,10 +227,24 @@ your call.
   `5ba5586c` and `f5d1e652`. I committed AMT SQL and the 200 assertion names to
   a PUBLIC repo, then rewrote history - but force-pushed commits stay fetchable
   by sha until GitHub garbage-collects. Treat as disclosed for that window.
-* **Attila** - keep dynamic storage provisioning or move to a static share in a
-  resource group he owns; and the exact key the indexer joins on before
-  `STORAGE_LOCATION` is renamed (currently `nightly-<BuildId>`; the diff he saw
-  is a proposal, not deployed).
+* ~~**Attila** - storage~~ **DONE 2026-09-08.** Static PersistentVolumes on
+  `blob.csi.azure.com` (`protocol: fuse3`), containers `rvf-jobs` and
+  `rvf-releases` on `nctsdevstorage` in resource group `ncts`, `ReadWriteMany`,
+  reclaim `Retain`, and EVERY blobfuse cache disabled - which is the right call
+  for a volume whose whole purpose is one pod reading what another just wrote.
+  The PVs live in `aehrc/ncts-argo` (`apps/rvf-duckdb/templates`) because a PV
+  is cluster-scoped; the chart here now takes a `volumeName` so it can express
+  that binding, and `k8s/rvf-aks.yaml` no longer asks for dynamic
+  `azurefile-csi-premium` claims it never got.
+* ~~**The indexer join key**~~ **ANSWERED 2026-09-09, from the indexer's own
+  database.** `rvf_runs` is keyed `(storage_location, rvf_run_id)` and the name
+  is PARSED: `ncts-20260930-16317-rvf16321` yields
+  `release_run_id = 20260930-16317` and `version = 20260930`. Nine `nightly-*`
+  runs are indexed with a NULL `release_run_id` - present in the console,
+  orphaned from any release - against one correctly-named run that joins. So the
+  rename was never a risk to the join; it IS the join, and
+  `az/azure-pipeline.nightly.yml` already emits
+  `ncts-$(release.version)-$(dailyRvf.runID)-rvf$(Build.BuildId)`.
 * **`si-rvf-client` secret** rotation - exposed in a session transcript.
 
 ## Traps worth not rediscovering
