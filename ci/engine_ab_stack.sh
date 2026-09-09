@@ -143,6 +143,23 @@ if ! "$MYSQL_HOME/bin/mysqladmin" --socket="$MYSQL_SOCKET" -uroot -p"$MYSQL_PASS
   PIDS+=($!)
   sleep 15
 fi
+
+# A datadir straight out of --initialize-insecure has NO root password, and
+# everything below authenticates with one. CI initialises in a separate step, so
+# this is the normal state there rather than an edge case: build 16315 started
+# mysqld, reached "ready for connections", and then died on the version query
+# below - whose stderr is discarded, so the log showed only a SHUTDOWN sent by
+# this script's own cleanup and no reason at all.
+if ! "$MYSQL_HOME/bin/mysqladmin" --socket="$MYSQL_SOCKET" -uroot -p"$MYSQL_PASSWORD" ping >/dev/null 2>&1 \
+   && "$MYSQL_HOME/bin/mysqladmin" --socket="$MYSQL_SOCKET" -uroot ping >/dev/null 2>&1; then
+  echo "  setting the root password on a freshly initialised datadir"
+  "$MYSQL_HOME/bin/mysql" --socket="$MYSQL_SOCKET" -uroot \
+    -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '$MYSQL_PASSWORD'"
+fi
+# The engine boots against rvf_master and does not create it. ddl-auto=create
+# makes the tables; the schema itself has to exist first.
+"$MYSQL_HOME/bin/mysql" --socket="$MYSQL_SOCKET" -uroot -p"$MYSQL_PASSWORD" \
+  -e "CREATE DATABASE IF NOT EXISTS rvf_master"
 "$MYSQL_HOME/bin/mysql" --socket="$MYSQL_SOCKET" -uroot -p"$MYSQL_PASSWORD" \
   -e "SELECT CONCAT('  ', VERSION(), ' on ', @@port)" 2>/dev/null | tail -1
 
