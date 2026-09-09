@@ -98,11 +98,24 @@ cost one fetch. A wrong digest is refused with the running corpus untouched.
 The run takes store AND source from one `Corpus`: asking the owner separately
 would execute one pack set while selecting assertions from another.
 
-**3.5 Pack update notification, pipeline-side.** A scheduled job compares the
-latest release digest against `GET /assertions/packs` and says "amtv4 2026.09.2
-available, 2026.09.1 loaded". A notification, never an action - the moment the
-server follows a channel we have reinvented `latest`.
-*Acceptance:* the job reports drift on a stale pin and is silent otherwise.
+**3.5 Pack update notification, pipeline-side. DONE 2026-09-09.**
+`ci/pack_update_check.py` + `az/azure-pipeline.pack-check.yml`, daily. Both
+acceptance cases proven locally against a served payload: a matching digest
+prints `in sync` and exits 0, a stale pin prints `DRIFT` naming both digests and
+exits 1, and the failed build is the notification. Compared on DIGEST, not
+version - same version with different bytes is the case a pin exists to catch.
+
+GitHub's release API carries `digest: "sha256:..."` per asset, so nothing had to
+be invented; the selftest pins that shape against a recorded REAL response. An
+unreachable side reports "nothing was compared, this is not in sync" and fails,
+because a check that read a 404 registry as agreement would go green for as long
+as the token stayed missing.
+
+`packAssets` ships empty on purpose: no deployment pins a pack yet and
+`aehrc/rvf` has no readable release, so a mapping would fail nightly for a
+reason nobody can act on. **Remaining wiring, needs org access:** register the
+YAML as a definition on `catchup-upgraded` and grant it the `ncts-release`
+variable group.
 
 **3.6 The REGEXP transpilations against the MySQL oracle. DONE 2026-09-09.**
 **84 calls, 83 identical on 1,826,331 real terms, 0 divergences**, after fixing

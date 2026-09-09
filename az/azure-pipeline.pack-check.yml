@@ -1,0 +1,128 @@
+# Is a newer assertion pack published than the deployment has loaded?
+#
+# A NOTIFICATION, never an action. The moment the server follows a channel -
+# "fetch whatever is newest" - `latest` has been reinvented and a 4am validation
+# runs assertions nobody chose. So the comparison lives here, the job FAILS on
+# drift, and ADO's failure mail is the notification. Applying the update stays a
+# values-file change plus a POST /assertions/packs/refresh.
+#
+# Cheap by construction: two HTTP GETs, no release downloaded, no cluster
+# access. It compares DIGESTS, because a version is a label someone types and
+# "same version, different bytes" is exactly what a pin exists to catch.
+
+name: pack-check-$(Date:yyyyMMdd)$(Rev:.r)
+
+trigger: none
+pr: none
+
+schedules:
+  # After the nightly A/B, so a drift report lands beside the night's parity
+  # result rather than eight hours before it.
+  - cron: '30 22 * * *'
+    displayName: 'Daily, after the nightly validation'
+    branches:
+      include:
+        - catchup-upgraded
+    always: true
+
+parameters:
+  - name: rvfBaseUrl
+    displayName: 'Base URL of the deployed RVF API, through the gateway'
+    # The public URL for the same reason the nightly uses it: only the gateway
+    # may reach rvf-api, and this exercises the path SI takes.
+    type: string
+    default: 'https://ncts-rvf.australiaeast.cloudapp.azure.com'
+  - name: keycloakIssuer
+    displayName: 'Keycloak issuer (note the /auth path segment)'
+    type: string
+    default: 'https://auth.ontoserver.csiro.au/auth/realms/aehrc'
+  - name: authClientId
+    displayName: 'Service-account client used to obtain a token'
+    type: string
+    default: 'si-rvf-client'
+  - name: packRegistryRepo
+    displayName: 'GitHub repository publishing the packs'
+    type: string
+    default: 'aehrc/rvf'
+  - name: packAssets
+    displayName: 'Pack name to release asset, comma separated NAME=ASSET'
+    # EMPTY until a pack is actually published. Today no deployment pins one -
+    # the AMT corpus is still a hand-staged volume - and aehrc/rvf has no
+    # readable release, so a mapping here would fail this job every night for a
+    # reason nobody can act on. A scheduled job that is always red is a job
+    # everyone learns to ignore, which costs more than it gives.
+    #
+    # With it empty the run still reports the server's own configured-vs-loaded
+    # state and passes. Set it to `amtv4=amtv4-pack.json` the day the pack is
+    # published and the comparison starts.
+    #
+    # Explicit rather than derived from the filename: deriving would work until
+    # an asset is renamed, at which point the check would compare nothing and
+    # pass.
+    type: string
+    default: ''
+
+variables:
+  # The same group and the same secret name the nightly uses, so this needs no
+  # new secret to be provisioned. packRegistryToken is only required while
+  # aehrc/rvf is private, and the job says so rather than failing obscurely if
+  # it is absent.
+  - group: ncts-release
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+  - task: Bash@3
+    displayName: 'Self-test the comparison'
+    # Before trusting a green result: the check reports "in sync" when it cannot
+    # find anything to compare, so its own rules are worth proving on every run.
+    # It also pins the shape of GitHub's release payload against a recorded real
+    # response, which is the part that can change under us.
+    inputs:
+      targetType: inline
+      workingDirectory: $(Build.SourcesDirectory)
+      script: |
+        set -euo pipefail
+        python3 ci/pack_update_check_selftest.py
+
+  - task: Bash@3
+    displayName: 'Compare what is loaded against what is published'
+    env:
+      CLIENT_SECRET: $(rvf.si.client.secret)
+      PACK_REGISTRY_TOKEN: $(packRegistryToken)
+    inputs:
+      targetType: inline
+      workingDirectory: $(Build.SourcesDirectory)
+      script: |
+        set -euo pipefail
+
+        # client_credentials, as the nightly does: a pipeline cannot follow a
+        # login redirect, and the gateway authorises on the `groups` claim.
+        ISSUER='${{ parameters.keycloakIssuer }}'
+        HTTP="$(curl -sS -m 60 -o token.json -w '%{http_code}' \
+          -X POST "$ISSUER/protocol/openid-connect/token" \
+          -d grant_type=client_credentials \
+          -d client_id='${{ parameters.authClientId }}' \
+          --data-urlencode "client_secret=$CLIENT_SECRET")"
+        if [ "$HTTP" != "200" ]; then
+          echo "##vso[task.logissue type=error]token request returned HTTP $HTTP"
+          cut -c1-400 token.json || true
+          exit 1
+        fi
+        TOKEN="$(python3 -c 'import json;print(json.load(open("token.json"))["access_token"])')"
+
+        PACK_ARGS=()
+        IFS=',' read -ra MAPPINGS <<< '${{ parameters.packAssets }}'
+        for mapping in "${MAPPINGS[@]}"; do
+          [ -n "$mapping" ] && PACK_ARGS+=(--pack "$mapping")
+        done
+
+        # --gate turns drift into a failed build, which is the notification.
+        # Without it this would print into a log nobody reads.
+        python3 ci/pack_update_check.py \
+          --packs-url '${{ parameters.rvfBaseUrl }}/assertions/packs' \
+          --header "Authorization: Bearer $TOKEN" \
+          --github-repo '${{ parameters.packRegistryRepo }}' \
+          "${PACK_ARGS[@]}" \
+          --gate

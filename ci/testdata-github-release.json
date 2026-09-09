@@ -1,0 +1,21 @@
+{
+ "tag_name": "v1.5.5",
+ "published_at": "2026-07-22T10:51:50Z",
+ "assets": [
+  {
+   "name": "duckdb_cli-linux-amd64-musl.gz",
+   "digest": "sha256:59bc84a96f58777bb21b67129222628d0ac196bbf722d3107ceb94a8602429d2",
+   "size": 22334749
+  },
+  {
+   "name": "duckdb_cli-linux-amd64-musl.zip",
+   "digest": "sha256:4261fe20bab47d92742d5e21eee979e9e81548442985b9e3327725e1f755c910",
+   "size": 22469200
+  },
+  {
+   "name": "duckdb_cli-linux-amd64.gz",
+   "digest": "sha256:c61f21485e6e41d3a0c28ce9904ea18346309cf427b4cf9479bc3564348dc885",
+   "size": 21134380
+  }
+ ]
+}

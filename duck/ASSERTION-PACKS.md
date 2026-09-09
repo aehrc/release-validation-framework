@@ -303,6 +303,46 @@ One trap worth naming: the run takes its store AND its assertion source from the
 same `Corpus`. Asking the owner for the source separately would execute one pack
 set while selecting assertions from another — a report describing neither.
 
+## Drift is reported, never applied, 2026-09-09
+
+`ci/pack_update_check.py`, run by `az/azure-pipeline.pack-check.yml` on a daily
+schedule. Two GETs, no download, no cluster access:
+
+    in sync     amtv4 2026.09.1 (sha256:59bc84a96f58777b...)     -> exit 0, quiet
+    DRIFT       amtv4: loaded 2026.09.1 sha256:0000...,
+                published v1.5.5 sha256:59bc84a9...              -> exit 1
+
+The failed build IS the notification. Applying the update stays a values-file
+change plus a `POST /assertions/packs/refresh`, because a server that follows a
+channel is `latest` by another name.
+
+**Compared on digest, not version.** A version is a label someone types; a
+digest is what would execute. Same version with different bytes is exactly the
+case a pin exists to catch, and it is reported as drift.
+
+**The registry needs no invented format**: GitHub's release API carries
+`digest: "sha256:..."` per asset, so the check reads the tag as the version and
+the asset digest as the comparison. That shape is pinned in the selftest against
+a *recorded real* response, not a hand-written fixture.
+
+Two kinds of drift, and only one needs this tool. CONFIGURED-but-not-loaded the
+server answers itself as `pendingRefresh`, since it knows both sides; this
+reports it rather than re-deriving it. PUBLISHED-but-not-pinned the server
+cannot know - a pinned digest is all it has - and that is what this adds.
+
+An unreachable side is reported as **"nothing was compared. This is not 'in
+sync'"** and fails. A private registry with no token answers 404, and a check
+that read an unreachable registry as agreement would go green for exactly as
+long as the token stayed missing.
+
+The pack mapping ships EMPTY, deliberately: no deployment pins a pack today and
+`aehrc/rvf` has no readable release, so a mapping would fail the job nightly for
+a reason nobody can act on - and an always-red schedule is one everyone learns
+to ignore. Set `packAssets` to `amtv4=amtv4-pack.json` the day the pack is
+published. **The ADO definition does not exist yet**; creating it needs the YAML
+path registered against `catchup-upgraded` and the `ncts-release` variable group
+granted to the new pipeline.
+
 **The pack itself is not committed here, and must not be.** This repository is
 public; the AMT assertions are not. That is not a hypothetical constraint - the
 SQL and the 200 assertion names were briefly committed here on 2026-09-07 and
