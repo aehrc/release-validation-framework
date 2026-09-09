@@ -131,7 +131,11 @@ fi
 echo "=== MySQL ==="
 if ! "$MYSQL_HOME/bin/mysqladmin" --socket="$MYSQL_SOCKET" -uroot -p"$MYSQL_PASSWORD" ping >/dev/null 2>&1; then
   echo "  starting mysqld on $MYSQL_PORT"
-  LD_LIBRARY_PATH="$WORK/libs" "$MYSQL_HOME/bin/mysqld" \
+  # $WORK/libs first, then anything the caller supplied. CI shims the
+  # libraries somewhere else - PublishPipelineArtifact cannot follow symlinks
+  # inside the published directory - and hardcoding this dropped that shim, so
+  # mysqld failed to start where it had just been initialised.
+  LD_LIBRARY_PATH="$WORK/libs${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" "$MYSQL_HOME/bin/mysqld" \
     --basedir="$MYSQL_HOME" --datadir="$WORK/mysqldata" --tmpdir="$WORK/mysqltmp" \
     --port="$MYSQL_PORT" --socket="$MYSQL_SOCKET" --mysqlx=OFF --skip-log-bin \
     --innodb-buffer-pool-size=4G --local-infile=ON --max-connections=200 \
