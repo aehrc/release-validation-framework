@@ -478,8 +478,16 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 		// Captured ONCE, at the start of the run, from whoever owns the corpus.
 		// Once: a refresh partway through a validation must not change which
 		// assertions it is running, or the report describes neither corpus.
+		//
+		// A run that names its own pins gets a corpus built for THEM - fetched,
+		// digest-checked, merged and proven executable exactly as a reload is -
+		// so an old report can be reproduced after the deployment's pins have
+		// moved on. It does not disturb what is serving.
 		DuckAssertionService owner = assertionService.getIfAvailable();
-		DuckStore store = owner != null ? owner.currentStore() : storeLocator.load();
+		DuckAssertionService.Corpus corpus = owner != null
+				? owner.corpusFor(executionConfig.getAssertionPacks())
+				: new DuckAssertionService.Corpus(storeLocator.load(), null, List.of());
+		DuckStore store = corpus.store();
 		LOGGER.info("DuckDB assertion store loaded from {}: {}{}", storeLocator.description(),
 				store.generatorDescription(),
 				store.packs().isEmpty() ? "" : " plus packs " + store.packs());
@@ -515,7 +523,11 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 			return statusReport;
 		}
 
-		DuckAssertionSource source = owner != null ? owner.currentSource() : assertionSource(store);
+		// From the SAME corpus as the store above, not re-asked of the owner: a
+		// pinned run whose source came from the deployment's corpus would
+		// execute one pack set while selecting assertions from another.
+		DuckAssertionSource source = corpus.source() != null
+				? corpus.source() : assertionSource(store);
 		Selection selection = selectAssertions(source, executionConfig);
 		LOGGER.info("Total assertions to run {} for groups {}", selection.total(),
 				executionConfig.getGroupNames());

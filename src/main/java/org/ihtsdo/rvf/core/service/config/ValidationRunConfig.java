@@ -42,6 +42,13 @@ public class ValidationRunConfig implements Serializable {
 	private String includedModules;
 	private List<String> droolsRulesGroupList;
 	private List<String> assertionExclusionList;
+	/**
+	 * The assertion packs this submission pins, empty for "whatever is deployed".
+	 *
+	 * <p>What makes an old report reproducible: the packs a run recorded can be
+	 * demanded again, rather than hoping the deployment still pins them.
+	 */
+	private List<String> assertionPacks;
 	private String bucketName;
 	private boolean enableMRCMValidation;
 	private boolean enableTraceabilityValidation;
@@ -79,6 +86,15 @@ public class ValidationRunConfig implements Serializable {
 	}
 	public List<String> getGroupsList() {
 		return groupsList;
+	}
+
+	public List<String> getAssertionPacks() {
+		return assertionPacks;
+	}
+
+	public ValidationRunConfig addAssertionPacks(List<String> assertionPacks) {
+		this.assertionPacks = assertionPacks;
+		return this;
 	}
 
 	public List<String> getAssertionExclusionList() {

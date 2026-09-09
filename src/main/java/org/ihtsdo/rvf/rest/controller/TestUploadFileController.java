@@ -92,6 +92,12 @@ public class TestUploadFileController {
 	private static final String GROUPS = "groups";
 
 	private static final String ASSERTION_EXCLUSION_LIST = "assertionExclusionList";
+	/**
+	 * The pack pins for ONE run, so an old report can be reproduced after the
+	 * deployment's own pins have moved. Same spec grammar as
+	 * {@code rvf.assertion.packs}; DuckDB engine only.
+	 */
+	private static final String ASSERTION_PACKS = "assertionPacks";
 
 	private static final String MANIFEST = "manifest";
 
@@ -205,6 +211,10 @@ public class TestUploadFileController {
 			@Parameter(description = "Assertion group names separated by a comma.") @RequestParam(value = GROUPS, required = false) final List<String> groupsList,
 			@Parameter(description = "Assertion exclusion list separated by a comma.") @RequestParam(value = ASSERTION_EXCLUSION_LIST, required = false) final List<String> assertionExclusionList,
 			@Parameter(description = "Excluded RF2 files to be validated.") @RequestParam(value = EXCLUDED_RF2_FILES, required = false) final List<String> excludedRF2Files,
+			@Parameter(description = "Assertion pack pins for this run, each "
+					+ "name=<n>;version=<v>;uri=<u>;sha256=<hex>. Defaults to the packs "
+					+ "the deployment has loaded. DuckDB engine only.")
+			@RequestParam(value = ASSERTION_PACKS, required = false) final List<String> assertionPacks,
 			@Parameter(description = "Drools rules group names") @RequestParam(value = DROOLS_RULES_GROUPS, required = false) final List<String> droolsRulesGroupsList,
 			@Parameter(description = "Required for non-first time international release testing") @RequestParam(value = PREVIOUS_RELEASE, required = false) final String previousRelease,
 			@Parameter(description = "Unique number e.g Timestamp") @RequestParam(value = RUN_ID) final Long runId,
@@ -234,6 +244,7 @@ public class TestUploadFileController {
 		vrConfig.addFile(file).addRF2DeltaOnly(isRf2DeltaOnly)
 				.addWriteSucceses(writeSucceses).addGroupsList(groupsList).addDroolsRulesGroupList(droolsRulesGroupsList)
 				.addAssertionExclusionList(assertionExclusionList)
+				.addAssertionPacks(assertionPacks)
 				.addManifestFile(manifestFile)
 				.addPreviousRelease(previousRelease)
 				.addRunId(runId).addStorageLocation(storageLocation)
@@ -286,6 +297,10 @@ public class TestUploadFileController {
 			@Parameter(description = "Assertion group names") @RequestParam(value = GROUPS, required = false) final List<String> groupsList,
 			@Parameter(description = "Assertion exclusion list separated by a comma.") @RequestParam(value = ASSERTION_EXCLUSION_LIST, required = false) final List<String> assertionExclusionList,
 			@Parameter(description = "Excluded RF2 files to be validated.") @RequestParam(value = EXCLUDED_RF2_FILES, required = false) final List<String> excludedRF2Files,
+			@Parameter(description = "Assertion pack pins for this run, each "
+					+ "name=<n>;version=<v>;uri=<u>;sha256=<hex>. Defaults to the packs "
+					+ "the deployment has loaded. DuckDB engine only.")
+			@RequestParam(value = ASSERTION_PACKS, required = false) final List<String> assertionPacks,
 			@Parameter(description = "Drools rules group names") @RequestParam(value = DROOLS_RULES_GROUPS, required = false) final List<String> droolsRulesGroupsList,
 			@Parameter(description = "Required for non-first time international release testing") @RequestParam(value = PREVIOUS_RELEASE, required = false) final String previousRelease,
 			@Parameter(description = "Unique run id e.g Timestamp") @RequestParam(value = RUN_ID) final Long runId,
@@ -316,6 +331,7 @@ public class TestUploadFileController {
 				.addWriteSucceses(writeSucceses)
 				.addGroupsList(groupsList)
 				.addAssertionExclusionList(assertionExclusionList)
+				.addAssertionPacks(assertionPacks)
 				.addDroolsRulesGroupList(droolsRulesGroupsList)
 				.addManifestFileFullPath(manifestFileS3Path)
 				.addPreviousRelease(previousRelease)

@@ -20,6 +20,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -189,6 +191,72 @@ public class DuckAssertionService implements AssertionService {
 	/** The loaded corpus itself, for a run that must not re-resolve it. */
 	public DuckAssertionSource currentSource() {
 		return source();
+	}
+
+	/** A corpus a run executes: the store, its source, and what it is made of. */
+	public record Corpus(DuckStore store, DuckAssertionSource source,
+			List<DuckStorePacks.Pack> packs) {
+	}
+
+	/**
+	 * Corpora built for per-run pins, keyed by the pin set.
+	 *
+	 * <p>Bounded and access-ordered: the case this serves is re-running a
+	 * handful of historical pin sets, and an unbounded map keyed by request
+	 * input is a memory leak a caller controls. ~800KB per corpus, so four is
+	 * cheap and a fifth distinct pin set costs a re-fetch rather than the heap.
+	 */
+	private final Map<String, Corpus> pinnedCorpora = Collections.synchronizedMap(
+			new LinkedHashMap<>(8, 0.75f, true) {
+				@Override
+				protected boolean removeEldestEntry(Map.Entry<String, Corpus> eldest) {
+					return size() > 4;
+				}
+			});
+
+	/** What {@link #reload} published, which is what a run uses by default. */
+	public Corpus currentCorpus() {
+		DuckAssertionSource current = source();
+		return new Corpus(store, current, packs);
+	}
+
+	/**
+	 * The corpus for one run's pins, or the current one when it names none.
+	 *
+	 * <p>Why a run may pin at all: a report is only reproducible if the
+	 * assertions that produced it can be named AND re-obtained. The deployment's
+	 * own pins move when someone updates them, so "re-run build 16247" needs the
+	 * pack set that run recorded, not today's.
+	 *
+	 * <p>Same pipeline as a reload - fetch, verify each digest, merge, build the
+	 * source, prove it executes - because a per-run corpus that skipped any of
+	 * those would report a release as clean for assertions it could not run. It
+	 * does NOT touch what is serving: a pinned run is not a deployment change.
+	 */
+	public Corpus corpusFor(List<String> pinSpecs) throws IOException {
+		if (pinSpecs == null || pinSpecs.isEmpty()) {
+			return currentCorpus();
+		}
+		String key = String.join("\n", new java.util.TreeSet<>(pinSpecs));
+		Corpus cached = pinnedCorpora.get(key);
+		if (cached != null) {
+			return cached;
+		}
+		List<DuckStorePacks.Pack> pinned = new AssertionPackFetcher()
+				.fetch(sourcesFrom(pinSpecs));
+		DuckStore base = storeLocator.load();
+		List<DuckStorePacks.Pack> all = new ArrayList<>();
+		all.add(basePack(base));
+		all.addAll(pinned);
+		DuckStore merged = DuckStorePacks.merge(all);
+		DuckAssertionSource built = DuckAssertionSource.from(merged, Path.of(corpusRoot));
+		verifyExecutable(merged, built);
+		Corpus corpus = new Corpus(merged, built, List.copyOf(pinned));
+		pinnedCorpora.put(key, corpus);
+		LOGGER.info("DuckDB corpus for this run's pins: {} assertions from {}",
+				built.findAll().size(),
+				pinned.stream().map(DuckStorePacks.Pack::label).toList());
+		return corpus;
 	}
 
 	/**
@@ -471,8 +539,19 @@ public class DuckAssertionService implements AssertionService {
 	}
 
 	List<AssertionPackFetcher.Source> configuredPackSources() {
+		return sourcesFrom(packSpecs);
+	}
+
+	/**
+	 * Pin specs to fetchable sources.
+	 *
+	 * <p>Shared by the configured pins and a run's own, so a per-run pin is
+	 * written exactly like a deployment's and neither grammar can drift into
+	 * accepting what the other rejects.
+	 */
+	private static List<AssertionPackFetcher.Source> sourcesFrom(List<String> specs) {
 		List<AssertionPackFetcher.Source> sources = new java.util.ArrayList<>();
-		for (String spec : packSpecs) {
+		for (String spec : specs) {
 			if (spec == null || spec.isBlank()) {
 				continue;
 			}

@@ -14,6 +14,15 @@ public class MysqlExecutionConfig {
 	private final Long executionId;
 	private List<String> groupNames;
 	private List<String> assertionExclusionList;
+	/**
+	 * The assertion packs THIS run pins, empty for "whatever is deployed".
+	 *
+	 * <p>A report is only reproducible if its assertions can be named and
+	 * re-obtained. The deployment's own pins move when someone updates them, so
+	 * re-running an old build needs the pack set that build recorded rather than
+	 * today's. MySQL ignores this: it has one assertion database.
+	 */
+	private List<String> assertionPacks = new ArrayList<>();
 	private String defaultModuleId;
 	/**
 	 * Never null.
@@ -83,6 +92,15 @@ public class MysqlExecutionConfig {
 
 	public List<String> getAssertionExclusionList() {
 		return assertionExclusionList;
+	}
+
+	/** Never null, so a caller can pass it straight to the corpus resolver. */
+	public void setAssertionPacks(List<String> assertionPacks) {
+		this.assertionPacks = assertionPacks == null ? new ArrayList<>() : assertionPacks;
+	}
+
+	public List<String> getAssertionPacks() {
+		return assertionPacks;
 	}
 
 	public void setExcludedRF2Files(List<String> excludedRF2Files) {

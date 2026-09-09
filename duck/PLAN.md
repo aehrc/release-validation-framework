@@ -82,12 +82,21 @@ A merged store keeps every input's requirements and can still satisfy them from
 its nested provenance, because it is a legitimate base for a later merge while
 arriving as one pack under one name. 39 tests green.
 
-**3.4 Per-run pack pins.** So an old report can be reproduced: the submission
-names pins, the engine fetches/verifies/merges/verifies-executable per run and
-caches corpora by digest. Costs 3.0s plus download on a cache miss, ~800KB per
-cached corpus.
-*Acceptance:* two runs of one release with different pins produce reports whose
-`assertionPacks` differ and whose findings differ accordingly.
+**3.4 Per-run pack pins. DONE 2026-09-09.** A submission carries
+`assertionPacks=name=..;version=..;uri=..;sha256=..`, and the engine resolves a
+corpus for THOSE pins through the same pipeline as a reload - fetch, verify each
+digest, merge with the bundled base, prove it executes - without touching what
+is serving. Proven by two full validations of one release: `packOne` gives
+`[international-fixture, packOne]` and 2 findings, `packTwo` gives
+`[international-fixture, packTwo]` and 1, and neither run executed the other's
+assertion. Pins accepted and ignored would still have produced two reports, so
+that is the check that counts.
+
+Cached by pin set, access-ordered, bounded at four - an unbounded map keyed by
+request input is a memory leak a caller controls. Two resolutions of one pin set
+cost one fetch. A wrong digest is refused with the running corpus untouched.
+The run takes store AND source from one `Corpus`: asking the owner separately
+would execute one pack set while selecting assertions from another.
 
 **3.5 Pack update notification, pipeline-side.** A scheduled job compares the
 latest release digest against `GET /assertions/packs` and says "amtv4 2026.09.2

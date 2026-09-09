@@ -270,6 +270,39 @@ containing several, so the check looks at nested provenance too. Otherwise a
 carried `requires international` would be refused by a base that contains
 international.
 
+## A run can pin its own packs, 2026-09-09
+
+Naming the packs in a report says which assertions produced it; reproducing it
+needs them back. The deployment's pins are a values file someone edits, so a run
+that recorded `amtv4 2026.09.1` can only be re-run if it can ASK for that pack
+rather than for whatever is loaded today:
+
+    POST /run-post ... --form 'assertionPacks=name=amtv4;version=2026.09.1;uri=...;sha256=...'
+
+Same spec grammar as `rvf.assertion.packs`, and the same pipeline as a reload —
+fetch, verify each digest, merge with the bundled base, prove the corpus
+executes — because a per-run corpus that skipped any of those would report a
+release as clean for assertions it could not run. It does **not** touch what is
+serving: a pinned run is not a deployment change, and a pin whose digest is
+wrong is refused with the running corpus left exactly as it was.
+
+Proven by two full validations of one release with different pins:
+
+    pins packOne -> packs [international-fixture, packOne], 2 findings
+    pins packTwo -> packs [international-fixture, packTwo], 1 finding
+
+and neither run executed the other's assertion. That is the check worth making:
+pins that are accepted and ignored would still produce two reports.
+
+**Cached by pin set**, access-ordered and bounded at four: the case is
+re-running a handful of historical pin sets, ~800KB per corpus, and an unbounded
+map keyed by request input is a memory leak a caller controls. Two resolutions
+of the same pins cost one HTTP fetch.
+
+One trap worth naming: the run takes its store AND its assertion source from the
+same `Corpus`. Asking the owner for the source separately would execute one pack
+set while selecting assertions from another — a report describing neither.
+
 **The pack itself is not committed here, and must not be.** This repository is
 public; the AMT assertions are not. That is not a hypothetical constraint - the
 SQL and the 200 assertion names were briefly committed here on 2026-09-07 and
