@@ -89,6 +89,7 @@ as something other than its cause:
 | 16313 | `unrecognized arguments: --recursive` | `az storage file list` on this CLI has no recursion; the layout is `<run>/output-files/<zip>` |
 | 16314 | `ResourceNotFound` on `<run>/output-files` | the share holds 684 directories, timestamp-named plus GUIDs, and GUIDs sort LAST |
 | 16315 | mysqld ready, then SHUTDOWN with no reason | the fresh datadir had no root password (above) |
+| 16318, 16323 | `Access denied for user 'root'@'localhost' (using password: YES)` | **`mysqladmin ping` exits 0 on "Access denied"** - it answers "did a server respond", not "are these credentials good". Every credential check here used it, so all of them concluded the password worked and the fresh-datadir branch never ran. Measured: `mysqladmin -uroot -pWRONG ping` exits 0, `mysql -uroot -pWRONG -e 'select 1'` exits 1 |
 
 Two general lessons in that list. Every listing the resolver makes is now
 printed, because four of those cost a 25-minute round trip to learn one line of

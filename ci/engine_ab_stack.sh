@@ -129,6 +129,28 @@ if [ ! -e "$WORK/libs/libaio.so.1" ]; then
 fi
 
 echo "=== MySQL ==="
+
+# `mysqladmin ping` EXITS 0 ON "ACCESS DENIED". It answers "did a server
+# respond", not "are these credentials good" - measured: `mysqladmin -uroot
+# -pWRONG ping` exits 0 while `mysql -uroot -pWRONG -e 'select 1'` exits 1.
+#
+# Every credential check here used ping, so all of them concluded the password
+# worked, the fresh-datadir branch below never ran, and builds 16318 and 16323
+# both died on the first real statement with "Access denied for user
+# 'root'@'localhost' (using password: YES)" - which reads as a wrong password
+# and was a vacuous test.
+mysql_works() {   # [password]
+  if [ $# -gt 0 ]; then
+    "$MYSQL_HOME/bin/mysql" --socket="$MYSQL_SOCKET" -uroot -p"$1" \
+      -e "select 1" >/dev/null 2>&1
+  else
+    "$MYSQL_HOME/bin/mysql" --socket="$MYSQL_SOCKET" -uroot \
+      -e "select 1" >/dev/null 2>&1
+  fi
+}
+
+# Aliveness, where ping's behaviour is exactly what is wanted: do not start a
+# second mysqld on a socket something is already serving.
 if ! "$MYSQL_HOME/bin/mysqladmin" --socket="$MYSQL_SOCKET" -uroot -p"$MYSQL_PASSWORD" ping >/dev/null 2>&1; then
   echo "  starting mysqld on $MYSQL_PORT"
   # $WORK/libs first, then anything the caller supplied. CI shims the
@@ -141,18 +163,11 @@ if ! "$MYSQL_HOME/bin/mysqladmin" --socket="$MYSQL_SOCKET" -uroot -p"$MYSQL_PASS
     --innodb-buffer-pool-size=4G --local-infile=ON --max-connections=200 \
     --sql-mode='STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION' &
   PIDS+=($!)
-  # WAITED FOR, not slept through. `sleep 15` was a race this lost on a CI
-  # agent (build 16318): mysqld was still doing InnoDB initialisation, both
-  # pings below failed because nothing was listening yet, so the password was
-  # never set - and the next statement hit a by-then-ready server with the
-  # wrong credentials and reported "Access denied for user 'root'@'localhost'
-  # (using password: YES)", which reads as a bad password rather than a race.
-  #
-  # Either answer means the server is up: with the password (an existing
-  # datadir) or without it (freshly initialised).
+  # Waited for, not slept through: `sleep 15` expired mid-InnoDB-initialisation
+  # on a CI agent. Either credential answering proves the server is up - with
+  # the password for an existing datadir, without one when freshly initialised.
   for _ in $(seq 1 60); do
-    if "$MYSQL_HOME/bin/mysqladmin" --socket="$MYSQL_SOCKET" -uroot -p"$MYSQL_PASSWORD" ping >/dev/null 2>&1 \
-       || "$MYSQL_HOME/bin/mysqladmin" --socket="$MYSQL_SOCKET" -uroot ping >/dev/null 2>&1; then
+    if mysql_works "$MYSQL_PASSWORD" || mysql_works; then
       break
     fi
     sleep 2
@@ -161,12 +176,9 @@ fi
 
 # A datadir straight out of --initialize-insecure has NO root password, and
 # everything below authenticates with one. CI initialises in a separate step, so
-# this is the normal state there rather than an edge case: build 16315 started
-# mysqld, reached "ready for connections", and then died on the version query
-# below - whose stderr is discarded, so the log showed only a SHUTDOWN sent by
-# this script's own cleanup and no reason at all.
-if ! "$MYSQL_HOME/bin/mysqladmin" --socket="$MYSQL_SOCKET" -uroot -p"$MYSQL_PASSWORD" ping >/dev/null 2>&1; then
-  if ! "$MYSQL_HOME/bin/mysqladmin" --socket="$MYSQL_SOCKET" -uroot ping >/dev/null 2>&1; then
+# this is the normal state there rather than an edge case.
+if ! mysql_works "$MYSQL_PASSWORD"; then
+  if ! mysql_works; then
     # Neither credential works, so this is not the fresh-datadir case and
     # guessing further would waste the run. Say which two were tried.
     echo "FATAL: mysqld on $MYSQL_SOCKET answers neither root with the" \
