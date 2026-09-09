@@ -441,7 +441,16 @@ stages:
                 cd '$(workdir)'
 
                 RUN_ID="$(date +%s%N | cut -c1-13)"
-                STORAGE_LOCATION="nightly-$(Build.BuildId)"
+                # Stamp BOTH builds behind this validation, because they are different pipelines and
+                # the indexer server must not read one as the other:
+                #   $(resources.pipeline.dailyRvf.runID) - the daily-rvf run that PRODUCED and uploaded
+                #     the release. `ncts-<version>-<that id>` is exactly the release build's run_id, so
+                #     the server joins on a stored value rather than reconstructing one.
+                #   $(Build.BuildId) - this nightly's own run, which VALIDATED it. It names the logs
+                #     for this run and nothing else.
+                # Dropping the -rvf suffix leaves the pipeline link unresolved; dropping the first half
+                # leaves the run unlinked to any release. Keep both.
+                STORAGE_LOCATION="ncts-$(release.version)-$(resources.pipeline.dailyRvf.runID)-rvf$(Build.BuildId)"
 
                 # An optional form field cannot be spliced in with a template
                 # expression - it would land mid-continuation and break the
