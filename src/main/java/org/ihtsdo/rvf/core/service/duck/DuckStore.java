@@ -6,11 +6,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.HexFormat;
 
 /**
  * The precompiled assertion store: RVF's SQL corpus already transpiled to DuckDB.
@@ -58,6 +63,83 @@ public final class DuckStore {
 					+ " is not supported (expected " + SUPPORTED_FORMAT_VERSION + ")");
 		}
 		return new DuckStore(root);
+	}
+
+	/**
+	 * This store's OWN identity, empty for one published before it had any.
+	 *
+	 * <p>Distinct from {@link #packs()}: that is what a merged store was
+	 * assembled from, this is what a single store IS. The bundled store used to
+	 * report as {@code bundled} with no version and no digest, so nothing could
+	 * be required of it and a report could not name the assertions that produced
+	 * it.
+	 *
+	 * <p>The digest is CHECKED here rather than copied. A digest a runtime only
+	 * repeats is a claim; one it recomputes is a fact, and the cost is 360
+	 * hashes of a uuid and a hash on a path that already parsed a 600KB tree.
+	 */
+	public Optional<PackRecord> identity() throws IOException {
+		JsonNode pack = root.path("pack");
+		if (pack.isMissingNode() || pack.isNull()) {
+			return Optional.empty();
+		}
+		String declared = pack.path("digest").asText("");
+		String actual = assertionDigest();
+		if (!declared.equals(actual)) {
+			throw new IOException("store " + pack.path("name").asText("?") + "@"
+					+ pack.path("version").asText("?") + " declares digest "
+					+ declared + " but its assertions hash to " + actual
+					+ ". The store has been edited since it was published, so its "
+					+ "identity does not describe what it would run.");
+		}
+		return Optional.of(new PackRecord(
+				pack.path("name").asText(),
+				pack.path("version").asText(),
+				declared,
+				assertions().size()));
+	}
+
+	/**
+	 * {@code sha256} over everything this store would EXECUTE.
+	 *
+	 * <p>The publisher's definition, reproduced exactly: the sorted
+	 * {@code uuid \t source hash} pairs, then {@code --}, then the sorted
+	 * {@code prerequisite file \t hash} pairs.
+	 *
+	 * <p>Over identities rather than the serialised store, so key order,
+	 * indentation and a later added field cannot change it. Over the
+	 * PREREQUISITES too, because they build the tables every assertion reads: a
+	 * store with a changed pre-requisites.sql runs differently while its
+	 * assertion set is untouched, and a digest blind to that cannot answer
+	 * "would this reproduce the old report".
+	 */
+	public String assertionDigest() {
+		StringBuilder material = new StringBuilder();
+		JsonNode assertions = root.path("assertions");
+		List<String> uuids = new ArrayList<>();
+		assertions.fieldNames().forEachRemaining(uuids::add);
+		Collections.sort(uuids);
+		for (int i = 0; i < uuids.size(); i++) {
+			if (i > 0) {
+				material.append('\n');
+			}
+			material.append(uuids.get(i)).append('\t')
+					.append(assertions.path(uuids.get(i)).path("sha256").asText(""));
+		}
+		List<String> prerequisites = new ArrayList<>();
+		for (JsonNode node : root.path("prerequisites")) {
+			prerequisites.add(node.path("file").asText() + '\t'
+					+ node.path("sha256").asText(""));
+		}
+		Collections.sort(prerequisites);
+		material.append("\n--\n").append(String.join("\n", prerequisites));
+		try {
+			MessageDigest sha = MessageDigest.getInstance("SHA-256");
+			return "sha256:" + HexFormat.of()
+					.formatHex(sha.digest(material.toString().getBytes(StandardCharsets.UTF_8)));
+		} catch (NoSuchAlgorithmException e) {
+			throw new IllegalStateException("no SHA-256", e);
+		}
 	}
 
 	/**
@@ -126,6 +208,27 @@ public final class DuckStore {
 					node.path("assertions").asInt()));
 		}
 		return Collections.unmodifiableList(out);
+	}
+
+	/**
+	 * What produced this store, whether or not anything was merged.
+	 *
+	 * <p>{@link #packs()} is empty for an unmerged store, which is every
+	 * deployment that pins no packs - so a report and {@code GET
+	 * /assertions/packs} both said nothing at all about the assertions that ran.
+	 * An unmerged store answers with its own {@link #identity()}, which is the
+	 * same question asked of a store of one.
+	 *
+	 * <p>One owner of the answer, and it is the artefact: a service caching this
+	 * beside the store is a second answer, and the two disagree exactly after a
+	 * reload, when it matters.
+	 */
+	public List<PackRecord> provenance() throws IOException {
+		List<PackRecord> merged = packs();
+		if (!merged.isEmpty()) {
+			return merged;
+		}
+		return identity().map(List::of).orElseGet(List::of);
 	}
 
 	/** One assertion's precompiled statements and the metadata to report it. */

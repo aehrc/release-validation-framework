@@ -58,11 +58,22 @@ Then, from a checkout of `aehrc/rvf`:
 
     cd <this repo> && mvn -o test -Dtest=BundledStoreMatchesCorpusTest
 
-Expect it to report `assertions 360 / statements 819`, and to list ~93 scripts
-as "not in manifest, skipped". Those are corpus scripts no manifest entry
-declares, so RVF never runs them on either engine. The publisher **refuses to
-write a store with zero assertions** — an empty store reports no findings and
-therefore passes every validation.
+Expect it to report `assertions 360 / statements 819`, a first line naming the
+store's identity, and ~93 scripts listed as "not in manifest, skipped". Those
+are corpus scripts no manifest entry declares, so RVF never runs them on either
+engine. The publisher **refuses to write a store with zero assertions** — an
+empty store reports no findings and therefore passes every validation.
+
+    pack         international 2026.07.27 sha256:d6f0a930e8acd55f (corpus 0160dd2ee830)
+
+The version is the **assertion corpus's own commit date**, not the build's: a
+rebuild of unchanged inputs must produce the same identity, and dates are
+orderable in a way a commit sha is not. The digest covers every assertion's
+source hash *and* the prerequisites, because those build the tables each
+assertion reads — so it answers "would this run the same SQL", and the engine
+**recomputes** it on load rather than repeating it. A store edited after
+publication is refused, naming both digests. Pass `--pack-version` when the
+corpus is not a git checkout; the publisher refuses to invent one.
 
 ## The two inputs that are not the corpus
 

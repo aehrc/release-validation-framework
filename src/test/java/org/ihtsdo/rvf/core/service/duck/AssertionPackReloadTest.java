@@ -152,6 +152,55 @@ class AssertionPackReloadTest {
 		return "name=amtv4;version=2026.09.1;uri=" + uri() + ";sha256=" + digest;
 	}
 
+	/** A store carrying its own identity, digest included. */
+	private static String identifiedStore(String uuid, String file, String macro,
+			String name, String version) {
+		String json = store(uuid, file, macro);
+		String material = uuid + "\t" + sourceHash(file) + "\n--\n";
+		String digest;
+		try {
+			digest = "sha256:" + HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+					.digest(material.getBytes(StandardCharsets.UTF_8)));
+		} catch (Exception e) {
+			throw new IllegalStateException(e);
+		}
+		return json.replace(" \"assertions\": {",
+				" \"pack\": {\"name\": \"" + name + "\", \"version\": \"" + version
+						+ "\", \"corpusRef\": \"abc123\", \"digest\": \"" + digest
+						+ "\", \"assertions\": 1},\n \"assertions\": {");
+	}
+
+	@Test
+	void aDeploymentWithNoPacksStillReportsWhatItIsRunning(@TempDir Path dir)
+			throws Exception {
+		// The normal deployment: no packs pinned. loadedPacks() is configuration
+		// and so answered [], which meant a report and GET /assertions/packs
+		// said NOTHING about the assertions that ran on exactly the case that is
+		// the norm. Provenance comes from the store instead.
+		DuckAssertionService service = serviceWith(dir, null);
+		Files.writeString(dir.resolve("store.json"),
+				identifiedStore(UUID_BASE, "base.sql", MACRO, "international", "2026.07.27"));
+
+		assertEquals(1, service.findAll().size(), "first use loads the bundled store");
+		List<DuckStore.PackRecord> provenance = service.loadedProvenance();
+		assertEquals(1, provenance.size(), "the base is a pack of its own");
+		assertEquals("international", provenance.get(0).name());
+		assertEquals("2026.07.27", provenance.get(0).version());
+		assertTrue(provenance.get(0).digest().startsWith("sha256:"),
+				provenance.get(0).digest());
+		assertTrue(service.loadedPacks().isEmpty(), "and no packs were configured");
+	}
+
+	@Test
+	void provenanceBeforeAnythingIsLoadedIsEmptyRatherThanAFetch(@TempDir Path dir)
+			throws Exception {
+		// An inspection method that loads - or fetches over the network - is not
+		// usable from a health endpoint or an error path, and this is called
+		// from both. Nothing is serving yet, and that is the honest answer.
+		DuckAssertionService service = serviceWith(dir, null);
+		assertTrue(service.loadedProvenance().isEmpty());
+	}
+
 	@Test
 	void aVerifiedPackIsMergedAndSwappedIn(@TempDir Path dir) throws Exception {
 		String pack = store(UUID_PACK, "pack.sql", MACRO);

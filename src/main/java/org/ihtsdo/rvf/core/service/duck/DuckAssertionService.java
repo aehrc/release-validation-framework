@@ -252,8 +252,7 @@ public class DuckAssertionService implements AssertionService {
 		// and nothing in a report would look different.
 		DuckStore base = storeLocator.load();
 		List<DuckStorePacks.Pack> all = new java.util.ArrayList<>();
-		all.add(new DuckStorePacks.Pack("bundled", storeLocator.description(),
-				"bundled", base));
+		all.add(basePack(base));
 		all.addAll(incoming);
 
 		DuckStore merged = DuckStorePacks.merge(all);
@@ -273,6 +272,23 @@ public class DuckAssertionService implements AssertionService {
 								.map(DuckStorePacks.Pack::label).toList());
 		LOGGER.info("DuckDB assertion corpus reloaded: {}", description);
 		return description;
+	}
+
+	/**
+	 * The base store as a pack, named by the store's OWN identity.
+	 *
+	 * <p>It used to be the literal {@code bundled} with {@code bundled} for a
+	 * version and a digest, so a report could say only that the assertions came
+	 * from something bundled - not which assertions, and nothing could be
+	 * required of it. A store published before it carried an identity still
+	 * reads that way, which is honest: that store cannot say what it is.
+	 */
+	private DuckStorePacks.Pack basePack(DuckStore base) throws IOException {
+		return base.identity()
+				.map(id -> new DuckStorePacks.Pack(id.name(), id.version(),
+						id.digest(), base))
+				.orElseGet(() -> new DuckStorePacks.Pack("bundled",
+						storeLocator.description(), "bundled", base));
 	}
 
 	/**
@@ -413,6 +429,23 @@ public class DuckAssertionService implements AssertionService {
 		// usable from a health endpoint or an error path, and this one is called
 		// from both.
 		return packs;
+	}
+
+	/**
+	 * The provenance of what is currently serving, base included.
+	 *
+	 * <p>{@link #loadedPacks()} is the CONFIGURED packs, which is empty on a
+	 * deployment that pins none - so an operator asking what produced a report
+	 * got an empty list on precisely the normal case. This answers from the
+	 * store that is loaded, which names the base as a pack of its own.
+	 *
+	 * <p>Like {@code loadedPacks}, it never forces a load: before first use
+	 * there is nothing serving, and saying so is the honest answer for an
+	 * inspection endpoint.
+	 */
+	public List<DuckStore.PackRecord> loadedProvenance() throws IOException {
+		DuckStore current = this.store;
+		return current == null ? List.of() : current.provenance();
 	}
 
 	/**

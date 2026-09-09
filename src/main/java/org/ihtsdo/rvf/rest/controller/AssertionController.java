@@ -143,18 +143,35 @@ public class AssertionController {
 			return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body(Map.of("message",
 					"Assertion packs are only available on the DuckDB execution engine."));
 		}
-		List<Map<String, Object>> packs = duck.loadedPacks().stream()
-				.map(pack -> {
-					Map<String, Object> entry = new LinkedHashMap<>();
-					entry.put("name", pack.name());
-					entry.put("version", pack.version());
-					entry.put("digest", pack.digest());
-					entry.put("assertions", pack.store().assertions().size());
-					return entry;
-				})
-				.toList();
+		// COUNT FIRST, deliberately: loadedProvenance reads what is serving and
+		// never forces a load, so asking it before the corpus is loaded reports
+		// no provenance for a corpus that is about to be loaded two lines later.
+		// On a cold server that is [] beside a count of 360.
+		int assertions = duck.findAll().size();
+		// The store's provenance, not the configured pack list: a deployment
+		// that pins nothing still ran a corpus with an identity, and answering
+		// [] for it made this endpoint useless on the normal case.
+		List<Map<String, Object>> packs;
+		try {
+			packs = duck.loadedProvenance().stream()
+					.map(pack -> {
+						Map<String, Object> entry = new LinkedHashMap<>();
+						entry.put("name", pack.name());
+						entry.put("version", pack.version());
+						entry.put("digest", pack.digest());
+						entry.put("assertions", pack.assertions());
+						return entry;
+					})
+					.toList();
+		} catch (IOException e) {
+			// A store whose declared digest no longer matches its assertions.
+			// Saying so is the point of checking it.
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+					.body(Map.of("message", "The loaded assertion store cannot state "
+							+ "its provenance", "reason", String.valueOf(e.getMessage())));
+		}
 		Map<String, Object> body = new LinkedHashMap<>();
-		body.put("assertions", duck.findAll().size());
+		body.put("assertions", assertions);
 		body.put("packs", packs);
 		// The one staleness question the server can answer alone: the values
 		// file may have been updated without anyone POSTing a refresh, and

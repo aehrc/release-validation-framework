@@ -202,6 +202,33 @@ differences that are the entire point: the pack is a published artefact rather
 than mutable state outside git, its digest is pinned so a run is reproducible,
 and the report says which packs produced it.
 
+## The base has an identity now, 2026-09-09
+
+It reported as the literal `bundled`, with `bundled` for a version and for a
+digest, so a report could say only that the assertions came from something
+bundled — not which assertions — and nothing could be *required* of it:
+
+    pack   international 2026.07.27 sha256:d6f0a930e8acd55f (corpus 0160dd2ee830)
+
+Version is the corpus's own commit date, so a rebuild of unchanged inputs
+produces the same identity, and dates are orderable where a sha is not — which
+is what "requires at least" needs. The digest covers every assertion's source
+hash and the prerequisites, and the engine **recomputes it on load**: a digest a
+runtime repeats is a claim, one it recomputes is a fact. Editing either an
+assertion's hash or the prerequisite's in the real 360-assertion store is
+refused, naming both digests.
+
+**The gap this closed was on the NORMAL deployment.** `loadedPacks()` is
+configuration, so a deployment pinning no packs answered `[]` — the report and
+`GET /assertions/packs` said nothing at all about the assertions that ran,
+precisely where nothing else could. Both now read `DuckStore.provenance()`,
+which is the merged pack list when there is one and the store's own identity
+when there is not. One owner of the answer, and it is the artefact.
+
+One ordering trap, since the endpoint hit it: `loadedProvenance()` reads what is
+serving and never forces a load, so asking it before `findAll()` on a cold
+server reports no provenance beside a count of 360.
+
 **The pack itself is not committed here, and must not be.** This repository is
 public; the AMT assertions are not. That is not a hypothetical constraint - the
 SQL and the 200 assertion names were briefly committed here on 2026-09-07 and

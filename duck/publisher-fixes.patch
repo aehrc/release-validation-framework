@@ -276,8 +276,16 @@
          if not low:
              continue
 --- a/publish_store.py	2026-08-26 10:29:17.000000000 +1000
-+++ b/publish_store.py	2026-09-09 22:21:45.613471204 +1000
-@@ -36,6 +36,7 @@
++++ b/publish_store.py	2026-09-09 22:49:31.973593011 +1000
+@@ -29,6 +29,7 @@
+ import json
+ import pathlib
+ import re
++import subprocess
+ import sys
+ 
+ import manifest
+@@ -36,6 +37,7 @@
  import procedures
  import rvfsql
  
@@ -285,7 +293,7 @@
  FORMAT_VERSION = 1
  
  # pre-requisites.sql materialises tables the DDL does not declare. They are real
-@@ -98,6 +99,15 @@
+@@ -98,6 +100,15 @@
            derive_uuids=True):
      tables = known_tables(ddl_path, prereq_dir)
      tcols = column_names(ddl_path)
@@ -301,7 +309,7 @@
  
      static = manifest.index_by_basename(manifest.load_scripts(manifest_root))
      derived = manifest.load_amtv4(scripts_dir, group_id, category)
-@@ -111,6 +121,13 @@
+@@ -111,6 +122,13 @@
      # doing it. DuckStore then reads that as an empty corpus, and an empty
      # corpus reports no findings and PASSES.
      for path in sorted(scripts_dir.rglob("*.sql")):
@@ -315,7 +323,7 @@
          raw = path.read_text(errors="replace")
          entry = static.get(path.name)
          if entry is None and derive_uuids:
-@@ -128,7 +145,8 @@
+@@ -128,7 +146,8 @@
          uuid = entry["uuid"] if isinstance(entry, dict) else entry
          try:
              stmts = rvfsql.precompile(raw, known_tables=tables,
@@ -325,7 +333,7 @@
          except Exception as e:                                  # noqa: BLE001
              failures.append((path.name, f"{type(e).__name__}: {e}"))
              continue
-@@ -154,7 +172,8 @@
+@@ -154,7 +173,8 @@
                  "file": path.name,
                  "sha256": hashlib.sha256(raw.encode()).hexdigest()[:16],
                  "statements": rvfsql.precompile(raw, known_tables=tables,
@@ -335,7 +343,7 @@
              })
          except Exception as e:                                  # noqa: BLE001
              failures.append((path.name, f"{type(e).__name__}: {e}"))
-@@ -215,8 +234,17 @@
+@@ -215,8 +235,17 @@
      """
      import amtv4
      schema = rvfsql._SENTINEL_BY_PLACEHOLDER["<PROSPECTIVE>"]
@@ -355,3 +363,91 @@
      body = re.sub(r"--[^\n]*", "", amtv4.macros(schema))
      out.extend(s.strip() for s in body.split(";") if s.strip())
      # The corpus's own scalar CREATE FUNCTIONs, which the routine-definition
+@@ -225,6 +254,58 @@
+     return out
+ 
+ 
++def pack_identity(name, version, corpus_root, assertions, prerequisites):
++    """This store's own identity: what it is, and what it was built from.
++
++    The bundled store reported as `bundled` with no version and no digest, so
++    nothing could be required of it and a report could not say which assertions
++    produced it. Both fields are derived, not stamped:
++
++    * VERSION is the assertion corpus's own commit date. A rebuild of unchanged
++      inputs therefore produces the same version - a wall-clock stamp would give
++      the same corpus a new identity on every build - and dates are orderable,
++      which a "requires at least" comparison needs and a commit sha cannot give.
++    * DIGEST is over the (uuid, source hash) pairs, sorted. It answers "the same
++      assertions, from the same text", independent of JSON key order, publisher
++      formatting, or which sqlglot compiled it.
++
++    Refuses to invent a version. A store whose identity is guessed is worse than
++    one with none: 3.3 refuses pack combinations by comparing these.
++    """
++    ref = date = ""
++    if version:
++        date = version
++    else:
++        try:
++            out = subprocess.run(
++                ["git", "-C", str(corpus_root), "log", "-1",
++                 "--format=%H %cd", "--date=format:%Y.%m.%d"],
++                capture_output=True, text=True, timeout=30)
++            if out.returncode == 0 and out.stdout.strip():
++                ref, date = out.stdout.strip().split(" ", 1)
++        except Exception:                                        # noqa: BLE001
++            pass
++    if not date:
++        raise SystemExit(
++            f"FATAL: no --pack-version given and {corpus_root} is not a git "
++            "checkout, so the corpus has no date to take a version from. Pass "
++            "--pack-version explicitly rather than publishing a store nothing "
++            "can be required of.")
++    # Over everything the store would EXECUTE, not only its assertions: the
++    # prerequisites build the tables every assertion reads, so a store with a
++    # changed pre-requisites.sql runs differently while its assertion set is
++    # untouched. A digest that cannot see that cannot answer "would this
++    # reproduce the old report".
++    material = "\n".join(f"{uuid}\t{a['sha256']}"
++                          for uuid, a in sorted(assertions.items()))
++    material += "\n--\n" + "\n".join(
++        f"{p['file']}\t{p['sha256']}" for p in sorted(prerequisites,
++                                                     key=lambda x: x["file"]))
++    digest = hashlib.sha256(material.encode()).hexdigest()
++    return {"name": name, "version": date, "corpusRef": ref,
++            "digest": "sha256:" + digest, "assertions": len(assertions)}
++
++
+ def main():
+     ap = argparse.ArgumentParser()
+     ap.add_argument("--scripts", required=True, type=pathlib.Path)
+@@ -240,6 +321,10 @@
+                          "derived amtv4 uuid (correct for any corpus but amtv4's own)")
+     ap.add_argument("--stamp", default="",
+                     help="optional build stamp recorded in the store")
++    ap.add_argument("--pack-name", default="international",
++                    help="this store's identity in a report and in a merge")
++    ap.add_argument("--pack-version", default="",
++                    help="override the version taken from the corpus commit date")
+     a = ap.parse_args()
+ 
+     root = a.manifest_root or a.scripts.parent
+@@ -248,6 +333,8 @@
+                                       derive_uuids=not a.no_derive_uuids)
+     if a.stamp:
+         store["generator"]["stamp"] = a.stamp
++    store["pack"] = pack_identity(a.pack_name, a.pack_version, root,
++                                  store["assertions"], store["prerequisites"])
+ 
+     # A store with no assertions is never a valid outcome - it is what a wrong
+     # --scripts path produces, and it is indistinguishable downstream from a
+@@ -261,6 +348,8 @@
+     a.out.write_text(json.dumps(store, indent=1))
+     n_stmt = sum(len(v["statements"]) for v in store["assertions"].values())
+     n_pre = sum(len(p["statements"]) for p in store["prerequisites"])
++    print(f"pack         {store['pack']['name']} {store['pack']['version']} "
++          f"{store['pack']['digest'][:23]} (corpus {store['pack']['corpusRef'][:12] or 'not a checkout'})")
+     print(f"assertions   {len(store['assertions'])}")
+     print(f"statements   {n_stmt} (+{n_pre} pre-requisite)")
+     print(f"knownTables  {len(store['knownTables'])}")

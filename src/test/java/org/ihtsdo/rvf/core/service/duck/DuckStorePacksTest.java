@@ -250,6 +250,100 @@ class DuckStorePacksTest {
 				.packs().isEmpty());
 	}
 
+	/** A store carrying its own identity, with the digest the publisher computes. */
+	private static String identified(String name, String version, String uuid,
+			String sourceHash) {
+		String json = pack(uuid, "a.sql", "SELECT 1", MACRO_A, "h1")
+				.replace("\"sha256\": \"aaaa\"", "\"sha256\": \"" + sourceHash + "\"");
+		String digest = digestOf(uuid, sourceHash);
+		return json.replace(" \"assertions\": {",
+				" \"pack\": {\"name\": \"" + name + "\", \"version\": \"" + version
+						+ "\", \"corpusRef\": \"0160dd2e\", \"digest\": \"" + digest
+						+ "\", \"assertions\": 1},\n \"assertions\": {");
+	}
+
+	/**
+	 * The publisher's digest, computed independently of the code under test.
+	 *
+	 * <p>Spelled out rather than delegated to {@code assertionDigest()}: a test
+	 * that asks the implementation what the answer is cannot notice the
+	 * implementation changing its mind. The material covers the prerequisites
+	 * too, because they build the tables every assertion reads.
+	 */
+	private static String digestOf(String uuid, String sourceHash) {
+		try {
+			java.security.MessageDigest sha = java.security.MessageDigest.getInstance("SHA-256");
+			String material = uuid + "\t" + sourceHash + "\n--\npre-requisites.sql\th1";
+			return "sha256:" + java.util.HexFormat.of().formatHex(sha.digest(
+					material.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+		} catch (Exception e) {
+			throw new IllegalStateException(e);
+		}
+	}
+
+	@Test
+	void aChangedPrerequisiteBreaksTheDigestToo() throws Exception {
+		// pre-requisites.sql builds the tables every assertion reads, so a store
+		// with a changed one runs differently while its assertion set is
+		// untouched. A digest blind to that cannot answer "would this reproduce
+		// the old report".
+		String tampered = identified("international", "2026.07.27", UUID_A, "aaaa")
+				.replace("\"sha256\": \"h1\"", "\"sha256\": \"h2\"");
+		IOException e = assertThrows(IOException.class,
+				() -> DuckStore.parse(tampered).identity());
+		assertTrue(e.getMessage().contains("declares digest"), e.getMessage());
+	}
+
+	@Test
+	void anUnmergedStoreStatesItsOwnIdentity() throws Exception {
+		// The gap this closes: an unmerged store - every deployment that pins no
+		// packs - answered "no packs", so a report and GET /assertions/packs said
+		// nothing at all about the assertions that ran, on the normal case.
+		DuckStore store = DuckStore.parse(identified("international", "2026.07.27",
+				UUID_A, "aaaa"));
+		List<DuckStore.PackRecord> provenance = store.provenance();
+		assertEquals(1, provenance.size());
+		assertEquals("international", provenance.get(0).name());
+		assertEquals("2026.07.27", provenance.get(0).version());
+		assertEquals(digestOf(UUID_A, "aaaa"), provenance.get(0).digest());
+		assertEquals(1, provenance.get(0).assertions());
+	}
+
+	@Test
+	void anEditedStoreIsRefusedRatherThanBelieved() throws Exception {
+		// A digest a runtime only repeats is a claim. This one is recomputed, so
+		// a store edited after publication cannot describe itself as the store
+		// that was published - which is the whole value of recording it.
+		String tampered = identified("international", "2026.07.27", UUID_A, "aaaa")
+				.replace("\"sha256\": \"aaaa\"", "\"sha256\": \"bbbb\"");
+		IOException e = assertThrows(IOException.class,
+				() -> DuckStore.parse(tampered).identity());
+		assertTrue(e.getMessage().contains("declares digest"), e.getMessage());
+		assertTrue(e.getMessage().contains("international@2026.07.27"), e.getMessage());
+	}
+
+	@Test
+	void aStorePublishedBeforeIdentitiesIsReadableAndSaysNothing() throws Exception {
+		// Refusing it would make an old artefact unrunnable to gain a label.
+		DuckStore store = DuckStore.parse(pack(UUID_A, "a.sql", "SELECT 1", MACRO_A, "h1"));
+		assertTrue(store.identity().isEmpty());
+		assertTrue(store.provenance().isEmpty());
+	}
+
+	@Test
+	void aMergedStoreReportsItsPacksRatherThanTheBaseIdentity() throws Exception {
+		// provenance() must not prefer the base's own identity once a merge has
+		// happened: the merged list is the complete answer and the base is one
+		// entry in it.
+		DuckStore merged = DuckStorePacks.merge(List.of(
+				packOf("international", "2026.07.27",
+						identified("international", "2026.07.27", UUID_A, "aaaa")),
+				packOf("amtv4", "2026.09.1",
+						pack(UUID_B, "b.sql", "SELECT 2", MACRO_B, "h1"))));
+		assertEquals(List.of("international", "amtv4"),
+				merged.provenance().stream().map(DuckStore.PackRecord::name).toList());
+	}
+
 	@Test
 	void mergingNothingIsRefused() {
 		// An empty store reports every release as clean, which is the one

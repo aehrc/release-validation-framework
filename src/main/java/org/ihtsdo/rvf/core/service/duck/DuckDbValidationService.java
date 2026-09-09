@@ -925,10 +925,22 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 		// another copy: the merged store records the packs it was assembled
 		// from, so provenance travels inside the artefact and there is one
 		// answer rather than two that can disagree.
-		report.setAssertionPacks(store.packs().stream()
-				.map(pack -> new ValidationReport.AssertionPackRecord(
-						pack.name(), pack.version(), pack.digest(), pack.assertions()))
-				.toList());
+		// provenance(), not packs(): an unmerged store - every deployment that
+		// pins none - has no pack list, so this said NOTHING about the
+		// assertions that ran on exactly the deployments that are the norm.
+		try {
+			report.setAssertionPacks(store.provenance().stream()
+					.map(pack -> new ValidationReport.AssertionPackRecord(
+							pack.name(), pack.version(), pack.digest(), pack.assertions()))
+					.toList());
+		} catch (IOException e) {
+			// The store's declared digest does not match its assertions. The run
+			// has already happened, so the report is real and must be written -
+			// but it cannot claim provenance it failed to verify. Empty plus a
+			// loud log, never a name and digest this run did not confirm.
+			LOGGER.error("The executed store cannot state its provenance, so this "
+					+ "report carries none: {}", e.getMessage());
+		}
 		try {
 			extractor.extractTestResults(items, executionConfig);
 

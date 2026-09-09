@@ -48,11 +48,22 @@ the configuration (1,482 records, SQL 425, 200 amtv4, 5 real failures), but it
 was queued by hand. One check of the next resource-triggered run closes it.
 *Acceptance:* a scheduled build with `amtv4` in `groupsList` and SQL 425.
 
-**3.2 Give the bundled store an identity.** It reports as `bundled` with no
-version or digest, so nothing can be required of it. Emit a version and a
-sha256 in the store, and surface both in `GET /assertions/packs`.
-*Acceptance:* provenance for a packless deployment names a real version and
-digest, and `DuckStorePacksTest` pins it.
+**3.2 Give the bundled store an identity. DONE 2026-09-09.** It reported as the
+literal `bundled`, version `bundled`, digest `bundled`. Now
+`international 2026.07.27 sha256:d6f0a930e8acd55f`, where the version is the
+corpus's own commit date (a rebuild of unchanged inputs gives the same identity;
+dates are orderable, a sha is not) and the digest covers every assertion's
+source hash plus the prerequisites. **Recomputed on load, not repeated** -
+editing either kind of hash in the real 360-assertion store is refused, naming
+both digests. Python and Java compute it independently and agree.
+
+The gap was on the NORMAL deployment: `loadedPacks()` is configuration, so one
+pinning no packs answered `[]`, and the report and `GET /assertions/packs` said
+nothing about the assertions that ran. Both now read `DuckStore.provenance()`.
+Republishing changed **only** the new `pack` node - 0 assertions' SQL - so there
+is no behavioural risk in the shipped artefact. 30 tests green across
+`DuckStorePacksTest` and `AssertionPackReloadTest`, including a cold-server
+ordering trap the endpoint hit.
 
 **3.3 Declared pack dependencies.** With 3.2 done, a pack can say
 `requires: {international: {atLeast: <version>}}` or an exact digest, and the
