@@ -218,9 +218,22 @@ was not supplied - a skipped statement builds what this one reads`. Test:
 `aPartlyDependentAssertionNamesTheMissingReleaseNotJustTheMissingTable`, which
 pins the outcome as well as the message.
 
-**3.10 AMT assertion digests.** `AssertionCorpusDigestTest` covers the 360
-international assertions; the 200 AMT ones have no recording. Belongs beside
-them in `aehrc/rvf`, so it lands with 1.2.
+**3.10 AMT assertion digests. PARTLY COVERED 2026-09-09; the rest belongs in
+`aehrc/rvf`.** Two things landed today that cover part of it:
+
+* the pack identity from 3.2 gives the AMT pack a digest over every assertion's
+  source hash AND the prerequisites - `amtv4 2026.09.1
+  sha256:ef49b93a06009258` for the 560-assertion build - **recomputed on load**,
+  so an edited pack is refused rather than believed;
+* `verifyExecutable` from the reload work runs the whole merged corpus against
+  an empty schema before any swap, and measured 560 assertions in 2,150ms - so
+  the AMT 200 do now get an executability check, on every reload and every
+  pinned run.
+
+What is still missing is the PER-ASSERTION recording `AssertionCorpusDigestTest`
+does for the international 360, and that has to live beside the scripts in
+`aehrc/rvf`: recording a digest for an assertion whose SQL is not in this
+repository would pin a number nobody here can regenerate. It lands with 1.2.
 
 ## 4. Known, deliberate, not scheduled
 
