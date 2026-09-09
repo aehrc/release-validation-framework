@@ -52,6 +52,11 @@ class DuckDbAssertionExecutionServiceTest {
 			   "file": "needs-previous.sql", "text": "Needs previous", "keywords": "k",
 			   "statements": [
 				"insert into qa_result (run_id, assertion_id, concept_id, details) select 424242424242424242, 'rvfph_assertionuuid_', id, 'x' from rvfph_previous_.concept_s"]},
+			  "55555555-5555-5555-5555-555555555555": {
+			   "file": "partly-needs-previous.sql", "text": "Partly needs previous", "keywords": "k",
+			   "statements": [
+				"create table rvfph_prospective_.tmp_active_desc as select id from rvfph_previous_.concept_s",
+				"insert into qa_result (run_id, assertion_id, concept_id, details) select 424242424242424242, 'rvfph_assertionuuid_', id, 'y' from rvfph_prospective_.tmp_active_desc"]},
 			  "33333333-3333-3333-3333-333333333333": {
 			   "file": "broken.sql", "text": "Broken SQL", "keywords": "k",
 			   "statements": ["select * from rvfph_prospective_.no_such_table"]},
@@ -174,6 +179,29 @@ class DuckDbAssertionExecutionServiceTest {
 		assertNotNull(item.getFailureMessage());
 		assertTrue(item.getFailureMessage().contains("<PREVIOUS>"), item.getFailureMessage());
 		assertTrue(item.getFailureMessage().startsWith("Not run:"), item.getFailureMessage());
+	}
+
+	@Test
+	void aPartlyDependentAssertionNamesTheMissingReleaseNotJustTheMissingTable() {
+		// The corpus has this shape for real:
+		// component-centric-snapshot-description-active-inactive-term-match.sql
+		// builds tmp_active_desc from the PREVIOUS release in statement 3 of 10
+		// and joins it in statement 6. With no previous release the build is
+		// skipped and the join dies on "Table with name tmp_active_desc does not
+		// exist", which names a symptom nobody can act on.
+		service.prepareSchema();
+		TestRunItem item = service.execute(List.of(
+				assertion("55555555-5555-5555-5555-555555555555", 505L, "Partly needs previous")))
+				.get(0);
+
+		String message = item.getFailureMessage();
+		assertNotNull(message);
+		assertTrue(message.contains("<PREVIOUS>"), message);
+		assertTrue(message.contains("builds what this one reads"), message);
+		// The OUTCOME must not change: MySQL fails this assertion too when no
+		// previous release is supplied, so reporting it as "not run" here would
+		// trade a nicer message for a new divergence.
+		assertTrue(message.startsWith("Error executing DuckDB statement"), message);
 	}
 
 	@Test

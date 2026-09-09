@@ -178,14 +178,26 @@ predates pack provenance, so which assertions produced it cannot be answered"*
 rather than staying silent. Silence there reads as "the usual ones", which is
 the assumption recording provenance exists to remove.
 
-**3.9 Decide on the partial-skip behaviour.** An assertion mixing
-previous-release-dependent statements with independent ones FAILS rather than
-skipping when no previous release is supplied, because the later statements
-reference a temp table the skipped one would have built
-(`component-centric-snapshot-description-active-inactive-term-match.sql`).
-Either report it as not-run, or record it as upstream behaviour with evidence.
-*Acceptance:* a decision, with either a fix and a test or an entry in the
-divergences file.
+**3.9 The partial-skip behaviour. DECIDED 2026-09-09: keep the outcome, name
+the cause.** `component-centric-snapshot-description-active-inactive-term-match`
+builds `tmp_active_desc` from the previous release in statement 3 of 10 and
+joins it in statement 6, so with no previous release the build is skipped and
+the join dies on `Table with name tmp_active_desc does not exist` - a symptom
+nobody can act on.
+
+**Why not report it as not-run.** The incumbent fails it too. `MySqlQueryTransformer`
+skips a statement only when it contains the literal `<PREVIOUS>` (a bare
+`continue`, line 57-61), and this corpus writes bound aliases like
+`prev_description_s` instead - so MySQL does not skip it at all, it substitutes
+an absent schema and errors. Reporting a skip on the DuckDB side would trade a
+nicer message for a NEW divergence: skip here, error there, and a report that
+disagrees about whether the check happened.
+
+So the outcome is unchanged - same error, same incomplete count - and the
+message now says `after skipping 1 statement(s) that require <PREVIOUS>, which
+was not supplied - a skipped statement builds what this one reads`. Test:
+`aPartlyDependentAssertionNamesTheMissingReleaseNotJustTheMissingTable`, which
+pins the outcome as well as the message.
 
 **3.10 AMT assertion digests.** `AssertionCorpusDigestTest` covers the 360
 international assertions; the 200 AMT ones have no recording. Belongs beside

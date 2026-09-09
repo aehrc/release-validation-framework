@@ -195,7 +195,27 @@ public class DuckDbAssertionExecutionService {
 			try (Statement st = connection.createStatement()) {
 				st.execute(bound.sql());
 			} catch (SQLException e) {
-				item.setFailureMessage("Error executing DuckDB statement: " + e.getMessage());
+				// An assertion whose statements are PARTLY release-dependent: the
+				// dependent one was skipped above and this one reads what it
+				// would have built, so DuckDB says "Table with name
+				// tmp_active_desc does not exist" and the actual cause - no
+				// previous release - is nowhere in the message.
+				//
+				// The OUTCOME is deliberately unchanged. MySQL fails this
+				// assertion too when no previous release is supplied (its skip
+				// tests for the literal <PREVIOUS> placeholder, while this
+				// corpus writes bound aliases like prev_description_s, so it
+				// substitutes a null schema and errors instead of skipping).
+				// Reporting it as "not run" here would make DuckDB skip where
+				// the incumbent errors, which is a new divergence traded for a
+				// nicer message. So: same failure, stated cause.
+				String cause = skippedFor.isEmpty() ? ""
+						: " after skipping " + skippedFor.size() + " statement(s) that require "
+								+ String.join(", ", skippedFor.stream().distinct().toList())
+								+ ", which was not supplied - a skipped statement builds what "
+								+ "this one reads";
+				item.setFailureMessage("Error executing DuckDB statement" + cause + ": "
+						+ e.getMessage());
 				item.setRunTime(System.currentTimeMillis() - start);
 				return item;
 			}
