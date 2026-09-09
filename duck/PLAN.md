@@ -251,6 +251,58 @@ does for the international 360, and that has to live beside the scripts in
 `aehrc/rvf`: recording a digest for an assertion whose SQL is not in this
 repository would pin a number nobody here can regenerate. It lands with 1.2.
 
+**3.11 Gate the AMT parity, not only the international.** Asked directly:
+*does this plan include the tests that prove parity for the assertions running
+DuckDB vs MySQL?* Honestly, for the international corpus yes and for the AMT 200
+not yet:
+
+| what is proven | how | where |
+|---|---|---|
+| 200 international assertions, per assertion, every night | `compare_reports.py --gate` classifies each divergence against `ci/known-engine-divergences.json` by cause and direction, and fails on an unexplained one, on a baseline entry that stopped diverging, and on coverage loss. 198/200 identical on the first autonomous green (15833) | nightly, ADO 64/66 |
+| the regex surface, per PREDICATE | `ci/regexp_oracle.py` + `RegexpOracleProbe`: 84 calls, 83 identical on 1,826,331 real terms, one real defect found and fixed | [REGEXP-PARITY.md](REGEXP-PARITY.md) |
+| every assertion still executes and is unchanged | `AssertionCorpusDigestTest` runs all 360 against an empty schema in ~3s and digests them; the pack identity (3.2) extends the digest half to all 560 | build |
+| the AMT 200 against MySQL, per assertion | **once, by hand, today**: 259 assertions, MySQL 4020s vs DuckDB 120s, 3 divergences (§3.6b) | nothing gates it |
+
+So the missing piece is precise: the AMT set has no *baseline* and no *gate*.
+`ci/known-engine-divergences.json` is keyed to the international nightly - its
+two entries are an INT-release module rule and the `<PREVIOUS>`/`<DEPENDENCY>`
+skip class - and an AU+AMT run diverges for its own reasons, which is why
+today's three are recorded in the plan rather than in that file.
+
+*Acceptance:* an AU/AMT divergence baseline with each of the three classified
+(the 1,405,850-finding MySQL defect is `incumbent-higher` with evidence; the
+other two need diagnosis), and `az/azure-pipeline.engine-ab.yml` able to run
+with `--groups amtv4` and gate against it. The prerequisite is 3.6a, which is
+already done: without the corpus declaring `pre-requisites.sql`, MySQL cannot
+run these assertions at all.
+
+**3.12 The international corpus as a pack, and what a pin cannot reproduce.**
+Also asked: *what about the pack for the international tests?* Today it is not a
+pack - it is the store baked into the image, `international@2026.07.27`, and the
+engine always uses it as the merge BASE so a pack set cannot silently drop it.
+
+That is right for safety and it caps what 3.4 can reproduce. A per-run pin names
+PACKS; the base comes from the image. So "re-run build 16247 with the assertions
+it actually used" reproduces the AMT side exactly and the international side
+only as far as the deployed image happens to match. Worse, pinning a DIFFERENT
+international version cannot work today: the same uuid with different SQL is a
+merge conflict, which is the rule that makes packs safe.
+
+Two ways out, and the choice is a design decision rather than a task:
+
+* **Publish the international store as a pack too** (from this repo - it is
+  public, so no secrecy question) and let a pin REPLACE the base rather than
+  extend it, with the replacement named explicitly so it cannot happen by
+  accident. Full reproducibility; the cost is that "the base is always the
+  bundled corpus" stops being an invariant.
+* **Leave it bundled** and accept that reproducing an old report exactly means
+  running the old IMAGE, which the tag already identifies. Nothing to build; the
+  cost is that pack pins are only half an answer.
+
+*Acceptance:* a decision recorded here. My inclination is the second until
+someone actually needs to re-run an old report, because the first trades a
+load-bearing invariant for a capability nobody has asked for yet.
+
 ## 4. Known, deliberate, not scheduled
 
 * `minAssertions` 1,400 / `minSqlAssertions` 400 depend on the AMT overlay

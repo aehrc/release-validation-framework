@@ -370,6 +370,42 @@ Not done here on purpose: publishing requires a branch on a private repository,
 which is a decision rather than a step.
 
 
+## Publishing: GitHub Actions in the private repo, 2026-09-09
+
+Decided shape, matching what `ci/pack_update_check.py` already reads: a workflow
+in `aehrc/rvf` builds the pack and attaches it to a **GitHub release**, whose
+asset API carries a `sha256:` digest per asset - so the pin, the drift check and
+the engine's verification all use the registry's own number rather than one
+recorded beside it.
+
+What that workflow needs, all of it known:
+
+* `publish_store.py` plus `rvfsql.py`, `amtv4.py`, `procedures.py` and
+  `manifest.py` - they live there already;
+* **sqlglot**, which is the only dependency (`pip install sqlglot`); the
+  publisher refuses to run without it rather than emitting untranspiled SQL;
+* `pre-requisites.sql` and `create-tables-mysql.sql`, which live in THIS public
+  repo under `duck/` - fetch them at a pinned tag rather than vendoring, so the
+  pack cannot silently be built against a different DDL from the engine's;
+* `--pack-name amtv4 --pack-version <date> --requires international:atLeast=<date>`
+  (§"A pack can say what it needs"), and the corpus manifest must declare
+  `pre-requisites.sql` as `category="resource"` or the INCUMBENT engine cannot
+  run those assertions at all - see PLAN §3.6a, which cost 192 incomplete
+  assertions to learn.
+
+Nothing here needs a token beyond the workflow's own `GITHUB_TOKEN`: the release
+is in the same repository as the scripts. Consumers need a read token only while
+the repo is private, which is the `authHeader` a pin already supports - by
+reference to a secret, never as a URL parameter.
+
+**The international corpus is a different question**, and it is open rather than
+answered: today it is the store baked into the image and always the merge base,
+which is what stops a pack set silently dropping it. That also caps what a
+per-run pin can reproduce. The fork - publish it as a replaceable pack, or leave
+it bundled and reproduce old reports by image tag - is written out in
+PLAN §3.12 with the tradeoff, because it trades a load-bearing invariant either
+way and is not mine to settle quietly.
+
 ## The reload proves the corpus EXECUTES, 2026-09-08
 
 Digest verification proves a pack is what was approved; the merge proves two
