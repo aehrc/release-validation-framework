@@ -327,25 +327,35 @@ stages:
 
                 REL='${{ parameters.release }}'
                 if [ -z "$REL" ]; then
-                  echo "--- top level of $SHARE ---"
-                  ls_share | sed 's/^/    /'
-                  RUN="$(ls_share | awk -F'\t' '$2 == "dir" {print $1}' | sort | tail -1)"
-                  [ -n "$RUN" ] || { echo "##vso[task.logissue type=error]$SHARE has no directories to search"; exit 1; }
-                  echo "--- newest run directory: $RUN ---"
-                  # output-files if it is there, the run directory itself if not:
-                  # the pointer the nightly reads names <run>/output-files/<zip>,
-                  # but that is SI's layout to change, not ours to require.
-                  for SUB in "$RUN/output-files" "$RUN"; do
-                    echo "  looking in $SUB"
-                    CAND="$(ls_share "$SUB" | awk -F'\t' '{print $1}' \
-                            | grep -iE '\.zip$' | grep -iE 'AU' | sort | tail -1)"
-                    if [ -n "$CAND" ]; then REL="$SUB/$CAND"; break; fi
-                    ls_share "$SUB" | sed 's/^/      /'
+                  # 684 directories on this share (build 16314). Most are named
+                  # by timestamp - 2024-05-15T005507 - and a handful are GUIDs,
+                  # which sort AFTER the timestamps and are what a plain
+                  # `sort | tail -1` picked: a GUID directory with no
+                  # output-files, so the run died on ResourceNotFound.
+                  #
+                  # Only the timestamp shape is considered, and for that shape a
+                  # name sort IS chronological.
+                  RUNS="$(ls_share | awk -F'\t' '$2 == "dir" {print $1}' \
+                          | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{6}$' | sort)"
+                  [ -n "$RUNS" ] || { echo "##vso[task.logissue type=error]$SHARE has no timestamp-named run directories"; exit 1; }
+                  echo "--- $(echo "$RUNS" | wc -l) run directories, newest last ---"
+                  echo "$RUNS" | tail -5 | sed 's/^/    /'
+
+                  # Newest first, and more than one, because the newest build is
+                  # not necessarily an AU edition - and a weekly parity run
+                  # wants the newest AU one rather than nothing.
+                  for RUN in $(echo "$RUNS" | tail -12 | tac); do
+                    for SUB in "$RUN/output-files" "$RUN"; do
+                      CAND="$(ls_share "$SUB" 2>/dev/null | awk -F'\t' '{print $1}' \
+                              | grep -iE '\.zip$' | grep -iE 'AU' | sort | tail -1)"
+                      if [ -n "$CAND" ]; then REL="$SUB/$CAND"; break 2; fi
+                    done
+                    echo "  $RUN holds no AU zip"
                   done
-                  [ -n "$REL" ] || { echo "##vso[task.logissue type=error]no AU edition zip under $RUN"; exit 1; }
-                  # Sorted by NAME, since these carry their effective time -
-                  # SnomedCT_..._20260831.zip - which orders correctly and does
-                  # not depend on when a file happened to be copied.
+                  [ -n "$REL" ] || { echo "##vso[task.logissue type=error]none of the newest 12 runs holds an AU edition zip"; exit 1; }
+                  # The zip name carries its effective time -
+                  # SnomedCT_..._20260831.zip - so a name sort within a run is
+                  # also chronological.
                   echo "no release given; using $REL"
                 fi
                 fetch "$REL" shared-jobs/releases
