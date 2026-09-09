@@ -134,12 +134,34 @@ stages:
                 java -version 2>&1 | head -2
 
           - task: Bash@3
+            displayName: 'Build the pinned forks'
+            # Build 16302 died here, 16 minutes in, with "Could not find
+            # artifact org.ihtsdo.drools:snomed-drools-engine:jar:6.1.3-aehrc-perf
+            # in ihtsdo-releases". The pom pins four libraries to -aehrc-perf
+            # versions that exist in NO remote repository - they are built from
+            # IHTSDO sources plus the patches in duck/ - so a fresh agent cannot
+            # resolve them and the message names a repository rather than the
+            # cause. The image pipeline has always done this; this one was
+            # written against a host whose .m2 already held them.
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                MAVEN_REPO_LOCAL="$(Pipeline.Workspace)/.m2" \
+                FORKS_BUILD_DIR="$(Agent.TempDirectory)/forks" \
+                  ./duck/build-pinned-forks.sh
+
+          - task: Bash@3
             displayName: 'Build the jar'
             inputs:
               targetType: 'inline'
               script: |
                 set -euo pipefail
-                mvn -B -ntp package -DskipTests
+                # The same settings and local repository as the fork build, or
+                # the forks it just installed are invisible to this step.
+                mvn -B -ntp -s duck/maven-settings.xml \
+                  -Dmaven.repo.local=$(Pipeline.Workspace)/.m2 \
+                  package -DskipTests -Ddependency-check.skip=true
                 ls -la target/release-validation-framework-*.jar
 
           - task: Bash@3
@@ -232,7 +254,12 @@ stages:
                 # jib needs no Docker daemon, which is why this works on the
                 # k8s agent pool. buildTar keeps the image local; publishing is
                 # a separate, deliberate step.
-                mvn -B -ntp jib:buildTar -DskipTests \
+                # Same settings and local repository as the jar build, for the
+                # same reason: without them the parent POM and the -aehrc-perf
+                # forks are unresolvable on a fresh agent.
+                mvn -B -ntp -s duck/maven-settings.xml \
+                    -Dmaven.repo.local=$(Pipeline.Workspace)/.m2 \
+                    jib:buildTar -DskipTests -Ddependency-check.skip=true \
                     -Djib.from.platforms=linux/amd64 \
                     -Ddocker.registry=ontoserver.azurecr.io \
                     -Ddocker.image.prefix=aehrc-rvf \
