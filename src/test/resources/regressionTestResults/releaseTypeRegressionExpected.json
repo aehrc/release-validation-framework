@@ -1,7 +1,7 @@
 {
   "assertionType" : "release-type-validation",
   "totalAssertionsRun" : 134,
-  "totalAssertionsFailed" : 100,
+  "totalAssertionsFailed" : 105,
   "results" : [ {
     "assertionName" : "There must be actual changes made to previously published complex map refset components in order for them to appear in the current delta.",
     "assertionUuid" : "80463c76-d84e-4a1a-8abb-c5b4d12b5da4",
@@ -2064,8 +2064,24 @@
   }, {
     "assertionName" : "The new Concrete Value Relationship Full file must be derived from the previously published Full file plus the new Delta content.",
     "assertionUuid" : "1b9e2371-1b0a-46d4-ac9d-fd222329ad9d",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "702769005",
+      "detail" : "Relationship Concrete Values: id=3100000006026 is in current full file, but not in prior full file.",
+      "componentId" : "3100000006026",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.relationship_concrete_values_f",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "702769005",
+      "detail" : "Relationship Concrete Values: id=3100000006026 is in current FULL file, but not in delta file.",
+      "componentId" : "3100000006026",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.relationship_concrete_values_f",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 2
   }, {
     "assertionName" : "The current delta file is an accurate derivative of the current full file.",
     "assertionUuid" : "1be975bb-2a1b-4c21-ae61-6e9fcd556718",
@@ -3030,13 +3046,29 @@
   }, {
     "assertionName" : "The new MRCM Attribute Domain Refset Snapshot file must be derived from the new Full file.",
     "assertionUuid" : "501dc4c4-49d4-41d9-9751-271687d54820",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "702769005",
+      "detail" : "MRCM Attribute Domain Refset: id=9bdbbcf2-710b-5f7d-953b-99462c25e519 is in SNAPSHOT file, but not in FULL file.",
+      "componentId" : "9bdbbcf2-710b-5f7d-953b-99462c25e519",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "The new MRCM Domain Refset Snapshot file must be derived from the new Full file.",
     "assertionUuid" : "504d10af-deba-46f0-85d5-f792749b0d62",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "703860006",
+      "detail" : "MRCM Domain Refset: id=e339cbd9-9c52-57d4-8af4-49828816da32 is in SNAPSHOT file, but not in FULL file.",
+      "componentId" : "e339cbd9-9c52-57d4-8af4-49828816da32",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmdomainrefset_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "The new Association Refset Full file must be derived from the previously published Full file plus the new Delta content.",
     "assertionUuid" : "5491a181-02b0-48a8-bb17-f65c347e9b91",
@@ -3741,8 +3773,24 @@
   }, {
     "assertionName" : "The new Concrete Value Relationship Snapshot file must be derived from the new Full file.",
     "assertionUuid" : "61e574b6-e38b-4561-9240-5169ab9d88db",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "702769005",
+      "detail" : "Relationship Concrete Values: id=3100000001021 is in SNAPSHOT file, but not in FULL file.",
+      "componentId" : "3100000001021",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.relationship_concrete_values_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "702769005",
+      "detail" : "Relationship Concrete Values: id=3100000006026 is in FULL file, but not in SNAPSHOT file.",
+      "componentId" : "3100000006026",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.relationship_concrete_values_f",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 2
   }, {
     "assertionName" : "The new Concept Snapshot file must be derived from the new Full file.",
     "assertionUuid" : "645e3292-18d6-41df-b42a-58ba4d7240d5",
@@ -4396,8 +4444,16 @@
   }, {
     "assertionName" : "The new MRCM Attribute Range Refset Snapshot file must be derived from the new Full file.",
     "assertionUuid" : "7c87a865-beb5-4e03-a489-2b05a40bd860",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "702769005",
+      "detail" : "MRCM Attribute Range Refset: id=7a1af510-0bb7-521c-851d-e5533f6e41b9 is in SNAPSHOT file, but not in FULL file.",
+      "componentId" : "7a1af510-0bb7-521c-851d-e5533f6e41b9",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributerangerefset_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "The current Relationship Concrete Values full file contains all previously published data unchanged.",
     "assertionUuid" : "7d105b20-ce21-49c2-b16d-b49df13fdfea",

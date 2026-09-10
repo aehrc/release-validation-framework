@@ -27,62 +27,29 @@
     "LF-only, so that statement read each file as ONE line, discarded it, and",
     "loaded 0 rows with no error: 90 empty tables and every previous-dependent",
     "assertion passing over nothing. Before that normalisation this arm read 50.9%",
-    "identical and every MySQL number in it was meaningless."
+    "identical and every MySQL number in it was meaningless.",
+    "",
+    "RETIRED 2026-09-10: 2e0eb135 / duckdb-does-not-pad-trailing-spaces-in-string-comparison.",
+    "DuckBinder now reproduces MySQL's PAD SPACE comparison where it can - a",
+    "statement that GROUPS BY term, and is not grouping inside a derived table, has",
+    "its term references wrapped in rtrim(). Both engines now report 169 failures",
+    "on this fixture and 212 of 213 assertions agree.",
+    "",
+    "It is NOT reproduced for term JOINS, and that is a decision rather than an",
+    "omission: rewriting those made three assertions fail to execute at all -",
+    "unique-FSN, unique-fsn-case-insensitive-checking and unique-preferred-terms",
+    "each group by term INSIDE a derived table and then join the outer query on",
+    "dup.term, so rewriting the inner projection renames the column and the outer",
+    "reference stops resolving. Three assertions that do not run is a worse report",
+    "than one false negative. 21 statements in 19 assertions carry that exposure,",
+    "none of them divergent on any release measured so far, and doing it properly",
+    "needs the parse tree - in the publisher that transpiles the corpus, not here."
   ],
   "directions": {
     "candidate-higher": "DuckDB reports more failures than MySQL for an assertion",
     "incumbent-higher": "MySQL reports more failures than DuckDB for an assertion"
   },
-  "divergences": {
-    "2e0eb135-fd7d-4f24-83c1-0cba797ee766": {
-      "class": "duckdb-does-not-pad-trailing-spaces-in-string-comparison",
-      "slug": "duckdb-does-not-pad-trailing-spaces-in-string-comparison",
-      "direction": "incumbent-higher",
-      "appliesTo": "component-centric-snapshot-description-unique-term-in-concept, and ~20 other assertions that join or group on term",
-      "assertionUuids": [
-        "2e0eb135-fd7d-4f24-83c1-0cba797ee766"
-      ],
-      "observed": "MySQL 1 in assertionsFailed; DuckDB 0 in assertionsPassed",
-      "cause": [
-        "MySQL IS RIGHT AND THIS IS A DUCKDB FALSE NEGATIVE. It is listed so the",
-        "gate stays usable, NOT because the answer is acceptable.",
-        "",
-        "Concept 703860006 has two ACTIVE descriptions whose terms differ only in",
-        "trailing whitespace:",
-        "",
-        "  2989790014  active=1  term='Exposure to vibration  '   (two trailing)",
-        "  2989790017  active=1  term='Exposure to vibration '    (one trailing)",
-        "",
-        "MySQL's collation is PAD SPACE: trailing spaces are ignored in comparison",
-        "and in GROUP BY, so the two rows group together, count(distinct id) is 2,",
-        "and the duplicate is reported. DuckDB compares exactly, sees two distinct",
-        "terms, and reports nothing.",
-        "",
-        "The assertion is 'For a given concept, all active description terms are",
-        "unique', and its own comment says so. Two terms differing only by trailing",
-        "spaces are indistinguishable to a reader and violate that. The port is",
-        "otherwise faithful - source and transpiled SQL both filter active = 1 and",
-        "both use count(distinct a.id) > 1 - so this is not a transpilation slip in",
-        "this assertion, it is a string-semantics difference the port does not yet",
-        "model.",
-        "",
-        "EXPOSURE, measured across the bundled corpus: 21 statements in 19",
-        "assertions join term = term, 8 statements in 8 assertions GROUP BY term,",
-        "and 1 uses DISTINCT over term. Only this one fires on this fixture because",
-        "only this concept has a trailing-space duplicate; the other ~20 are latent.",
-        "",
-        "This is the same SHAPE as the REGEXP work: a MySQL string behaviour that",
-        "has to be replicated deliberately rather than assumed. See",
-        "duck/REGEXP-PARITY.md for how that one was measured and closed."
-      ],
-      "evidence": [
-        "MySQL report detail: 'Duplicate term=Exposure to vibration  '",
-        "Loading the same file by hand and running MySQL's own query returns no rows,",
-        "which is what pointed at the collation rather than the data"
-      ],
-      "moveWhen": "The port normalises trailing whitespace where MySQL's PAD SPACE collation would, and both engines report 1"
-    }
-  },
+  "divergences": {},
   "coverage": {
     "_README": [
       "Assertions one engine reports that the other does not. Zero here, and it",

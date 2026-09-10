@@ -214,4 +214,70 @@ class DuckBinderTest {
 		assertTrue(b.isSkipped());
 	}
 
+
+	@Test
+	void groupingOnTermIgnoresTrailingSpacesAsMySqlsCollationDoes() {
+		// MySQL's collation is PAD SPACE: 'x ' and 'x  ' group together. DuckDB
+		// compares exactly, so it found no duplicate where MySQL found one - on
+		// an assertion that says active description terms are unique.
+		DuckBinder.Bound b = binder("previous", null).bind(
+				"insert into qa_result select a.conceptid, 'Duplicate term=' || a.term "
+						+ "from rvfph_prospective_.description_s as a where a.active = 1 "
+						+ "group by a.conceptid, a.term having count(distinct a.id) > 1", "1");
+		// Rewritten in BOTH places, because a GROUP BY key and the SELECT
+		// expression over it have to agree or DuckDB rejects the statement.
+		assertTrue(b.sql().contains("'Duplicate term=' || rtrim(a.term)"), b.sql());
+		assertTrue(b.sql().contains("group by a.conceptid, rtrim(a.term)"), b.sql());
+	}
+
+	@Test
+	void aTermJoinIsLeftAloneBecausePatternsCannotDoItSafely() {
+		// MySQL's PAD SPACE applies here too, so this IS unreplicated exposure -
+		// 21 statements in 19 assertions - and it is left that way on purpose.
+		// Rewriting term comparisons made three assertions fail to EXECUTE:
+		// unique-FSN, unique-fsn-case-insensitive-checking and
+		// unique-preferred-terms each group by term inside a derived table and
+		// then join the outer query on dup.term, so rewriting the inner
+		// projection renames the column and the outer reference stops resolving.
+		// Three assertions that do not run is a worse report than one false
+		// negative. Doing it properly needs the parse tree, in the publisher.
+		DuckBinder.Bound b = binder("previous", null).bind(
+				"insert into qa_result select a.id from rvfph_prospective_.description_s as a "
+						+ "join rvfph_prospective_.description_s as b on a.term = b.term", "1");
+		assertFalse(b.sql().contains("rtrim"), b.sql());
+	}
+
+	@Test
+	void groupingInsideADerivedTableIsLeftAlone() {
+		// The shape that broke: the inner projection would be renamed and
+		// `dup.term` would no longer resolve.
+		DuckBinder.Bound b = binder("previous", null).bind(
+				"insert into qa_result select e.id from rvfph_prospective_.description_s as e "
+						+ "join (select a.term from rvfph_prospective_.description_s as a "
+						+ "group by a.term having count(*) > 1) as dup on e.term = dup.term", "1");
+		assertFalse(b.sql().contains("rtrim"), b.sql());
+	}
+
+	@Test
+	void aStatementThatMerelyReportsATermIsLeftAlone() {
+		// No grouping and no term join, so PAD SPACE cannot change the answer -
+		// and rewriting it would change the reported text for nothing.
+		DuckBinder.Bound b = binder("previous", null).bind(
+				"insert into qa_result select a.id, 'term=' || a.term "
+						+ "from rvfph_prospective_.description_s as a where a.active = 1", "1");
+		assertTrue(b.sql().contains("'term=' || a.term"), b.sql());
+		assertFalse(b.sql().contains("rtrim"), b.sql());
+	}
+
+	@Test
+	void aStatementThatAlreadyTrimsIsNotTrimmedAgain() {
+		// The corpus has two statements that trim maprule themselves. Wrapping
+		// an existing trim would be pointless and could silence a check that
+		// exists to find padding.
+		String sql = "insert into qa_result select a.id from rvfph_prospective_.description_s as a "
+				+ "join rvfph_prospective_.description_s as b on rtrim(a.term) = rtrim(b.term)";
+		DuckBinder.Bound b = binder("previous", null).bind(sql, "1");
+		assertFalse(b.sql().contains("rtrim(rtrim("), b.sql());
+	}
+
 }

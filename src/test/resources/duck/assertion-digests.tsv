@@ -70,7 +70,7 @@
 2b193a88-8dab-4d19-b995-b556ed59398d	release-type-snapshot-description-successive-states.sql	RAN	1	3d9a58424abf22aef57ae3057958f2edb3e9ac3f342016e38cfd7c12d7389737
 2cc6624a-159b-4251-96b5-16b13b6bfdb4	release-type-snapshot-validation-owl-expression.sql	RAN	5	351b37577e8ed3e9ef81d4cf1cfd0e7cc5fc70a151b6176da6d48d2d6092d975
 2ddc9a28-150d-47a4-9b0e-7dbff2efdd72	file-centric-snapshot-association-valid-key.sql	RAN	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-2e0eb135-fd7d-4f24-83c1-0cba797ee766	component-centric-snapshot-description-unique-term-in-concept.sql	RAN	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2e0eb135-fd7d-4f24-83c1-0cba797ee766	component-centric-snapshot-description-unique-term-in-concept.sql	RAN	1	4547da50ca8eca6c8d9cd293bcbd781342672b0b4718114530574ce7ee8b30ee
 2e2542f9-64a4-43d0-bf4e-9029af8b7cf0	component-centric-snapshot-referencedComponentID-in-extended-map-refset-member-with-exceptions-must-be-valid.sql	RAN	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 2e4fd620-7d08-11e1-b0c4-0800200c9a66	component-centric-snapshot-inferred-inactive-concepts.sql	RAN	4	1e5d796c4cf839ba2cfe7da434b83a39c9f6197608c36633c7ae959b25941ccd
 2ecc6223-25a5-4543-a102-62f958e5745e	file-centric-snapshot-be-translated-descriptions-both-french-dutch.sql	RAN	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855

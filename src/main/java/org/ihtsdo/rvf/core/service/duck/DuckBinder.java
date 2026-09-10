@@ -131,7 +131,77 @@ public final class DuckBinder {
 			}
 			return new Bound(null, release);
 		}
+		s = padSpaceTerms(s);
 		return new Bound(QA_RESULT.matcher(s).replaceAll(config.qaResultTable()), null);
+	}
+
+	/**
+	 * A {@code term} reference, for reproducing MySQL's PAD SPACE comparison.
+	 *
+	 * <p>MySQL's collation ignores TRAILING SPACES when it compares and when it
+	 * groups; DuckDB compares exactly. On RVF's own regression fixture concept
+	 * 703860006 has two active descriptions whose terms differ only in trailing
+	 * whitespace - {@code 'Exposure to vibration  '} and
+	 * {@code 'Exposure to vibration '} - so MySQL groups them and reports the
+	 * duplicate while DuckDB reported nothing. For an assertion that says "all
+	 * active description terms are unique", MySQL is right and that was a false
+	 * negative on our side.
+	 */
+	private static final Pattern TERM_REFERENCE = Pattern.compile("\\b(\\w+)\\.term\\b");
+
+	/** GROUP BY over term: the whole statement is rewritten, keys and all. */
+	private static final Pattern GROUPS_BY_TERM = Pattern.compile(
+			"GROUP\\s+BY[^;]*\\bterm\\b", Pattern.CASE_INSENSITIVE);
+
+	/**
+	 * A derived table, which this rewrite must not reach into.
+	 *
+	 * <p>Three assertions - unique-FSN, unique-fsn-case-insensitive-checking and
+	 * unique-preferred-terms - group by {@code a.term} INSIDE a derived table and
+	 * then join the outer query on {@code dup.term}. Rewriting the inner
+	 * projection renames that column, the outer reference stops resolving, and
+	 * the assertion fails to execute at all. Trading one false negative for three
+	 * assertions that do not run is a worse report.
+	 *
+	 * <p>Doing this correctly means keeping the projection's name -
+	 * {@code rtrim(a.term) AS term} - which needs the parse tree, not a pattern.
+	 * That belongs in the publisher that transpiles the corpus, which is not in
+	 * this repository.
+	 */
+	private static final Pattern DERIVED_TABLE = Pattern.compile("\\)\\s+AS\\s+\\w+", Pattern.CASE_INSENSITIVE);
+
+	/**
+	 * Makes a statement's {@code term} comparisons trailing-space-insensitive,
+	 * as MySQL's are.
+	 *
+	 * <p>Applied to the WHOLE statement rather than just the comparison, because
+	 * a GROUP BY key and the SELECT expression over it have to agree: rewriting
+	 * only the GROUP BY leaves DuckDB rejecting the statement outright.
+	 *
+	 * <p>Only statements that group or join on term are touched - 29 of them,
+	 * measured - and the rewrite is a NO-OP on data without trailing spaces, so
+	 * it cannot change the 20-odd that agree today. Nothing in the corpus
+	 * inspects trailing whitespace on a term: the only two statements using trim
+	 * functions work on {@code maprule} and already trim it explicitly, so this
+	 * cannot silence a check that exists to find padding.
+	 *
+	 * <p>The proper home for this is the publisher that transpiles the corpus,
+	 * which is not in this repository. Until it lands there this keeps the two
+	 * engines answering the same question.
+	 */
+	private static String padSpaceTerms(String sql) {
+		if (sql.toLowerCase().contains("rtrim(")) {
+			return sql;
+		}
+		if (GROUPS_BY_TERM.matcher(sql).find() && !DERIVED_TABLE.matcher(sql).find()) {
+			// Every reference, because a GROUP BY key and the SELECT expression
+			// over it have to agree or DuckDB rejects the statement outright.
+			return TERM_REFERENCE.matcher(sql).replaceAll("rtrim($1.term)");
+		}
+		// Everything else keeps MySQL's collation unreplicated: 21 statements in
+		// 19 assertions join on term, and none of them diverges on any release
+		// measured so far. The exposure is recorded rather than guessed at.
+		return sql;
 	}
 
 	/**

@@ -1,7 +1,7 @@
 {
   "assertionType" : "component-centric-validation",
   "totalAssertionsRun" : 96,
-  "totalAssertionsFailed" : 75,
+  "totalAssertionsFailed" : 83,
   "results" : [ {
     "assertionName" : "Active concepts must have correct definition status according to defined axioms.",
     "assertionUuid" : "8090d441-7aeb-4a48-bdc3-2545916aa26d",
@@ -400,8 +400,24 @@
   }, {
     "assertionName" : "Check that the expression constraints, refinements and expression templates in multiple columns in MRCM Attribute Range Refset include only valid SNOMED CT concept identifiers.",
     "assertionUuid" : "9ece50b0-cafc-4e13-a66a-a59d315e9f2c",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "999999999999",
+      "detail" : "MRCM Attribute Range Refset:id=0debabff-8125-569b-a3be-95eb71618873:ConceptId=999999999999 referenced in the column rangeConstraint is not an active concept.",
+      "componentId" : "0debabff-8125-569b-a3be-95eb71618873",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "mrcmattributerangerefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "999999999999",
+      "detail" : "MRCM Attribute Range Refset:id=0debabff-8125-569b-a3be-95eb71618873:ConceptId=999999999999 referenced in the column attributeRule is not an active concept.",
+      "componentId" : "0debabff-8125-569b-a3be-95eb71618873",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "mrcmattributerangerefset_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 2
   }, {
     "assertionName" : "CTV3 simple map refset members are unique.",
     "assertionUuid" : "a2e01ee0-7f25-11e1-b0c4-0800200c9a66",
@@ -418,8 +434,16 @@
   }, {
     "assertionName" : "IDs must be unique in the MRCM Attribute Domain Refset Snapshot file.",
     "assertionUuid" : "a48d78fe-8ab5-4705-bbc5-1286fb2a98a2",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "702769005",
+      "detail" : "MRCM ATTRIBUTE DOMAIN REFSET: id=9bdbbcf2-710b-5f7d-953b-99462c25e519:Non unique id in current MRCM Attribute Domain snapshot file.",
+      "componentId" : "9bdbbcf2-710b-5f7d-953b-99462c25e519",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "The mapTarget in LOINC ExpressionAssociationRefset snapshot is unique.",
     "assertionUuid" : "a6f78382-91c4-4e0a-a9d6-6d47b1a16979",
@@ -592,8 +616,16 @@
   }, {
     "assertionName" : "ReferencedComponentId in MRCM ATTRIBUTE DOMAIN SNAPSHOT exists in the ReferencedComponentId values of MRCM ATTRIBUTE RANGE SNAPSHOT.",
     "assertionUuid" : "bd3bb9ec-97ae-4c53-9686-9c8c63b8d67b",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "700132008",
+      "detail" : "MRCM ATTRIBUTE DOMAIN REFSET: id=635d1053-f8a6-5faa-85d7-3e476ee6caec ReferencedComponentId in MRCM ATTRIBUTE DOMAIN SNAPSHOT does not exist in the ReferencedComponentId values of MRCM ATTRIBUTE RANGE SNAPSHOT",
+      "componentId" : "635d1053-f8a6-5faa-85d7-3e476ee6caec",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "CTV3 simple map refset members are always active.",
     "assertionUuid" : "c0869af0-7f25-11e1-b0c4-0800200c9a66",
@@ -737,8 +769,16 @@
   }, {
     "assertionName" : "Grouped value is either 0 or 1 in MRCM ATTRIBUTE DOMAIN snapshot file.",
     "assertionUuid" : "ce8f4bae-0c51-4248-9c42-8f05a2cccdb4",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "702386002",
+      "detail" : "MRCM ATTRIBUTE DOMAIN REFSET: id=a54c7b67-bdaa-56c1-a04b-631c2d2c6415 has an invalid value 2 for the grouped field.",
+      "componentId" : "a54c7b67-bdaa-56c1-a04b-631c2d2c6415",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "The refsetId of a refset member must be an existing and active concept.",
     "assertionUuid" : "d1417dd6-7a74-4e67-8dc0-156e7c4c489c",
@@ -823,7 +863,7 @@
       "tableName" : "rvf_regression_test_prospective.associationrefset_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 146
+    "totalFailed" : 165
   }, {
     "assertionName" : "Association reference records are referencing the same concept for both referencedComponentId and targetComponentId.",
     "assertionUuid" : "d2727004-cfed-4798-8710-1a088833e775",
@@ -832,8 +872,16 @@
   }, {
     "assertionName" : "IDs must be unique in the MRCM Attribute Range Refset Snapshot file.",
     "assertionUuid" : "d51966ed-e034-4a25-90ef-1eb489c0bd37",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "702769005",
+      "detail" : "MRCM ATTRIBUTE RANGE REFSET: id=7a1af510-0bb7-521c-851d-e5533f6e41b9:Non unique id in current MRCM Attribute Range snapshot file.",
+      "componentId" : "7a1af510-0bb7-521c-851d-e5533f6e41b9",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributerangerefset_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "Lang refset members are active for inactive descriptions in the language refset snapshot file.",
     "assertionUuid" : "d76f1430-7e9a-11e1-b0c4-0800200c9a66",
@@ -939,8 +987,16 @@
   }, {
     "assertionName" : "IDs must be unique in the MRCM Domain Refset Snapshot file.",
     "assertionUuid" : "e980e959-943b-4cdc-998b-f91e670a030b",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "703860006",
+      "detail" : "MRCM DOMAIN REFSET: id=e339cbd9-9c52-57d4-8af4-49828816da32:Non unique id in current MRCM Domain snapshot file.",
+      "componentId" : "e339cbd9-9c52-57d4-8af4-49828816da32",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmdomainrefset_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "Active historical association refset members have active concepts as targets.",
     "assertionUuid" : "eb940ee0-7cd6-11e1-b0c4-0800200c9a66",
@@ -1910,8 +1966,40 @@
   }, {
     "assertionName" : "Check that the expression constraints, refinements and expression templates in multiple columns in MRCM Domain Refset include only valid SNOMED CT concept identifiers.",
     "assertionUuid" : "5d0fdbf5-fef6-44b2-aa42-ebb302132178",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "999999999999",
+      "detail" : "MRCM Domain Refset:id=7e69927f-d456-586b-bb82-6eb71cb6ee11:ConceptId=999999999999 referenced in the column domainConstraint is not an active concept.",
+      "componentId" : "7e69927f-d456-586b-bb82-6eb71cb6ee11",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "mrcmdomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "703649004",
+      "detail" : "MRCM Domain Refset:id=4dabe843-cc49-57d8-96a4-651cba79a6b0:ConceptId=703649004 referenced in the column domainConstraint is not an active concept.",
+      "componentId" : "4dabe843-cc49-57d8-96a4-651cba79a6b0",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "mrcmdomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "999999999999",
+      "detail" : "MRCM Domain Refset:id=7e69927f-d456-586b-bb82-6eb71cb6ee11:ConceptId=999999999999 referenced in the column proximalPrimitiveConstraint is not an active concept.",
+      "componentId" : "7e69927f-d456-586b-bb82-6eb71cb6ee11",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "mrcmdomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "703649004",
+      "detail" : "MRCM Domain Refset:id=4dabe843-cc49-57d8-96a4-651cba79a6b0:ConceptId=703649004 referenced in the column proximalPrimitiveConstraint is not an active concept.",
+      "componentId" : "4dabe843-cc49-57d8-96a4-651cba79a6b0",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "mrcmdomainrefset_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 4
   }, {
     "assertionName" : "There is only one active inactivation reason for a given referenced component in the attribute value snapshot.",
     "assertionUuid" : "638e1194-1934-11e7-819d-3c15c2c6e32e",
@@ -2115,8 +2203,16 @@
   }, {
     "assertionName" : "ReferencedComponentId in MRCM ATTRIBUTE RANGE SNAPSHOT exists in the ReferencedComponentId values of MRCM ATTRIBUTE DOMAIN SNAPSHOT.",
     "assertionUuid" : "73772817-4654-4abf-b801-e849fbae1ba0",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "999999999999",
+      "detail" : "MRCM ATTRIBUTE RANGE REFSET: id=0debabff-8125-569b-a3be-95eb71618873 ReferencedComponentId in MRCM ATTRIBUTE RANGE SNAPSHOT does not exist in the ReferencedComponentId values of MRCM ATTRIBUTE DOMAIN SNAPSHOT",
+      "componentId" : "0debabff-8125-569b-a3be-95eb71618873",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributerangerefset_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "There is an equivalent definition in the en-us and en-gb language when provided.",
     "assertionUuid" : "7c406d6c-7e30-4aa1-b99d-e00b4e2d52a5",

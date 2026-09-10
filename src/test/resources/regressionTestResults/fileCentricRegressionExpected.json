@@ -1,7 +1,7 @@
 {
   "assertionType" : "file-centric-validation",
   "totalAssertionsRun" : 114,
-  "totalAssertionsFailed" : 50,
+  "totalAssertionsFailed" : 68,
   "results" : [ {
     "assertionName" : "All the changes in the release are in the expected set of modules.",
     "assertionUuid" : "81a4f6a9-0f64-4b45-9e9d-310bac0ec4f8",
@@ -203,13 +203,29 @@
   }, {
     "assertionName" : "All referencedComponentIds in the MRCM Attribute Range Refset Snapshot File must refer to valid concepts.",
     "assertionUuid" : "907c11ad-5ad7-49ed-b3e8-1149b1e95716",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "999999999999",
+      "detail" : "MRCM ATTRIBUTE RANGE: id=0debabff-8125-569b-a3be-95eb71618873 : referencedComponentId=999999999999 MRCM Attribute Range Refset contains a ReferencedComponentId that does not exist in the Concept snapshot.",
+      "componentId" : "0debabff-8125-569b-a3be-95eb71618873",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributerangerefset_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "The relationship-concrete-values moduleId,effectiveTime pair should always respect the MDRS.",
     "assertionUuid" : "92c8b144-2f6d-43d6-a9f4-4b4646d46ae5",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "733073007",
+      "detail" : "relationship-concrete-values: Component moduleId: 733073007 is not a valid module defined as per MDRS",
+      "componentId" : "3100000005025",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.relationship_concrete_values_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "ReferenceComponentIds refers to valid concepts in the LOINC MapCorrelationOriginRefset snapshot file.",
     "assertionUuid" : "9e113c74-c6a7-4e22-bff5-58827a348a31",
@@ -321,8 +337,48 @@
   }, {
     "assertionName" : "All contentTypeIds in the MRCM Attribute Range Refset Snapshot File must refer to valid concepts.",
     "assertionUuid" : "b110b8de-53df-4387-b0ac-aecfbc01ed0d",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "723596005",
+      "detail" : "MRCM ATTRIBUTE RANGE: id=7a1af510-0bb7-521c-851d-e5533f6e41b9 : contentTypeId=723596005 MRCM Attribute Range Refset contains a ContentTypeId that does not exist in the Concept snapshot.",
+      "componentId" : "7a1af510-0bb7-521c-851d-e5533f6e41b9",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributerangerefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723594008",
+      "detail" : "MRCM ATTRIBUTE RANGE: id=ac893ba3-bd3c-5b3f-b795-7e0c411febe6 : contentTypeId=723594008 MRCM Attribute Range Refset contains a ContentTypeId that does not exist in the Concept snapshot.",
+      "componentId" : "ac893ba3-bd3c-5b3f-b795-7e0c411febe6",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributerangerefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723596005",
+      "detail" : "MRCM ATTRIBUTE RANGE: id=353384a7-e43a-52a8-a8b0-df4062a46798 : contentTypeId=723596005 MRCM Attribute Range Refset contains a ContentTypeId that does not exist in the Concept snapshot.",
+      "componentId" : "353384a7-e43a-52a8-a8b0-df4062a46798",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributerangerefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723596005",
+      "detail" : "MRCM ATTRIBUTE RANGE: id=0debabff-8125-569b-a3be-95eb71618873 : contentTypeId=723596005 MRCM Attribute Range Refset contains a ContentTypeId that does not exist in the Concept snapshot.",
+      "componentId" : "0debabff-8125-569b-a3be-95eb71618873",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributerangerefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723596005",
+      "detail" : "MRCM ATTRIBUTE RANGE: id=7a1af510-0bb7-521c-851d-e5533f6e41b9 : contentTypeId=723596005 MRCM Attribute Range Refset contains a ContentTypeId that does not exist in the Concept snapshot.",
+      "componentId" : "7a1af510-0bb7-521c-851d-e5533f6e41b9",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributerangerefset_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 5
   }, {
     "assertionName" : "Every active concept defined in the Australian extension has a preferred FSN in the en-US language refset.",
     "assertionUuid" : "b3cf6f2e-057b-4270-920b-906d9a06fc6a",
@@ -449,8 +505,48 @@
   }, {
     "assertionName" : "All moduleIds in the MRCM Attribute Range Refset Snapshot File must refer to valid concepts.",
     "assertionUuid" : "bd129ddf-e7ea-49a4-9e9c-ad790b75331d",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "900000000000207008",
+      "detail" : "MRCM ATTRIBUTE RANGE: id=7a1af510-0bb7-521c-851d-e5533f6e41b9 : moduleId=900000000000207008 MRCM Attribute Range Refset contains a ModuleId that does not exist in the Concept snapshot.",
+      "componentId" : "7a1af510-0bb7-521c-851d-e5533f6e41b9",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributerangerefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "900000000000207008",
+      "detail" : "MRCM ATTRIBUTE RANGE: id=ac893ba3-bd3c-5b3f-b795-7e0c411febe6 : moduleId=900000000000207008 MRCM Attribute Range Refset contains a ModuleId that does not exist in the Concept snapshot.",
+      "componentId" : "ac893ba3-bd3c-5b3f-b795-7e0c411febe6",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributerangerefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "900000000000207008",
+      "detail" : "MRCM ATTRIBUTE RANGE: id=353384a7-e43a-52a8-a8b0-df4062a46798 : moduleId=900000000000207008 MRCM Attribute Range Refset contains a ModuleId that does not exist in the Concept snapshot.",
+      "componentId" : "353384a7-e43a-52a8-a8b0-df4062a46798",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributerangerefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "449080006",
+      "detail" : "MRCM ATTRIBUTE RANGE: id=0debabff-8125-569b-a3be-95eb71618873 : moduleId=449080006 MRCM Attribute Range Refset contains a ModuleId that does not exist in the Concept snapshot.",
+      "componentId" : "0debabff-8125-569b-a3be-95eb71618873",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributerangerefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "900000000000207008",
+      "detail" : "MRCM ATTRIBUTE RANGE: id=7a1af510-0bb7-521c-851d-e5533f6e41b9 : moduleId=900000000000207008 MRCM Attribute Range Refset contains a ModuleId that does not exist in the Concept snapshot.",
+      "componentId" : "7a1af510-0bb7-521c-851d-e5533f6e41b9",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributerangerefset_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 5
   }, {
     "assertionName" : "Every active concept defined in the Belgian extension has a preferred FSN in the en-US language refset.",
     "assertionUuid" : "bd17ab04-b7f8-11e7-8f22-3c15c2c6e32e",
@@ -549,8 +645,24 @@
   }, {
     "assertionName" : "All referencedComponentIds in the MRCM Domain Refset Snapshot File must refer to valid concepts.",
     "assertionUuid" : "c3e6008a-2e9a-4b42-9a37-78ea6a4c7799",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "999999999999",
+      "detail" : "MRCM DOMAIN: id=7e69927f-d456-586b-bb82-6eb71cb6ee11 : referencedComponentId=999999999999 MRCM Domain Refset contains a ReferencedComponentId that does not exist in the Concept snapshot.",
+      "componentId" : "7e69927f-d456-586b-bb82-6eb71cb6ee11",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmdomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "703649004",
+      "detail" : "MRCM DOMAIN: id=4dabe843-cc49-57d8-96a4-651cba79a6b0 : referencedComponentId=703649004 MRCM Domain Refset contains a ReferencedComponentId that does not exist in the Concept snapshot.",
+      "componentId" : "4dabe843-cc49-57d8-96a4-651cba79a6b0",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmdomainrefset_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 2
   }, {
     "assertionName" : "All referencedComponentIds in the MRCM Module Scope Refset Snapshot File must refer to valid concepts.",
     "assertionUuid" : "c4920cb7-7e7f-4f3f-ae87-f15b7c8fb1b6",
@@ -977,8 +1089,56 @@
   }, {
     "assertionName" : "All moduleIds in the MRCM Attribute Domain Refset Snapshot File must refer to valid concepts.",
     "assertionUuid" : "e968c5d1-e06b-4351-9e96-3f62208d27d4",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "900000000000207008",
+      "detail" : "MRCM ATTRIBUTE DOMAIN: id=9bdbbcf2-710b-5f7d-953b-99462c25e519 : moduleId=900000000000207008 MRCM Attribute Domain Refset contains a ModuleId that does not exist in the Concept snapshot.",
+      "componentId" : "9bdbbcf2-710b-5f7d-953b-99462c25e519",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "900000000000207008",
+      "detail" : "MRCM ATTRIBUTE DOMAIN: id=253f271d-711f-5e3e-a54b-38853563d628 : moduleId=900000000000207008 MRCM Attribute Domain Refset contains a ModuleId that does not exist in the Concept snapshot.",
+      "componentId" : "253f271d-711f-5e3e-a54b-38853563d628",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "900000000000207008",
+      "detail" : "MRCM ATTRIBUTE DOMAIN: id=a54c7b67-bdaa-56c1-a04b-631c2d2c6415 : moduleId=900000000000207008 MRCM Attribute Domain Refset contains a ModuleId that does not exist in the Concept snapshot.",
+      "componentId" : "a54c7b67-bdaa-56c1-a04b-631c2d2c6415",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "900000000000207008",
+      "detail" : "MRCM ATTRIBUTE DOMAIN: id=79208f69-322f-5740-a4d8-76b2e06c0153 : moduleId=900000000000207008 MRCM Attribute Domain Refset contains a ModuleId that does not exist in the Concept snapshot.",
+      "componentId" : "79208f69-322f-5740-a4d8-76b2e06c0153",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "900000000000207008",
+      "detail" : "MRCM ATTRIBUTE DOMAIN: id=71cd8696-01ec-5df9-b788-6814338c6557 : moduleId=900000000000207008 MRCM Attribute Domain Refset contains a ModuleId that does not exist in the Concept snapshot.",
+      "componentId" : "71cd8696-01ec-5df9-b788-6814338c6557",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "900000000000207008",
+      "detail" : "MRCM ATTRIBUTE DOMAIN: id=9bdbbcf2-710b-5f7d-953b-99462c25e519 : moduleId=900000000000207008 MRCM Attribute Domain Refset contains a ModuleId that does not exist in the Concept snapshot.",
+      "componentId" : "9bdbbcf2-710b-5f7d-953b-99462c25e519",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 6
   }, {
     "assertionName" : "The textdefinition moduleId,effectiveTime pair should always respect the MDRS.",
     "assertionUuid" : "ea92a85e-b24a-405f-9dea-579af338a81a",
@@ -1486,8 +1646,16 @@
   }, {
     "assertionName" : "All domainIds in the MRCM Attribute Domain Refset Snapshot File must refer to valid concepts.",
     "assertionUuid" : "0bd6a234-58f9-424f-84b4-0dc800e5a70b",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "999999999999",
+      "detail" : "MRCM ATTRIBUTE DOMAIN: id=71cd8696-01ec-5df9-b788-6814338c6557 : DomainId=999999999999 MRCM Attribute Domain Refset contains a DomainId that does not exist in the Concept snapshot.",
+      "componentId" : "71cd8696-01ec-5df9-b788-6814338c6557",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "Every active concept has a preferred FSN in the en-GB language refset.",
     "assertionUuid" : "0dde2aec-14c0-428b-ba1c-15e483aaa155",
@@ -1657,12 +1825,68 @@
       "tableName" : null,
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 20
+    "totalFailed" : 23
   }, {
     "assertionName" : "All ruleStrengthIds in the MRCM Attribute Domain Refset Snapshot File must refer to valid concepts.",
     "assertionUuid" : "0e8e3549-e704-41a2-a853-fd91a60116ee",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "723597001",
+      "detail" : "MRCM ATTRIBUTE DOMAIN: id=9bdbbcf2-710b-5f7d-953b-99462c25e519 : ruleStrengthId=723597001 MRCM Attribute Domain Refset contains a RuleStrengthId that does not exist in the Concept snapshot.",
+      "componentId" : "9bdbbcf2-710b-5f7d-953b-99462c25e519",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723598006",
+      "detail" : "MRCM ATTRIBUTE DOMAIN: id=253f271d-711f-5e3e-a54b-38853563d628 : ruleStrengthId=723598006 MRCM Attribute Domain Refset contains a RuleStrengthId that does not exist in the Concept snapshot.",
+      "componentId" : "253f271d-711f-5e3e-a54b-38853563d628",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723597001",
+      "detail" : "MRCM ATTRIBUTE DOMAIN: id=a54c7b67-bdaa-56c1-a04b-631c2d2c6415 : ruleStrengthId=723597001 MRCM Attribute Domain Refset contains a RuleStrengthId that does not exist in the Concept snapshot.",
+      "componentId" : "a54c7b67-bdaa-56c1-a04b-631c2d2c6415",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723597001",
+      "detail" : "MRCM ATTRIBUTE DOMAIN: id=79208f69-322f-5740-a4d8-76b2e06c0153 : ruleStrengthId=723597001 MRCM Attribute Domain Refset contains a RuleStrengthId that does not exist in the Concept snapshot.",
+      "componentId" : "79208f69-322f-5740-a4d8-76b2e06c0153",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723597001",
+      "detail" : "MRCM ATTRIBUTE DOMAIN: id=71cd8696-01ec-5df9-b788-6814338c6557 : ruleStrengthId=723597001 MRCM Attribute Domain Refset contains a RuleStrengthId that does not exist in the Concept snapshot.",
+      "componentId" : "71cd8696-01ec-5df9-b788-6814338c6557",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723597001",
+      "detail" : "MRCM ATTRIBUTE DOMAIN: id=9bdbbcf2-710b-5f7d-953b-99462c25e519 : ruleStrengthId=723597001 MRCM Attribute Domain Refset contains a RuleStrengthId that does not exist in the Concept snapshot.",
+      "componentId" : "9bdbbcf2-710b-5f7d-953b-99462c25e519",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723597001",
+      "detail" : "MRCM ATTRIBUTE DOMAIN: id=635d1053-f8a6-5faa-85d7-3e476ee6caec : ruleStrengthId=723597001 MRCM Attribute Domain Refset contains a RuleStrengthId that does not exist in the Concept snapshot.",
+      "componentId" : "635d1053-f8a6-5faa-85d7-3e476ee6caec",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 7
   }, {
     "assertionName" : "The MDRS effectiveTime should always equal the sourceEffectiveTime.",
     "assertionUuid" : "119d0620-0a32-43a6-9d08-8e6bdefda3be",
@@ -1728,8 +1952,64 @@
   }, {
     "assertionName" : "All refsetIds in the MRCM Domain Refset Snapshot File must refer to valid concepts.",
     "assertionUuid" : "14e30e46-1e7a-4655-b1ca-48254f8b7071",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "723560006",
+      "detail" : "MRCM DOMAIN: id=e339cbd9-9c52-57d4-8af4-49828816da32 : refsetId=723560006 MRCM Domain Refset contains a RefsetId that does not exist in the Concept snapshot.",
+      "componentId" : "e339cbd9-9c52-57d4-8af4-49828816da32",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmdomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723560006",
+      "detail" : "MRCM DOMAIN: id=ab3bacc4-58fa-5ef7-b287-c52c8ca15c0b : refsetId=723560006 MRCM Domain Refset contains a RefsetId that does not exist in the Concept snapshot.",
+      "componentId" : "ab3bacc4-58fa-5ef7-b287-c52c8ca15c0b",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmdomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723560006",
+      "detail" : "MRCM DOMAIN: id=7e69927f-d456-586b-bb82-6eb71cb6ee11 : refsetId=723560006 MRCM Domain Refset contains a RefsetId that does not exist in the Concept snapshot.",
+      "componentId" : "7e69927f-d456-586b-bb82-6eb71cb6ee11",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmdomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723560006",
+      "detail" : "MRCM DOMAIN: id=4dabe843-cc49-57d8-96a4-651cba79a6b0 : refsetId=723560006 MRCM Domain Refset contains a RefsetId that does not exist in the Concept snapshot.",
+      "componentId" : "4dabe843-cc49-57d8-96a4-651cba79a6b0",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmdomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723560006",
+      "detail" : "MRCM DOMAIN: id=2230f34b-03c0-5468-b0ba-56f29a046573 : refsetId=723560006 MRCM Domain Refset contains a RefsetId that does not exist in the Concept snapshot.",
+      "componentId" : "2230f34b-03c0-5468-b0ba-56f29a046573",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmdomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723560006",
+      "detail" : "MRCM DOMAIN: id=875116d9-74e7-5064-8b92-e21e8815fffe : refsetId=723560006 MRCM Domain Refset contains a RefsetId that does not exist in the Concept snapshot.",
+      "componentId" : "875116d9-74e7-5064-8b92-e21e8815fffe",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmdomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723560006",
+      "detail" : "MRCM DOMAIN: id=e339cbd9-9c52-57d4-8af4-49828816da32 : refsetId=723560006 MRCM Domain Refset contains a RefsetId that does not exist in the Concept snapshot.",
+      "componentId" : "e339cbd9-9c52-57d4-8af4-49828816da32",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmdomainrefset_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 7
   }, {
     "assertionName" : "All moduleIds in the MRCM Module Scope Refset Snapshot File must refer to valid concepts.",
     "assertionUuid" : "15a2289d-a160-4faa-b1ea-2f54980b5830",
@@ -1780,8 +2060,16 @@
   }, {
     "assertionName" : "All source ids found in the Relationship Concrete Values snapshot file exist in the Concept snapshot file.",
     "assertionUuid" : "1e6a0403-f276-44fc-8c90-da1bff1651f4",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "999999999999",
+      "detail" : "RELATIONSHIP CONCRETE VALUES: id=3100000004024: Relationship Concrete Values contains a source id that does not exist in the Concept snapshot file.",
+      "componentId" : "3100000004024",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.relationship_concrete_values_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "Found grouped relationship for attribute marked as never-grouped.",
     "assertionUuid" : "21f3a8f3-a714-40b6-800e-4eeb0fa9b424",
@@ -1795,8 +2083,16 @@
   }, {
     "assertionName" : "All referencedComponentIds in the MRCM Attribute Domain Refset Snapshot File must refer to valid concepts.",
     "assertionUuid" : "292b4427-0cce-493d-b63c-27cd249eafea",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "700132008",
+      "detail" : "MRCM ATTRIBUTE DOMAIN: id=635d1053-f8a6-5faa-85d7-3e476ee6caec : referencedComponentId=700132008 MRCM Attribute Domain Refset contains a ReferencedComponentId that does not exist in the Concept snapshot.",
+      "componentId" : "635d1053-f8a6-5faa-85d7-3e476ee6caec",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "There is a 1:1 relationship between the id and the key values in the ASSOCIATION REFSET snapshot file.",
     "assertionUuid" : "2ddc9a28-150d-47a4-9b0e-7dbff2efdd72",
@@ -1828,13 +2124,125 @@
   }, {
     "assertionName" : "All moduleIds in the MRCM Domain Refset Snapshot File must refer to valid concepts.",
     "assertionUuid" : "32bc5dc7-192c-441f-9693-6710020a6442",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "900000000000207008",
+      "detail" : "MRCM DOMAIN: id=e339cbd9-9c52-57d4-8af4-49828816da32 : moduleId=900000000000207008 MRCM Domain Refset contains a Moduleid that does not exist in the Concept snapshot.",
+      "componentId" : "e339cbd9-9c52-57d4-8af4-49828816da32",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmdomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "900000000000207008",
+      "detail" : "MRCM DOMAIN: id=ab3bacc4-58fa-5ef7-b287-c52c8ca15c0b : moduleId=900000000000207008 MRCM Domain Refset contains a Moduleid that does not exist in the Concept snapshot.",
+      "componentId" : "ab3bacc4-58fa-5ef7-b287-c52c8ca15c0b",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmdomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "900000000000207008",
+      "detail" : "MRCM DOMAIN: id=7e69927f-d456-586b-bb82-6eb71cb6ee11 : moduleId=900000000000207008 MRCM Domain Refset contains a Moduleid that does not exist in the Concept snapshot.",
+      "componentId" : "7e69927f-d456-586b-bb82-6eb71cb6ee11",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmdomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "900000000000207008",
+      "detail" : "MRCM DOMAIN: id=4dabe843-cc49-57d8-96a4-651cba79a6b0 : moduleId=900000000000207008 MRCM Domain Refset contains a Moduleid that does not exist in the Concept snapshot.",
+      "componentId" : "4dabe843-cc49-57d8-96a4-651cba79a6b0",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmdomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "900000000000207008",
+      "detail" : "MRCM DOMAIN: id=2230f34b-03c0-5468-b0ba-56f29a046573 : moduleId=900000000000207008 MRCM Domain Refset contains a Moduleid that does not exist in the Concept snapshot.",
+      "componentId" : "2230f34b-03c0-5468-b0ba-56f29a046573",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmdomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "900000000000012004",
+      "detail" : "MRCM DOMAIN: id=875116d9-74e7-5064-8b92-e21e8815fffe : moduleId=900000000000012004 MRCM Domain Refset contains a Moduleid that does not exist in the Concept snapshot.",
+      "componentId" : "875116d9-74e7-5064-8b92-e21e8815fffe",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmdomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "900000000000207008",
+      "detail" : "MRCM DOMAIN: id=e339cbd9-9c52-57d4-8af4-49828816da32 : moduleId=900000000000207008 MRCM Domain Refset contains a Moduleid that does not exist in the Concept snapshot.",
+      "componentId" : "e339cbd9-9c52-57d4-8af4-49828816da32",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmdomainrefset_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 7
   }, {
     "assertionName" : "All contentTypeIds in the MRCM Attribute Domain Refset Snapshot File must refer to valid concepts.",
     "assertionUuid" : "338c39ad-6f40-46dc-ad35-b7c697d66a63",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "723596005",
+      "detail" : "MRCM ATTRIBUTE DOMAIN: id=9bdbbcf2-710b-5f7d-953b-99462c25e519 : contentTypeId=723596005 MRCM Attribute Domain Refset contains a ContentTypeId that does not exist in the Concept snapshot.",
+      "componentId" : "9bdbbcf2-710b-5f7d-953b-99462c25e519",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723594008",
+      "detail" : "MRCM ATTRIBUTE DOMAIN: id=253f271d-711f-5e3e-a54b-38853563d628 : contentTypeId=723594008 MRCM Attribute Domain Refset contains a ContentTypeId that does not exist in the Concept snapshot.",
+      "componentId" : "253f271d-711f-5e3e-a54b-38853563d628",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723596005",
+      "detail" : "MRCM ATTRIBUTE DOMAIN: id=a54c7b67-bdaa-56c1-a04b-631c2d2c6415 : contentTypeId=723596005 MRCM Attribute Domain Refset contains a ContentTypeId that does not exist in the Concept snapshot.",
+      "componentId" : "a54c7b67-bdaa-56c1-a04b-631c2d2c6415",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723596005",
+      "detail" : "MRCM ATTRIBUTE DOMAIN: id=79208f69-322f-5740-a4d8-76b2e06c0153 : contentTypeId=723596005 MRCM Attribute Domain Refset contains a ContentTypeId that does not exist in the Concept snapshot.",
+      "componentId" : "79208f69-322f-5740-a4d8-76b2e06c0153",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723596005",
+      "detail" : "MRCM ATTRIBUTE DOMAIN: id=71cd8696-01ec-5df9-b788-6814338c6557 : contentTypeId=723596005 MRCM Attribute Domain Refset contains a ContentTypeId that does not exist in the Concept snapshot.",
+      "componentId" : "71cd8696-01ec-5df9-b788-6814338c6557",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723596005",
+      "detail" : "MRCM ATTRIBUTE DOMAIN: id=9bdbbcf2-710b-5f7d-953b-99462c25e519 : contentTypeId=723596005 MRCM Attribute Domain Refset contains a ContentTypeId that does not exist in the Concept snapshot.",
+      "componentId" : "9bdbbcf2-710b-5f7d-953b-99462c25e519",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723596005",
+      "detail" : "MRCM ATTRIBUTE DOMAIN: id=635d1053-f8a6-5faa-85d7-3e476ee6caec : contentTypeId=723596005 MRCM Attribute Domain Refset contains a ContentTypeId that does not exist in the Concept snapshot.",
+      "componentId" : "635d1053-f8a6-5faa-85d7-3e476ee6caec",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 7
   }, {
     "assertionName" : "All targetComponentIds in the Association Refset Snapshot File must refer to valid concepts or descriptions.",
     "assertionUuid" : "35ec824d-b53d-4567-833e-8ce79774acae",
@@ -1959,13 +2367,109 @@
   }, {
     "assertionName" : "All refsetIds in the MRCM Attribute Range Refset Snapshot File must refer to valid concepts.",
     "assertionUuid" : "40b0b1f3-7ed0-4074-ab0e-c5abd19f70b8",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "723562003",
+      "detail" : "MRCM ATTRIBUTE RANGE: id=7a1af510-0bb7-521c-851d-e5533f6e41b9 : refsetId=723562003 MRCM Attribute Range Refset contains a RefsetId that does not exist in the Concept snapshot.",
+      "componentId" : "7a1af510-0bb7-521c-851d-e5533f6e41b9",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributerangerefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723562003",
+      "detail" : "MRCM ATTRIBUTE RANGE: id=ac893ba3-bd3c-5b3f-b795-7e0c411febe6 : refsetId=723562003 MRCM Attribute Range Refset contains a RefsetId that does not exist in the Concept snapshot.",
+      "componentId" : "ac893ba3-bd3c-5b3f-b795-7e0c411febe6",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributerangerefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723562003",
+      "detail" : "MRCM ATTRIBUTE RANGE: id=353384a7-e43a-52a8-a8b0-df4062a46798 : refsetId=723562003 MRCM Attribute Range Refset contains a RefsetId that does not exist in the Concept snapshot.",
+      "componentId" : "353384a7-e43a-52a8-a8b0-df4062a46798",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributerangerefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723562003",
+      "detail" : "MRCM ATTRIBUTE RANGE: id=0debabff-8125-569b-a3be-95eb71618873 : refsetId=723562003 MRCM Attribute Range Refset contains a RefsetId that does not exist in the Concept snapshot.",
+      "componentId" : "0debabff-8125-569b-a3be-95eb71618873",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributerangerefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723562003",
+      "detail" : "MRCM ATTRIBUTE RANGE: id=7a1af510-0bb7-521c-851d-e5533f6e41b9 : refsetId=723562003 MRCM Attribute Range Refset contains a RefsetId that does not exist in the Concept snapshot.",
+      "componentId" : "7a1af510-0bb7-521c-851d-e5533f6e41b9",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributerangerefset_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 5
   }, {
     "assertionName" : "All refsetIds in the MRCM Attribute Domain Refset Snapshot File must refer to valid concepts.",
     "assertionUuid" : "413c91cd-4b1a-47cf-a278-3141bea39fde",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "723561005",
+      "detail" : "MRCM ATTRIBUTE DOMAIN: id=9bdbbcf2-710b-5f7d-953b-99462c25e519 : refsetId=723561005 MRCM Attribute Domain Refset contains a RefsetId that does not exist in the Concept snapshot.",
+      "componentId" : "9bdbbcf2-710b-5f7d-953b-99462c25e519",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723561005",
+      "detail" : "MRCM ATTRIBUTE DOMAIN: id=253f271d-711f-5e3e-a54b-38853563d628 : refsetId=723561005 MRCM Attribute Domain Refset contains a RefsetId that does not exist in the Concept snapshot.",
+      "componentId" : "253f271d-711f-5e3e-a54b-38853563d628",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723561005",
+      "detail" : "MRCM ATTRIBUTE DOMAIN: id=a54c7b67-bdaa-56c1-a04b-631c2d2c6415 : refsetId=723561005 MRCM Attribute Domain Refset contains a RefsetId that does not exist in the Concept snapshot.",
+      "componentId" : "a54c7b67-bdaa-56c1-a04b-631c2d2c6415",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723561005",
+      "detail" : "MRCM ATTRIBUTE DOMAIN: id=79208f69-322f-5740-a4d8-76b2e06c0153 : refsetId=723561005 MRCM Attribute Domain Refset contains a RefsetId that does not exist in the Concept snapshot.",
+      "componentId" : "79208f69-322f-5740-a4d8-76b2e06c0153",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723561005",
+      "detail" : "MRCM ATTRIBUTE DOMAIN: id=71cd8696-01ec-5df9-b788-6814338c6557 : refsetId=723561005 MRCM Attribute Domain Refset contains a RefsetId that does not exist in the Concept snapshot.",
+      "componentId" : "71cd8696-01ec-5df9-b788-6814338c6557",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723561005",
+      "detail" : "MRCM ATTRIBUTE DOMAIN: id=9bdbbcf2-710b-5f7d-953b-99462c25e519 : refsetId=723561005 MRCM Attribute Domain Refset contains a RefsetId that does not exist in the Concept snapshot.",
+      "componentId" : "9bdbbcf2-710b-5f7d-953b-99462c25e519",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723561005",
+      "detail" : "MRCM ATTRIBUTE DOMAIN: id=635d1053-f8a6-5faa-85d7-3e476ee6caec : refsetId=723561005 MRCM Attribute Domain Refset contains a RefsetId that does not exist in the Concept snapshot.",
+      "componentId" : "635d1053-f8a6-5faa-85d7-3e476ee6caec",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 7
   }, {
     "assertionName" : "All module dependency rows should be in the module dependency refset.",
     "assertionUuid" : "424789d5-8bb4-4036-9123-328085bfde99",
@@ -1974,8 +2478,16 @@
   }, {
     "assertionName" : "The current Relationship Concrete Values snapshot file does not contain duplicate Ids.",
     "assertionUuid" : "46853429-e7ff-41db-a8b3-3b0f738a8117",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "702769005",
+      "detail" : "RELATIONSHIP CONCRETE VALUES: id=3100000001021 is repeated in the Relationship Concrete Values snapshot file.",
+      "componentId" : "3100000001021",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.relationship_concrete_values_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "There is a 1:1 relationship between the id and the immutable values in the description snapshot.",
     "assertionUuid" : "48118153-d32a-4d1c-bfbc-23ed953e9991",
@@ -2298,8 +2810,48 @@
   }, {
     "assertionName" : "All ruleStrengthIds in the MRCM Attribute Range Refset Snapshot File must refer to valid concepts.",
     "assertionUuid" : "618115ab-b5bc-4ed3-aaba-fec8536fe498",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "723597001",
+      "detail" : "MRCM ATTRIBUTE RANGE: id=7a1af510-0bb7-521c-851d-e5533f6e41b9 : ruleStrengthId=723597001 MRCM Attribute Range Refset contains a RuleStrengthId that does not exist in the Concept snapshot.",
+      "componentId" : "7a1af510-0bb7-521c-851d-e5533f6e41b9",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributerangerefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723598006",
+      "detail" : "MRCM ATTRIBUTE RANGE: id=ac893ba3-bd3c-5b3f-b795-7e0c411febe6 : ruleStrengthId=723598006 MRCM Attribute Range Refset contains a RuleStrengthId that does not exist in the Concept snapshot.",
+      "componentId" : "ac893ba3-bd3c-5b3f-b795-7e0c411febe6",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributerangerefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723597001",
+      "detail" : "MRCM ATTRIBUTE RANGE: id=353384a7-e43a-52a8-a8b0-df4062a46798 : ruleStrengthId=723597001 MRCM Attribute Range Refset contains a RuleStrengthId that does not exist in the Concept snapshot.",
+      "componentId" : "353384a7-e43a-52a8-a8b0-df4062a46798",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributerangerefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723597001",
+      "detail" : "MRCM ATTRIBUTE RANGE: id=0debabff-8125-569b-a3be-95eb71618873 : ruleStrengthId=723597001 MRCM Attribute Range Refset contains a RuleStrengthId that does not exist in the Concept snapshot.",
+      "componentId" : "0debabff-8125-569b-a3be-95eb71618873",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributerangerefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723597001",
+      "detail" : "MRCM ATTRIBUTE RANGE: id=7a1af510-0bb7-521c-851d-e5533f6e41b9 : ruleStrengthId=723597001 MRCM Attribute Range Refset contains a RuleStrengthId that does not exist in the Concept snapshot.",
+      "componentId" : "7a1af510-0bb7-521c-851d-e5533f6e41b9",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributerangerefset_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 5
   }, {
     "assertionName" : "The current Inferred Relationship snapshot file does not contain duplicate Relationship Ids.",
     "assertionUuid" : "6336ec40-79b9-11e1-b0c4-0800200c9a66",
@@ -2332,8 +2884,16 @@
   }, {
     "assertionName" : "The mrcmattributedomain Refset moduleId,effectiveTime pair should always respect the MDRS.",
     "assertionUuid" : "64bbc7e6-b856-4eb8-be3e-8f154cf8a452",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "733073007",
+      "detail" : "mrcmattributedomainrefset: Component moduleId: 733073007 is not a valid module defined as per MDRS",
+      "componentId" : "635d1053-f8a6-5faa-85d7-3e476ee6caec",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "All referencedComponentIds in the Simple Refset Snapshot File must refer to valid concepts.",
     "assertionUuid" : "6a407415-8415-4870-a6ef-b5bc22f73c1f",
