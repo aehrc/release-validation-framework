@@ -481,6 +481,103 @@ def author_s8_membership_gaps(r: Rows):
     return made
 
 
+INACTIVE_CONCEPT = '703649004'      # active=0 in the fixture's concept snapshot
+AU_SIMPLE_REFSETS = ['1050951000168102', '1184031000168105', '929360061000036106']
+
+
+def author_generic_defects(r: Rows):
+    """The tail: assertions that share a mechanism with each other but not with
+    any family above. One defect each, each named by the assertion it serves.
+    """
+    n = 0
+
+    # "All active members of <refset> are active" - an ACTIVE membership row
+    # pointing at an INACTIVE concept, which is the real failure: retiring a
+    # concept without retiring its memberships.
+    for refset in AU_SIMPLE_REFSETS:
+        r.simple.append((r.next_uuid(), CURR, '1', AMT_MODULE, refset, INACTIVE_CONCEPT))
+        n += 1
+
+    # "All simple type reference set memberships are unique" - the same concept
+    # in the same refset twice, under two member ids.
+    dup_target = r.next_id(CONCEPT_P, '00')
+    r.concept_row(dup_target, status=DEFINED)
+    r.description_row(dup_target, 'AMT concept with a duplicated membership (clinical drug)', typeid=FSN)
+    for _ in range(2):
+        r.simple.append((r.next_uuid(), CURR, '1', AMT_MODULE, '929360071000036103', dup_target))
+    n += 1
+
+    # "Concepts have at most one Has <container|device> type relationship" and
+    # "Concepts with a Has product name relationship only have one" - the same
+    # attribute twice on one concept, in different groups so it is a cardinality
+    # breach rather than a duplicated row.
+    target = r.next_id(CONCEPT_P, '00')
+    r.concept_row(target, status=DEFINED)
+    r.description_row(target, 'AMT attribute target for cardinality breaches (product)', typeid=FSN)
+    # Read from the assertions: "has device type" is 999000061000168105, and the
+    # container and product-name ones are the other two.
+    for typeid in ('30465011000036106', '999000061000168105', '774158006'):
+        cid = r.next_id(CONCEPT_P, '00')
+        r.concept_row(cid, status=DEFINED)
+        r.description_row(cid, f'AMT concept with two {typeid} relationships (clinical drug)', typeid=FSN)
+        r.relationship_row(cid, target, typeid=typeid, group='1')
+        r.relationship_row(cid, target, typeid=typeid, group='2')
+        n += 1
+
+    # "Relationship identifiers are not duplicated" - one relationship id used
+    # twice, which no valid RF2 file may do.
+    dup_id = sctid(REL_P, 99001, '02')
+    for dest in ('703860006', '703649004'):
+        r.rel.append((dup_id, CURR, '1', AMT_MODULE, target, dest, '0', IS_A,
+                      '900000000000011006', '900000000000451002'))
+    n += 1
+
+    # "Maximum length of descriptions does not exceed 2048 characters" and the
+    # text-definition variant at 4096. Long but valid rows, so the length check
+    # is what fires rather than a parse failure.
+    long_concept = r.next_id(CONCEPT_P, '00')
+    r.concept_row(long_concept, status=PRIMITIVE)
+    r.description_row(long_concept, 'AMT concept with over-long descriptions (observable entity)', typeid=FSN)
+    r.description_row(long_concept, 'AMT ' + 'over-long synonym ' * 120, typeid=SYNONYM)
+    r.description_row(long_concept, 'AMT ' + 'over-long text definition ' * 170,
+                      typeid='900000000000550004')
+    n += 2
+
+    # "MPUU FSNs have spaces around slashes between values" and "MPUU synonyms do
+    # not have spaces adjacent to slashes" - opposite conventions, so two
+    # concepts: an FSN missing the spaces and a synonym that has them.
+    for label, term, typeid in (
+            ('FSN', 'AMT paracetamol 500 mg/codeine 30 mg tablet (clinical drug)', FSN),
+            ('synonym', 'AMT paracetamol 500 mg / codeine 30 mg tablet', SYNONYM)):
+        cid = r.next_id(CONCEPT_P, '00')
+        r.concept_row(cid, status=DEFINED)
+        r.description_row(cid, f'AMT MPUU slash spacing in the {label} (clinical drug)', typeid=FSN)
+        r.description_row(cid, term, typeid=typeid)
+        r.simple.append((r.next_uuid(), CURR, '1', AMT_MODULE, '929360071000036103', cid))
+        n += 1
+
+    # "AMT Has <concentration|pack size|total quantity> value+units are always
+    # grouped together" - the value and its unit in DIFFERENT relationship
+    # groups, which is the ungrouped pair they look for.
+    #
+    # The type ids are read from each assertion rather than guessed: a first
+    # pass invented plausible ones, two of the three missed, and the one that
+    # hit did so by accident - 999000061000168105 is "has device type", not a
+    # unit. All three pairs read relationship_active, so both halves are
+    # relationships and neither is a concrete value.
+    for value_type, unit_type in (('999000021000168100', '999000031000168102'),
+                                  ('1142142004', '774163005'),
+                                  ('1142143009', '999000051000168108')):
+        cid = r.next_id(CONCEPT_P, '00')
+        r.concept_row(cid, status=DEFINED)
+        r.description_row(cid, f'AMT ungrouped {value_type} value and units (clinical drug)', typeid=FSN)
+        r.relationship_row(cid, target, typeid=value_type, group='1')
+        r.relationship_row(cid, target, typeid=unit_type, group='2')
+        n += 1
+
+    return n
+
+
 def author_map_refset_files(r: Rows):
     """The two map-refset files the fixture does not have at all.
 
@@ -558,9 +655,26 @@ def adrs_pattern_requirements():
         if not a['file'].startswith('ADRS'):
             continue
         sql = ' '.join(a['statements'])
+        # Patterns inside a `NOT <col> IN (SELECT ...)` are what the concept must
+        # NOT have - that subquery IS the companion check: "a term says
+        # cytomegalovirus and no term on that concept says CMV". Read as another
+        # requirement, they produced a term carrying both, which satisfies the
+        # companion and fires nothing. Six of the family sat silent on this.
+        excluded_spans = []
+        for m in re.finditer(r'NOT\s+\w+\s+IN\s*\(', sql, re.I):
+            depth, j = 1, m.end()
+            while j < len(sql) and depth:
+                depth += (sql[j] == '(') - (sql[j] == ')')
+                j += 1
+            excluded_spans.append((m.start(), j))
+
+        def inside_excluded(pos):
+            return any(a <= pos < b for a, b in excluded_spans)
+
         want, avoid = [], []
         for m in re.finditer(r"(NOT\s+)?REGEXP_MATCHES\(\s*term\s*,\s*'((?:[^']|'')+)'", sql):
-            (avoid if m.group(1) else want).append(m.group(2).replace("''", "'"))
+            pattern = m.group(2).replace("''", "'")
+            (avoid if (m.group(1) or inside_excluded(m.start())) else want).append(pattern)
         pt_want = pt_avoid = None
         for m in re.finditer(r"(NOT\s+)?REGEXP_MATCHES\(\s*GET_CR_ADRS_PT\([^)]*\)\s*,\s*'((?:[^']|'')+)'", sql):
             if m.group(1):
@@ -644,6 +758,7 @@ def main():
     author_same_refset_parentage(r)
     maps = author_map_refset_files(r)
     s8 = author_s8_membership_gaps(r)
+    generic = author_generic_defects(r)
     print(f"  authored {members} class-refset members, each non-compliant in the ways "
           f"the corpus checks, plus one dangling attribute target")
     if adrs_skipped:
@@ -655,6 +770,7 @@ def main():
           f"breach and a same-refset parent")
     print(f"  authored {maps} rows in the two map-refset files the fixture lacked")
     print(f"  authored {s8} S8 cases: a scheduled product whose counterpart is not scheduled")
+    print(f"  authored {generic} single-mechanism defects for the remaining tail")
 
     buckets = {'concept': r.concept, 'desc': r.desc, 'rel': r.rel, 'lang': r.lang,
                'simple': r.simple, 'concrete': r.concrete,
