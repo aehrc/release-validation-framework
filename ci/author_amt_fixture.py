@@ -470,6 +470,69 @@ def author_s8_membership_gaps(r: Rows):
         r.relationship_row(s8_member, target, typeid=typeid)
         made += 1
 
+    # The OTHER direction, which a first pass missed by assuming one shape for
+    # the whole family. "All TPUU targets of S8 concepts are members" tests the
+    # DESTINATION's membership; "Associated MPPs of S8 MPUUs are also members"
+    # tests the SOURCE's. So a pair for each: an S8 member pointing at an
+    # unscheduled target of a named class, and an unscheduled source pointing at
+    # an S8 member of a named class.
+    reverse = [
+        # (source class, destination class, type) with the SOURCE not in S8
+        ('929360081000036101', '929360071000036103', ASSOCIATED_WITH),  # MPP -> S8 MPUU
+        ('929360041000036105', '929360031000036100', ASSOCIATED_WITH),  # TPP -> S8 TPUU
+        ('929360051000036108', '929360081000036101', IS_A),             # CTPP -> S8 MPP
+    ]
+    for source_refset, target_refset, typeid in reverse:
+        unscheduled = r.next_id(CONCEPT_P, '00')
+        r.concept_row(unscheduled, status=DEFINED)
+        r.description_row(unscheduled, f'AMT unscheduled pack {made} (branded clinical drug package)', typeid=FSN)
+        r.simple.append((r.next_uuid(), CURR, '1', AMT_MODULE, source_refset, unscheduled))
+        # deliberately NOT in S8
+
+        scheduled = r.next_id(CONCEPT_P, '00')
+        r.concept_row(scheduled, status=DEFINED)
+        r.description_row(scheduled, f'AMT scheduled unit {made} (branded clinical drug)', typeid=FSN)
+        r.simple.append((r.next_uuid(), CURR, '1', AMT_MODULE, target_refset, scheduled))
+        r.simple.append((r.next_uuid(), CURR, '1', AMT_MODULE, S8_REFSET, scheduled))
+
+        r.relationship_row(unscheduled, scheduled, typeid=typeid)
+        made += 1
+
+    # And the destination-side variant for the TPUU target family: an S8 member
+    # whose 774160008 target is a TPUU that is not scheduled.
+    for target_refset in ('929360031000036100', '929360071000036103'):
+        s8_source = r.next_id(CONCEPT_P, '00')
+        r.concept_row(s8_source, status=DEFINED)
+        r.description_row(s8_source, f'AMT scheduled source {made} (branded clinical drug)', typeid=FSN)
+        r.simple.append((r.next_uuid(), CURR, '1', AMT_MODULE, S8_REFSET, s8_source))
+
+        target = r.next_id(CONCEPT_P, '00')
+        r.concept_row(target, status=DEFINED)
+        r.description_row(target, f'AMT unscheduled target {made} (clinical drug)', typeid=FSN)
+        r.simple.append((r.next_uuid(), CURR, '1', AMT_MODULE, target_refset, target))
+
+        r.relationship_row(s8_source, target, typeid=ASSOCIATED_WITH)
+        made += 1
+
+    # The DNF parentage cases the same-refset pass covered for TPUU only: an IsA
+    # between two members of the CTPP refset, and a CTPP member whose IsA target
+    # is in no pack refset at all.
+    ctpp_parent = r.next_id(CONCEPT_P, '00')
+    ctpp_child = r.next_id(CONCEPT_P, '00')
+    for cid, role in ((ctpp_parent, 'parent'), (ctpp_child, 'child')):
+        r.concept_row(cid, status=DEFINED)
+        r.description_row(cid, f'AMT CTPP {role} in the same refset (containerized branded clinical drug package)', typeid=FSN)
+        r.simple.append((r.next_uuid(), CURR, '1', AMT_MODULE, '929360051000036108', cid))
+    r.relationship_row(ctpp_child, ctpp_parent, typeid=IS_A)
+    made += 1
+
+    orphan_ctpp = r.next_id(CONCEPT_P, '00')
+    r.concept_row(orphan_ctpp, status=DEFINED)
+    r.description_row(orphan_ctpp, 'AMT CTPP whose parent is in no pack refset (containerized branded clinical drug package)', typeid=FSN)
+    r.simple.append((r.next_uuid(), CURR, '1', AMT_MODULE, '929360051000036108', orphan_ctpp))
+    r.relationship_row(orphan_ctpp, '703860006', typeid=IS_A)
+    made += 1
+
     # The two ingredient-name assertions: an always-S8 substance named in the
     # FSN of a product that is not in the S8 refset.
     for refset in ('929360031000036100', '929360051000036108'):
