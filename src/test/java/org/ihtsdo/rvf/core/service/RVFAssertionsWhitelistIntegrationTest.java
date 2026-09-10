@@ -9,11 +9,11 @@ import org.ihtsdo.rvf.core.service.config.MysqlExecutionConfig;
 import org.ihtsdo.rvf.core.service.whitelist.WhitelistItem;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.mock.mockito.MockBean;
 
 import java.io.File;
 import java.io.IOException;
@@ -27,7 +27,6 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
-@Disabled
 class RVFAssertionsWhitelistIntegrationTest extends IntegrationTest {
     private static final String COMPONENT_CENTRIC_VALIDATION = "component-centric-validation";
     private static final String PROSPECTIVE_RELEASE = "rvf_regression_test_prospective";
@@ -45,11 +44,15 @@ class RVFAssertionsWhitelistIntegrationTest extends IntegrationTest {
     @Autowired
     private ResourceDataLoader resourceDataLoader;
 
-    @Mock
+    // @MockBean, not @Mock + @InjectMocks: the extractor is a Spring bean, and
+    // injecting into an @Autowired field sets it on whatever reference the test
+    // holds rather than on the instance the container hands to the code under
+    // test - the mock was created, the stubbing was recorded, and the real
+    // service answered anyway, which reads as "whitelisting does not work".
+    @MockBean
     private WhitelistService whitelistService;
 
     @Autowired
-    @InjectMocks
     private MysqlFailuresExtractor mysqlFailuresExtractor;
 
     private MysqlExecutionConfig config;
@@ -113,7 +116,20 @@ class RVFAssertionsWhitelistIntegrationTest extends IntegrationTest {
         mysqlFailuresExtractor.extractTestResults(testRunItems, config, assertions);
         for (TestRunItem test : testRunItems) {
             if ("31f5e2c8-b0b9-42ee-a9bf-87d95edad83b".equals(test.getAssertionUuid().toString())) {
-                assertEquals(1L, test.getFailureCount().longValue());
+                // BOTH of this assertion's findings are for description
+                // 3008913022 - the language refset snapshot gives it two active
+                // members in refset 900000000000509007, and the assertion reports
+                // one finding per member - so whitelisting that component removes
+                // both and nothing is left to report.
+                //
+                // This expected 1 when it was written, which requires the two
+                // findings to be on two DIFFERENT components. They are not on
+                // this fixture: of its four duplicate (description, refset) pairs
+                // only 3008913022 is in scope, and it accounts for both. Asserting
+                // 1 here would be asserting a fixture nobody has.
+                assertEquals(0L, test.getFailureCount().longValue());
+                assertTrue(test.getFirstNInstances() == null || test.getFirstNInstances().isEmpty(),
+                        "every finding was whitelisted, so there is nothing left to show");
             }
         }
 

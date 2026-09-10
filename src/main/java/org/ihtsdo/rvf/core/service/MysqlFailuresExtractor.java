@@ -110,15 +110,26 @@ public class MysqlFailuresExtractor {
                     if (!failureDetails.isEmpty()) {
                         // Convert to WhitelistItem
                         List<WhitelistItem> whitelistItems = failureDetails.stream()
-                                .map(failureDetail -> new WhitelistItem(item.getAssertionUuid().toString(), StringUtils.hasLength(failureDetail.getComponentId())? failureDetail.getComponentId() : "", failureDetail.getConceptId(), failureDetail.getFullComponent()))
+                                .map(failureDetail -> new WhitelistItem(item.getAssertionUuid().toString(), componentIdOf(failureDetail), failureDetail.getConceptId(), failureDetail.getFullComponent()))
                                 .toList();
 
                         // Send to Authoring acceptance gateway
                         List<WhitelistItem> whitelistedItems = whitelistService.checkComponentFailuresAgainstWhitelist(whitelistItems);
 
-                        // Find the failures which are not in the whitelisted item
+                        // Find the failures which are not in the whitelisted item.
+                        //
+                        // Normalised on BOTH sides, with the same rule line 113
+                        // uses when it builds the items: a failure can have no
+                        // component id - a file-level or release-level finding -
+                        // and this dereferenced it, so enabling whitelisting on a
+                        // report containing one threw
+                        // `Cannot invoke "String.equals(Object)"`. The gateway
+                        // answers with the entries it whitelisted OUT OF THE LIST
+                        // WE SENT, where the id was already mapped to "", so
+                        // comparing the same normalisation is what matches them.
                         List<FailureDetail> validFailures = failureDetails.stream().filter(failure ->
-                                whitelistedItems.stream().noneMatch(whitelistedItem -> failure.getComponentId().equals(whitelistedItem.getComponentId()))
+                                whitelistedItems.stream().noneMatch(whitelistedItem ->
+                                        componentIdOf(failure).equals(whitelistedItem.getComponentId()))
                         ).toList();
 
                         totalWhitelistedFailures += whitelistedItems.size();
@@ -187,6 +198,17 @@ public class MysqlFailuresExtractor {
             }
         }
         return assertionIdToTotalFailureMap;
+    }
+
+    /**
+     * A failure's component id, never null.
+     *
+     * <p>A file-level or release-level finding has none, and both the whitelist
+     * item and the match have to agree about what that means or the comparison
+     * either throws or silently never matches.
+     */
+    private static String componentIdOf(FailureDetail failure) {
+        return StringUtils.hasLength(failure.getComponentId()) ? failure.getComponentId() : "";
     }
 
     private List<FailureDetail> fetchFailureDetails(Connection connection, Long executionId, Long assertionId, int failureExportMax, Integer offset, Integer rowCount)

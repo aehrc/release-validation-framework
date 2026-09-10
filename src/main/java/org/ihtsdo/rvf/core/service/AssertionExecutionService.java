@@ -199,13 +199,25 @@ public List<TestRunItem> executeAssertionsConcurrently(List<Assertion> assertion
 				try (PreparedStatement preparedStatement = connection.prepareStatement(sqlStatement)) {
 					try (ResultSet execResult = preparedStatement.executeQuery()) {
 						try (Connection qaDbConnection = dataSource.getConnection()) {
-							final String insertSQL = "insert into ? (run_id, assertion_id, details) values (?, ?, ?)";
+							// A TABLE NAME CANNOT BE A BIND PARAMETER. This read
+							// `insert into ? ...` with setString(1, qaResulTableName),
+							// which binds a string LITERAL - the server received
+							// `insert into 'qa_result' (run_id, ...)` and answered
+							// with a syntax error every single time, so this branch
+							// has never worked and every assertion reaching it
+							// reported failureCount -1. That is what kept
+							// AssertionExecutionServiceIntegrationTest disabled.
+							//
+							// The name comes from rvf.qa.result.table.name, which is
+							// configuration rather than input, so interpolating it is
+							// not an injection surface; the three VALUES stay bound.
+							final String insertSQL = "insert into " + qaResulTableName
+									+ " (run_id, assertion_id, details) values (?, ?, ?)";
 							try(PreparedStatement insertStatement = qaDbConnection.prepareStatement(insertSQL)) {
 								while (execResult.next()) {
-									insertStatement.setString(1, qaResulTableName);
-									insertStatement.setLong(2, config.getExecutionId());
-									insertStatement.setLong(3, assertion.getAssertionId());
-									insertStatement.setString(4, execResult.getString(3));
+									insertStatement.setLong(1, config.getExecutionId());
+									insertStatement.setLong(2, assertion.getAssertionId());
+									insertStatement.setString(3, execResult.getString(3));
 									insertStatement.addBatch();
 
 									failureCount++;

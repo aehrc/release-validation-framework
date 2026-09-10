@@ -1,3 +1,14 @@
 # Normalize file endings for all text files detected by Git
 #https://git-scm.com/docs/gitattributes#gitattributes-Settostringvalueauto
 * text=auto
+
+# RF2 release files are CRLF by specification, and RVF's MySQL loader states it
+# outright: `load data local infile ... lines terminated by '\r\n' ignore 1
+# lines`. Checked out as LF, that statement reads each file as ONE line,
+# `ignore 1 lines` discards it, and the release loads ZERO rows with no error -
+# 90 empty tables and every data-dependent assertion passing over nothing.
+#
+# `text eol=crlf` keeps the repository copy LF, so diffs stay readable, and
+# gives every working tree CRLF, which is what the loader and the specification
+# both require.
+src/test/resources/SnomedCT_RegressionTest_*/** text eol=crlf

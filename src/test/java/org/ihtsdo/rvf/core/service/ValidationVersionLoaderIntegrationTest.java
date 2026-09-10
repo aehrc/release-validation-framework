@@ -10,7 +10,6 @@ import org.ihtsdo.rvf.core.service.structure.resource.ResourceProvider;
 import org.ihtsdo.rvf.core.service.structure.resource.ZipFileResourceProvider;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -21,7 +20,6 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@Disabled
 public class ValidationVersionLoaderIntegrationTest extends IntegrationTest {
 	@Autowired
 	private ReleaseDataManager releaseDataManager;
