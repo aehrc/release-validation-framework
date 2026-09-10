@@ -67,6 +67,28 @@ class AssertionCanFireTest {
 	private static final Pattern GROUPED =
 			Pattern.compile("\\bGROUP\\s+BY\\b|\\bHAVING\\b", Pattern.CASE_INSENSITIVE);
 
+	/** A comparison to NULL is NULL, never true. */
+	private static final Pattern NULL_COMPARISON =
+			Pattern.compile("([\\w.]+)\\s*(?:=|<>|!=)\\s*\\(?\\s*NULL\\s*\\)?", Pattern.CASE_INSENSITIVE);
+
+	/**
+	 * One of the corpus's own predicates, required and forbidden as ADJACENT
+	 * conjuncts.
+	 *
+	 * <p>Adjacency is load-bearing. A first version scanned the whole statement
+	 * for the same call negated somewhere and plain somewhere else, and flagged
+	 * two assertions that demonstrably fire - the same predicate legitimately
+	 * appears on both sides of an OR, and in separate EXISTS subqueries, which
+	 * are separate scopes. Two false positives out of four findings is how a
+	 * linter gets switched off. Separated by nothing but {@code AND} cannot span
+	 * an OR or a subquery boundary, and is the shape both real defects have.
+	 */
+	private static final Pattern ADJACENT_CONTRADICTION = Pattern.compile(
+			"(NOT\\s+)?(\\b(?:is\\w+_cr(?:_refset)?|get_cr_\\w+)\\s*\\([^()]*\\))"
+					+ "\\s+AND\\s+"
+					+ "(NOT\\s+)?(\\b(?:is\\w+_cr(?:_refset)?|get_cr_\\w+)\\s*\\([^()]*\\))",
+			Pattern.CASE_INSENSITIVE);
+
 	@Test
 	void noBundledAssertionIsStructurallyUnableToFire() throws Exception {
 		List<String> dead = new ArrayList<>();
@@ -96,6 +118,43 @@ class AssertionCanFireTest {
 	 * and with the amtv4 identifiers removed, since they do not belong in this
 	 * repository.
 	 */
+	@Test
+	void theDetectorCatchesTheContradictionAndTheNullComparison() {
+		// Both found in the amtv4 corpus on 2026-09-11, both verified silent in a
+		// real run before being called defects.
+		String contradiction = "INSERT INTO qa_result SELECT id FROM prospective.concept_active"
+				+ " WHERE NOT isActiveMemberOf_cr_refset(id, 111) AND"
+				+ " isActiveMemberOf_cr_refset(id, 111) AND active = 1";
+		assertTrue(whyItCannotFire(contradiction) != null
+						&& whyItCannotFire(contradiction).contains("adjacent"),
+				"a predicate required and forbidden as adjacent conjuncts has to be reported");
+
+		String nullCompare = "INSERT INTO qa_result SELECT id FROM prospective.values_active"
+				+ " WHERE val.typeid = (null) AND val.value IS NULL";
+		assertTrue(whyItCannotFire(nullCompare) != null
+						&& whyItCannotFire(nullCompare).contains("NULL"),
+				"a comparison to NULL has to be reported");
+	}
+
+	/**
+	 * The shapes the contradiction check must NOT flag, because the first
+	 * version of it flagged exactly these and both assertions fire.
+	 */
+	@Test
+	void theContradictionCheckToleratesOrsAndSubqueries() {
+		String acrossOr = "SELECT id FROM prospective.concept_active WHERE"
+				+ " (NOT isActiveMemberOf_cr_refset(id, 111) OR isActiveMemberOf_cr_refset(id, 111))"
+				+ " AND active = 1";
+		assertTrue(whyItCannotFire(acrossOr) == null,
+				"either side of an OR is satisfiable, so this is not a contradiction");
+
+		String acrossSubquery = "SELECT id FROM prospective.concept_active a WHERE"
+				+ " NOT isActiveMemberOf_cr_refset(a.id, 111) AND EXISTS(SELECT 1 FROM"
+				+ " prospective.relationship_active WHERE isActiveMemberOf_cr_refset(a.id, 111))";
+		assertTrue(whyItCannotFire(acrossSubquery) == null,
+				"a subquery is a separate scope, not the same conjunction");
+	}
+
 	@Test
 	void theDetectorCatchesBothShapes() {
 		String fromLess = "INSERT INTO qa_result (details) SELECT 'x' FROM (SELECT 1 FROM dual"
@@ -160,6 +219,22 @@ class AssertionCanFireTest {
 				return "NOT EXISTS over an ungrouped aggregate, which returns one row"
 						+ " even when the table is empty";
 			}
+		}
+		Matcher c = ADJACENT_CONTRADICTION.matcher(sql);
+		while (c.find()) {
+			String left = c.group(2).replaceAll("\\s+", "").toLowerCase();
+			String right = c.group(4).replaceAll("\\s+", "").toLowerCase();
+			boolean leftNegated = c.group(1) != null;
+			boolean rightNegated = c.group(3) != null;
+			if (left.equals(right) && leftNegated != rightNegated) {
+				return "the same predicate is required and forbidden as adjacent"
+						+ " conjuncts: " + c.group(2).trim();
+			}
+		}
+		Matcher n = NULL_COMPARISON.matcher(sql);
+		if (n.find()) {
+			return n.group(1) + " is compared to NULL, which is never true -"
+					+ " use IS NULL, or bind the value this was meant to test";
 		}
 		return null;
 	}

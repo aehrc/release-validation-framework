@@ -47,6 +47,15 @@ NOT_EXISTS_SELECT = re.compile(r'NOT\s+EXISTS\s*\(\s*SELECT\b', re.I)
 FROM = re.compile(r'\bFROM\b', re.I)
 AGGREGATE = re.compile(r'\b(COUNT|SUM|MAX|MIN|AVG)\s*\(', re.I)
 GROUPED = re.compile(r'\bGROUP\s+BY\b|\bHAVING\b', re.I)
+# `x = (null)` and friends. In SQL a comparison to NULL is NULL, never true, so
+# a WHERE built on one selects nothing and a conjunct built on one makes the
+# whole conjunction unsatisfiable.
+NULL_COMPARISON = re.compile(r'([\w.]+)\s*(?:=|<>|!=)\s*\(?\s*NULL\s*\)?(?!\s*\))', re.I)
+# A call to one of the corpus's own predicates, so the same call appearing both
+# negated and plain can be spotted.
+_CALL = r'(\b(?:is\w+_cr(?:_refset)?|get_cr_\w+)\s*\([^()]*\))'
+ADJACENT_CONTRADICTION = re.compile(
+    r'(NOT\s+)?' + _CALL + r'\s+AND\s+(NOT\s+)?' + _CALL, re.I)
 BLOCK_COMMENT = re.compile(r'/\*.*?\*/', re.S)
 LINE_COMMENT = re.compile(r'--[^\n]*')
 
@@ -99,6 +108,40 @@ def findings(sql: str):
                               ' row even when the table is empty, so this can never'
                               ' be true - including for the empty table it is'
                               ' presumably checking for'))
+
+    # A predicate asserted and denied as ADJACENT conjuncts.
+    #
+    # `where not isActiveMemberOf_cr_refset(id, R) and
+    #         isActiveMemberOf_cr_refset(id, R) and ...` is a contradiction, so
+    # the assertion selects nothing for any release. Found in two assertions
+    # named "Contains all Active <class>s", where the intent is evidently a
+    # concept that QUALIFIES for the refset and is not in it - and the
+    # qualifying half was lost. That intent cannot be recovered from the SQL,
+    # which is why this reports rather than repairs.
+    #
+    # ADJACENT is the whole point, and a looser version of this check was wrong.
+    # Scanning a whole statement for the same call negated somewhere and plain
+    # somewhere else flagged two assertions that demonstrably fire: the same
+    # predicate legitimately appears on both sides of an OR, and in separate
+    # EXISTS subqueries, which are separate scopes. Two false positives out of
+    # four findings is how a linter gets switched off. Requiring the two calls
+    # to be separated by nothing but `AND` cannot span an OR or a subquery
+    # boundary, and it is exactly the shape both real defects have.
+    for m in ADJACENT_CONTRADICTION.finditer(clean):
+        left_not, left, right_not, right = m.group(1), m.group(2), m.group(3), m.group(4)
+        if re.sub(r'\s+', '', left).lower() != re.sub(r'\s+', '', right).lower():
+            continue
+        if bool(left_not) == bool(right_not):
+            continue
+        line = clean.count('\n', 0, m.start()) + 1
+        out.append((line, f'the same predicate is required and forbidden as adjacent'
+                          f' conjuncts - {left.strip()[:56]} - so this can never be true'))
+
+    # A comparison to NULL, which is NULL rather than true.
+    for m in NULL_COMPARISON.finditer(clean):
+        line = clean.count('\n', 0, m.start()) + 1
+        out.append((line, f'{m.group(1)} is compared to NULL, which is never true -'
+                          f' use IS NULL, or bind the value this was meant to test'))
     return out
 
 

@@ -25,7 +25,38 @@ $ python3 ci/assertion_lint.py snomed-release-validation-assertions/scripts
 453 assertion file(s) scanned, 0 that cannot fire
 ```
 
-## 2. The AMT corpus - the guard AND twelve fixes
+## 2. The AMT corpus - the guard, twelve fixes, and three to decide
+
+**Updated 2026-09-11: fifteen, not twelve.** Reading the remaining silent
+assertions to author content for them turned up two more shapes, both verified
+silent in a real run before being called defects:
+
+| shape | files | fixable mechanically? |
+|---|---|---|
+| `NOT f(id, R) AND f(id, R)` as adjacent conjuncts | 2 | **no - report** |
+| `where val.typeid = (null)` | 1 | **no - report** |
+
+The two contradictions are both named "Contains all Active <class>s", and the
+intent is evident - a concept that QUALIFIES for the refset and is not in it -
+but the qualifying half is simply absent from the SQL. What it was meant to be
+cannot be recovered from what is there, so these are reported rather than
+repaired. Inventing the missing predicate would be inventing a check.
+
+The NULL comparison is worse than inert. `val.typeid = (null)` is never true, so
+the guarded branch never fires; but the statement is `A AND B OR C`, so branch C
+runs against EVERY concrete value rather than the type the assertion meant to
+single out. The guard does not guard.
+
+One note on the contradiction check, because it matters for trusting the linter:
+a first version scanned each statement for the same predicate negated somewhere
+and plain somewhere else, and flagged two assertions that demonstrably fire -
+the same call legitimately appears across an OR, and in separate EXISTS
+subqueries. Two false positives out of four findings is how a linter gets
+switched off. It now requires the two calls to be separated by nothing but
+`AND`, which cannot span an OR or a subquery boundary, and both real defects
+have exactly that shape. Re-verified: **15 flagged, 0 of them fire.**
+
+## The original twelve, all fixable
 
 ```
 amt/.github/scripts/assertion_lint.py
