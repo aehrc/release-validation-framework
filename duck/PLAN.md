@@ -763,26 +763,36 @@ Every `-proc.sql` and `res-table-*` defines a procedure or builds a resource
 table for other assertions to read. Against the 344 that can report, coverage is
 **315, or 91%**.
 
-**11 of the 200 amtv4 assertions cannot fire at all**, and this one is an
-upstream SQL defect worth reporting rather than a denominator adjustment. They
-are of the form:
+**12 of the 200 amtv4 assertions cannot fire at all** - they report
+`assertionsPassed` with a failure count of zero for every release ever
+validated, and always will. This is an upstream SQL defect, not a denominator
+adjustment. Two shapes, both turning on the same fact - a `SELECT` that reads no
+rows still RETURNS a row:
 
 ```sql
-SELECT ... FROM (SELECT 1 FROM dual WHERE NOT EXISTS(SELECT <scalar>)) AS query
+NOT EXISTS(SELECT GET_CR_ADRS_PT(x) = 'y')      -- 9, no FROM at all
+NOT EXISTS(SELECT COUNT(1) FROM ccsRefset_f)    -- 3, ungrouped aggregate
 ```
 
-where the inner `SELECT` has **no `FROM`**. A `FROM`-less `SELECT` always returns
-exactly one row, so `EXISTS` is always true, `NOT EXISTS` is always false, and
-the assertion reports nothing whatever the release contains. Nine wrap a function
-call (`NOT EXISTS(SELECT ISCHILDOF_CR(a, b))`, `NOT EXISTS(SELECT
-GET_CR_ADRS_PT(x) = 'y')`) and two wrap an aggregate (`NOT EXISTS(SELECT
-COUNT(1) FROM <table>)`, where `COUNT` returns a row even over an empty table).
-The named assertions are not listed here because this repository is public and
-that corpus is not; the shape and the count are enough to find them.
+A `FROM`-less `SELECT` yields exactly one row, so `EXISTS` is true and `NOT
+EXISTS` is false. So does `COUNT` with no `GROUP BY`, **even over an empty
+table** - and that is the sharper case, because the three assertions carrying it
+exist to detect that the file is empty. Demonstrated, not argued: with
+`ccsRefset_f` created and left empty, `SELECT COUNT(1) FROM ccsRefset_f` returns
+`(0)`, so the assertion inserts nothing. This release ships no ccsRefset file at
+all, so the condition was present the whole time and the check said "pass".
 
-Both engines agree on all 11 - they are silent on MySQL for the same reason -
-so this is not an engine difference and the gate stays green. It is a check that
-has never checked anything.
+Both engines agree on all 12 - they are silent on MySQL for the same reason - so
+this is not an engine difference and the gate stays green. It is twelve checks
+that have never checked anything.
+
+`AssertionCanFireTest` now scans the bundled store for both shapes on every
+build. The international 360 have none, and that is pinned rather than assumed:
+the detector is tested against the real shapes and against the three healthy
+patterns it must leave alone, because a green light wired to nothing is the same
+failure it exists to catch. The amtv4 pack is not bundled here, so its twelve
+cannot be pinned - they belong upstream, with the corpus. The names stay out of
+this repository; the shape and the count are enough to find them.
 
 ### Two more that no fixture can trigger
 
