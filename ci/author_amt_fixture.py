@@ -548,6 +548,61 @@ INACTIVE_CONCEPT = '703649004'      # active=0 in the fixture's concept snapshot
 AU_SIMPLE_REFSETS = ['1050951000168102', '1184031000168105', '929360061000036106']
 
 
+PRODUCT_NAME_ROOT = '774167006'
+MEDICINAL_PRODUCT_ROOT = '763158003'
+DEVICE_ROOT = '49062001'
+
+
+def author_qualifying_non_members(r: Rows):
+    """The mirror of the membership families: a concept that QUALIFIES for a
+    class refset and is not in it.
+
+    Everything authored so far was a member that misbehaved. These assertions
+    ask the opposite question - "does the refset contain everything it should" -
+    so they need a concept with the hierarchy or the attributes of a class and
+    no membership row at all. A refset that silently omits a product is the
+    failure they exist to catch, and it is the more dangerous direction: a
+    missing member is invisible to every check that starts from membership.
+    """
+    n = 0
+
+    # TP refset must contain all active Product Name concepts
+    cid = r.next_id(CONCEPT_P, '00')
+    r.concept_row(cid, status=DEFINED)
+    r.description_row(cid, 'AMT product name absent from the TP refset (product name)', typeid=FSN)
+    r.relationship_row(cid, PRODUCT_NAME_ROOT, typeid=IS_A)
+    n += 1
+
+    # TPUU refset must contain all medicinal products and devices holding a
+    # 774158006 relationship
+    for root in (MEDICINAL_PRODUCT_ROOT, DEVICE_ROOT):
+        cid = r.next_id(CONCEPT_P, '00')
+        r.concept_row(cid, status=DEFINED)
+        r.description_row(cid, f'AMT product under {root} absent from the TPUU refset (branded clinical drug)', typeid=FSN)
+        r.relationship_row(cid, root, typeid=IS_A)
+        r.relationship_row(cid, PRODUCT_NAME_ROOT, typeid='774158006', group='1')
+        n += 1
+
+    # "Multipack <X>s do not subsume non-multipack <Y>s": an IsA between members
+    # of the two refsets where the parent holds none of the multipack
+    # attributes. These members get NO other relationships on purpose - the
+    # product-model members all carry every AMT attribute, which excludes them
+    # from this check.
+    for parent_refset, child_refset in (('929360041000036105', '929360081000036101'),
+                                        ('929360051000036108', '929360041000036105')):
+        parent = r.next_id(CONCEPT_P, '00')
+        child = r.next_id(CONCEPT_P, '00')
+        r.concept_row(parent, status=DEFINED)
+        r.description_row(parent, f'AMT pack subsuming across classes (branded clinical drug package)', typeid=FSN)
+        r.simple.append((r.next_uuid(), CURR, '1', AMT_MODULE, parent_refset, parent))
+        r.concept_row(child, status=DEFINED)
+        r.description_row(child, f'AMT pack subsumed across classes (clinical drug package)', typeid=FSN)
+        r.simple.append((r.next_uuid(), CURR, '1', AMT_MODULE, child_refset, child))
+        r.relationship_row(parent, child, typeid=IS_A)
+        n += 1
+    return n
+
+
 def author_generic_defects(r: Rows):
     """The tail: assertions that share a mechanism with each other but not with
     any family above. One defect each, each named by the assertion it serves.
@@ -822,6 +877,7 @@ def main():
     maps = author_map_refset_files(r)
     s8 = author_s8_membership_gaps(r)
     generic = author_generic_defects(r)
+    qualifying = author_qualifying_non_members(r)
     print(f"  authored {members} class-refset members, each non-compliant in the ways "
           f"the corpus checks, plus one dangling attribute target")
     if adrs_skipped:
@@ -834,6 +890,7 @@ def main():
     print(f"  authored {maps} rows in the two map-refset files the fixture lacked")
     print(f"  authored {s8} S8 cases: a scheduled product whose counterpart is not scheduled")
     print(f"  authored {generic} single-mechanism defects for the remaining tail")
+    print(f"  authored {qualifying} concepts that qualify for a class refset and are not in it")
 
     buckets = {'concept': r.concept, 'desc': r.desc, 'rel': r.rel, 'lang': r.lang,
                'simple': r.simple, 'concrete': r.concrete,
