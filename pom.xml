@@ -51,6 +51,23 @@
             <artifactId>spring-boot-configuration-processor</artifactId>
             <optional>true</optional>
         </dependency>
+        <!--
+            ANTLR is pinned only because presto-parser needs it, and presto-parser
+            is here for ONE class: StatementSplitter, which splits a script into
+            statements. Pinned at 4.7.1 it shadowed the 4.13.1 Hibernate 6 needs,
+            and Hibernate's HQL lexer then fails to initialise - so any HQL
+            STRING query throws ExceptionInInitializerError. Native queries and
+            derived repository methods are unaffected, which is nearly all of
+            RVF, which is why this went unnoticed.
+
+            MEASURED, do not "fix" this by bumping the version: at 4.13.1
+            Hibernate's HQL works and presto-parser's StatementSplitter breaks
+            instead - MySqlQueryTransformerTest goes from green to 1 failure and
+            3 errors. The two requirements are incompatible, and presto-parser is
+            here for exactly one class. Removing that dependency in favour of a
+            statement splitter of our own is the way out, and it is a real piece
+            of work: quoted strings, escapes, comments and delimiters.
+        -->
         <dependency>
             <groupId>org.antlr</groupId>
             <artifactId>antlr4-runtime</artifactId>

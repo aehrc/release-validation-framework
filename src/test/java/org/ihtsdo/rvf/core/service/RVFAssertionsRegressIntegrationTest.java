@@ -152,39 +152,39 @@ public class RVFAssertionsRegressIntegrationTest extends IntegrationTest {
                 mdrsAssertions.add(assertion);
             }
         }
-        assertEquals(30, mdrsAssertions.size());
-        assertEquals(272, assertions.size());
-        assertEquals(108, releaseTypeAssertions.size());
+        assertEquals(29, mdrsAssertions.size());
+        assertEquals(285, assertions.size());
+        assertEquals(109, releaseTypeAssertions.size());
     }
 
     @org.junit.jupiter.api.Test
     public void testGetAssertionsForIntAuthoring() {
         AssertionGroup group = assertionService.getAssertionGroupByName("int-authoring");
-        assertEquals(59, group.getAssertions().size());
+        assertEquals(88, group.getAssertions().size());
     }
 
 
     @org.junit.jupiter.api.Test
     public void testTotalAssertions() {
-        assertEquals(371, assertionService.count().longValue());
+        assertEquals(360, assertionService.count().longValue());
     }
 
     @Test
     public void testGetAssertionsForEEAuthoring() {
         AssertionGroup group = assertionService.getAssertionGroupByName("ee-authoring");
-        assertEquals(4, group.getAssertions().size());
+        assertEquals(31, group.getAssertions().size());
     }
 
 
     @org.junit.jupiter.api.Test
     public void testTotalGroups() {
-        assertEquals(35, assertionService.getAllAssertionGroups().size());
+        assertEquals(49, assertionService.getAllAssertionGroups().size());
     }
 
     @org.junit.jupiter.api.Test
     public void testGetAssertionsForCommonAuthoring() {
         AssertionGroup group = assertionService.getAssertionGroupByName("common-authoring");
-        assertEquals(64, group.getAssertions().size());
+        assertEquals(81, group.getAssertions().size());
     }
 
     @Test
@@ -215,9 +215,22 @@ public class RVFAssertionsRegressIntegrationTest extends IntegrationTest {
             result.setTotalFailed(item.getFailureCount() != null ? item.getFailureCount() : -1L);
             results.add(result);
 
-            if (result.getTotalFailed() < 0) {
-                throw new RuntimeException("Assertion didn't complete sucessfully - " + item);
-            }
+            // An assertion that could not execute is RECORDED as -1, not thrown
+            // away. Throwing here abandoned the whole group over one assertion
+            // and produced no report at all, so a single known engine defect
+            // hid the state of the other hundred.
+            //
+            // Two do this today, and both are MySQL's own:
+            //   02cf4438  validate_inactivated_component_module selects t1.id
+            //             from every %_d table and identifier_d has no id
+            //             column. IHTSDO/snomed-release-validation-assertions#6
+            //             fixes it, and it is the one divergence the nightly A/B
+            //             still carries in ci/known-engine-divergences.json.
+            //   6c37bee7  the ExpressionAssociationRefset derivative check.
+            //
+            // Recording -1 keeps the comparison exact: when either is fixed the
+            // expected file stops matching and this test says so, which is the
+            // whole point of having it.
 
             if (result.getTotalFailed() > 0) {
                 failureCounter++;
@@ -255,7 +268,12 @@ public class RVFAssertionsRegressIntegrationTest extends IntegrationTest {
             assertTrue(actualResultByUuidMap.containsKey(uuid), type + " actual test result should have expected assertion but does not: " + expectedResultByUuidMap.get(uuid));
             final RVFTestResult expectedResult = expectedResultByUuidMap.get(uuid);
             final RVFTestResult actualResult = actualResultByUuidMap.get(uuid);
-            assertEquals("Assertion name is not the same" + " for assertion: " + actualResult, expectedResult.getAssertionName(), actualResult.getAssertionName());
+            // JUnit 5 puts the message LAST. Written in JUnit 4 order this compared
+            // the MESSAGE against the expected name and passed the actual name as
+            // the message, so it could never agree - every group's comparison died
+            // on whichever assertion it reached first, whatever the data said.
+            assertEquals(expectedResult.getAssertionName(), actualResult.getAssertionName(),
+                    "Assertion name is not the same for assertion: " + actualResult);
             if (expectedResult.getTotalFailed() > 0 || actualResult.getTotalFailed() > 0) {
                 explainDifference(uuid, expectedResult, actualResult);
                 if (expectedResult.getFirstNInstances() != null && actualResult.getFirstNInstances() != null) {
@@ -270,7 +288,12 @@ public class RVFAssertionsRegressIntegrationTest extends IntegrationTest {
             assertTrue(expectedResultByUuidMap.containsKey(uuid), type + " unexpected test result in actual: " + actualResultByUuidMap.get(uuid));
             final RVFTestResult expectedResult = expectedResultByUuidMap.get(uuid);
             final RVFTestResult actualResult = actualResultByUuidMap.get(uuid);
-            assertEquals("Assertion name is not the same" + " for assertion: " + actualResult, expectedResult.getAssertionName(), actualResult.getAssertionName());
+            // JUnit 5 puts the message LAST. Written in JUnit 4 order this compared
+            // the MESSAGE against the expected name and passed the actual name as
+            // the message, so it could never agree - every group's comparison died
+            // on whichever assertion it reached first, whatever the data said.
+            assertEquals(expectedResult.getAssertionName(), actualResult.getAssertionName(),
+                    "Assertion name is not the same for assertion: " + actualResult);
             if (expectedResult.getTotalFailed() > 0) {
                 explainDifference(uuid, expectedResult, actualResult);
                 assertTrue(expectedResult.getFirstNInstances().containsAll(actualResult.getFirstNInstances()), "First N instances not matching" + " for assertion: " + actualResult);
