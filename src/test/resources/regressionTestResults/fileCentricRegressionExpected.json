@@ -1,7 +1,7 @@
 {
   "assertionType" : "file-centric-validation",
   "totalAssertionsRun" : 114,
-  "totalAssertionsFailed" : 68,
+  "totalAssertionsFailed" : 69,
   "results" : [ {
     "assertionName" : "All the changes in the release are in the expected set of modules.",
     "assertionUuid" : "81a4f6a9-0f64-4b45-9e9d-310bac0ec4f8",
@@ -2923,8 +2923,16 @@
   }, {
     "assertionName" : "All type ids found in the Relationship Concrete Values snapshot file exist in the Concept snapshot file.",
     "assertionUuid" : "6a7f2569-a5b9-447c-a067-51e894c20c30",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "702769005",
+      "detail" : "RELATIONSHIP CONCRETE VALUES: id=3100000007027: Relationship Concrete Values contains a type id that does not exist in the Concept snapshot file.",
+      "componentId" : "3100000007027",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.relationship_concrete_values_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "All destination ids found in the Inferred Relationship snapshot file exist in the Concept snapshot file.",
     "assertionUuid" : "6b34ab30-79b9-11e1-b0c4-0800200c9a66",

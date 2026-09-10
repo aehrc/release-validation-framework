@@ -167,8 +167,34 @@ def rows_concrete_values():
         # A module the module dependency refset does not declare, for
         # -mdrs-violation.
         ('3100000005025', CURR, '1', '733073007', ACTIVE_E, '#3', '0', ACTIVE_B, INFERRED, NOT_REFINABLE),
+        # A typeId that is not a concept in this release, for -valid-typeid:
+        # that assertion left-joins concept_s on typeid and reports the misses.
+        ('3100000007027', CURR, '1', CORE_MODULE, ACTIVE_A, '#4', '0', ABSENT, INFERRED, NOT_REFINABLE),
     ]
     return valid, flawed
+
+
+def concrete_delta_only():
+    """A delta row that is NOT in the full file.
+
+    release-type-delta-validation joins the delta to the full on every column
+    and reports what does not match, so a delta row absent from the full file is
+    exactly what it exists to find.
+    """
+    return [('3100000008028', CURR, '1', CORE_MODULE, ACTIVE_B, '#8', '0', ACTIVE_C, INFERRED, NOT_REFINABLE)]
+
+
+def concrete_inactive_both_releases():
+    """Inactive in BOTH releases, with the effective time moved and nothing else.
+
+    -successive-states looks for a component that is inactive in this snapshot
+    AND in the previous one, identical in every other column, with a different
+    effectiveTime - an inactivation restated for no reason. Returns the previous
+    and current forms of the same row.
+    """
+    prev = ('3100000009029', PREV, '0', CORE_MODULE, ACTIVE_C, '#6', '0', ACTIVE_B, INFERRED, NOT_REFINABLE)
+    curr = ('3100000009029', CURR, '0', CORE_MODULE, ACTIVE_C, '#6', '0', ACTIVE_B, INFERRED, NOT_REFINABLE)
+    return prev, curr
 
 
 def concrete_full_only():
@@ -218,11 +244,18 @@ def main():
     total = 0
     for stem, (header, builder) in FILES.items():
         valid, flawed = builder()
-        full_only = concrete_full_only() if stem == 'sct2_RelationshipConcreteValues' else []
-        for release, kinds in ((PREV, {'Snapshot': valid, 'Full': valid, 'Delta': valid}),
-                               (CURR, {'Snapshot': valid + flawed,
-                                       'Full': valid + flawed + full_only,
-                                       'Delta': flawed})):
+        concrete = stem == 'sct2_RelationshipConcreteValues'
+        full_only = concrete_full_only() if concrete else []
+        delta_only = concrete_delta_only() if concrete else []
+        prev_inactive, curr_inactive = (concrete_inactive_both_releases() if concrete else (None, None))
+        prev_extra = [prev_inactive] if concrete else []
+        curr_extra = [curr_inactive] if concrete else []
+        for release, kinds in ((PREV, {'Snapshot': valid + prev_extra,
+                                       'Full': valid + prev_extra,
+                                       'Delta': valid + prev_extra}),
+                               (CURR, {'Snapshot': valid + flawed + curr_extra,
+                                       'Full': valid + flawed + full_only + curr_extra,
+                                       'Delta': flawed + delta_only + curr_extra})):
             base = ROOT / f'SnomedCT_RegressionTest_{release}' / 'RF2Release'
             for kind, rows in kinds.items():
                 # The current release's Snapshot and Full carry the previous rows

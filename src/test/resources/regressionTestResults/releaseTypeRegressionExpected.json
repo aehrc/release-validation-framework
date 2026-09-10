@@ -1,7 +1,7 @@
 {
   "assertionType" : "release-type-validation",
   "totalAssertionsRun" : 134,
-  "totalAssertionsFailed" : 105,
+  "totalAssertionsFailed" : 110,
   "results" : [ {
     "assertionName" : "There must be actual changes made to previously published complex map refset components in order for them to appear in the current delta.",
     "assertionUuid" : "80463c76-d84e-4a1a-8abb-c5b4d12b5da4",
@@ -915,8 +915,16 @@
   }, {
     "assertionName" : "The Concrete Value Relationship Snapshot file must contain the latest Concrete Value Relationship changes.",
     "assertionUuid" : "c0812d7e-b0a2-460d-a1bd-1292c07a7516",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "703155005",
+      "detail" : "Relationship Concrete Values: id=3100000008028 is in delta, but not in snapshot file.",
+      "componentId" : "3100000008028",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.relationship_concrete_values_d",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "The current SimpleMap refset full file contains all previously published data unchanged.",
     "assertionUuid" : "c19b9008-bbc9-4209-a3d7-896d414df565",
@@ -1279,8 +1287,16 @@
   }, {
     "assertionName" : "The current relationship concrete values delta file is an accurate derivative of the current full file.",
     "assertionUuid" : "e74e3b12-6bf8-4d58-9117-a03d4b3b4d17",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "703155005",
+      "detail" : "Relationship Concrete Values: id=3100000008028 is in delta file, but not in FULL file.",
+      "componentId" : "3100000008028",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.relationship_concrete_values_d",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "There must be actual changes made to previously published mapcorrelationOriginRefset components in order for them to appear in the current delta.",
     "assertionUuid" : "e77a45db-d2d7-4d48-9420-0b97579582fc",
@@ -1514,8 +1530,16 @@
   }, {
     "assertionName" : "Components in the new Concrete Value Relationship Delta file must be different from their previously published version.",
     "assertionUuid" : "fbfc4fd1-f10d-4fc2-889f-df0e089df4b7",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "702386002",
+      "detail" : "Relationship Concrete Values: id=3100000009029 is in the delta file, but no actual changes made since the previous release.",
+      "componentId" : "3100000009029",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.relationship_concrete_values_d",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "The current Stated Relationship full file contains all previously published data unchanged.",
     "assertionUuid" : "fd8ed390-94e9-4fd9-9e20-902a24273dca",
@@ -3036,8 +3060,16 @@
   }, {
     "assertionName" : "Inactive components in the Concrete Value Relationship Snapshot file must have been active in the previous version.",
     "assertionUuid" : "4deb9274-d923-4f84-b0dc-c4dab0c2fc4c",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "702386002",
+      "detail" : "Relationship Concrete Values: id=3100000009029 should not have a new inactive state as it was inactive previously.",
+      "componentId" : "3100000009029",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.relationship_concrete_values_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "The MRCM Attribute Domain Refset Full file must contain the same data as its previously published version.",
     "assertionUuid" : "4fdf8c6a-8b58-4bf7-a8b5-71176ede7ac0",
@@ -4457,8 +4489,16 @@
   }, {
     "assertionName" : "The current Relationship Concrete Values full file contains all previously published data unchanged.",
     "assertionUuid" : "7d105b20-ce21-49c2-b16d-b49df13fdfea",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "702386002",
+      "detail" : "Relationship Concrete Values: id=3100000009029 is in prior full file but not in current full file.",
+      "componentId" : "3100000009029",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_previous.relationship_concrete_values_f",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "Changes from the MapCorrelationOriginRefset delta file must be in the current full file.",
     "assertionUuid" : "7e203a1f-2b6d-462a-a6f9-93cbc3893616",
