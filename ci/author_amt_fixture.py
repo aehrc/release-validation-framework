@@ -103,6 +103,7 @@ class Rows:
     def __init__(self):
         self.concept, self.desc, self.rel, self.lang, self.simple = [], [], [], [], []
         self.concrete = []
+        self.attrvaluemap, self.imaprefset = [], []
         self._n = 0
 
     def next_id(self, prefix, partition):
@@ -398,6 +399,59 @@ def author_same_refset_parentage(r: Rows):
     r.relationship_row(child, parent, typeid=IS_A)
     return 2
 
+def author_map_refset_files(r: Rows):
+    """The two map-refset files the fixture does not have at all.
+
+    `attributevaluemap_*` is loaded from `der2_csRefset_.*AttributeValueMap` and
+    `isimplemaprefset_*` from `der2_iRefset_.*SimpleMap` - neither of which is in
+    this fixture, so ten assertions read empty tables and could not fire whatever
+    content the rest of the release carried.
+
+    Each row below is one assertion's defect, and only that one, so a finding
+    names a cause:
+
+    * an id that is no refset at all, for `refsetId is a valid refsetId`
+    * a referencedComponentId that is in no component file, for `- 07`
+    * one id appearing twice with a different referencedComponentId, and another
+      with a different refsetId, for `- 09a` and `- 09b`, which is a Full-file
+      defect: the same member changing what it points at
+    * an empty value, for `StringValue is populated`
+    * two rows agreeing on every business key, for the `All currently active
+      references are unique` pair
+    * a negative mapTarget, for `value1 is a 32-bit integer`
+    """
+    module, eff = AMT_MODULE, CURR
+    bogus_refset = '99700001000036101'      # a plain concept, so not a valid refsetId
+    absent_component = '999999999999'       # deliberately in no component file
+    real_refset = '900000000000490003'      # a genuine attribute-value refset
+
+    r.attrvaluemap = [
+        # - 06: refsetId that is not a descendant of the refset root
+        ('a0000001-0000-4000-8000-000000000001', eff, '1', module, bogus_refset, '703860006', '', 'first'),
+        # - 07: referencedComponentId in no component file
+        ('a0000001-0000-4000-8000-000000000002', eff, '1', module, real_refset, absent_component, '', 'second'),
+        # - 09a: one id, two referencedComponentIds
+        ('a0000001-0000-4000-8000-000000000003', '20130131', '1', module, real_refset, '703860006', '', 'third'),
+        ('a0000001-0000-4000-8000-000000000003', eff, '1', module, real_refset, '703649004', '', 'third'),
+        # - 09b: one id, two refsetIds
+        ('a0000001-0000-4000-8000-000000000004', '20130131', '1', module, real_refset, '703860006', '', 'fourth'),
+        ('a0000001-0000-4000-8000-000000000004', eff, '1', module, '900000000000489007', '703860006', '', 'fourth'),
+        # - 13: no value at all
+        ('a0000001-0000-4000-8000-000000000005', eff, '1', module, real_refset, '703860006', '', ''),
+        # - 14: two active rows agreeing on refset, component, target and value
+        ('a0000001-0000-4000-8000-000000000006', eff, '1', module, real_refset, '703860006', 'same', 'same'),
+        ('a0000001-0000-4000-8000-000000000007', eff, '1', module, real_refset, '703860006', 'same', 'same'),
+    ]
+    r.imaprefset = [
+        # - 12: a mapTarget that is not a positive integer, and is not zero
+        ('b0000001-0000-4000-8000-000000000001', eff, '1', module, '900000000000497000', '703860006', '-5'),
+        # - 13: two active rows agreeing on refset, component and target
+        ('b0000001-0000-4000-8000-000000000002', eff, '1', module, '900000000000497000', '703860006', '77'),
+        ('b0000001-0000-4000-8000-000000000003', eff, '1', module, '900000000000497000', '703860006', '77'),
+    ]
+    return len(r.attrvaluemap) + len(r.imaprefset)
+
+
 def adrs_pattern_requirements():
     """Reads the ADRS assertions out of the published store: for each, the first
     positive `REGEXP_MATCHES(term, ...)` and, if it reads the ADRS preferred
@@ -448,6 +502,14 @@ FILES = {
         ['id', 'effectiveTime', 'active', 'moduleId', 'sourceId', 'value',
          'relationshipGroup', 'typeId', 'characteristicTypeId', 'modifierId'],
         'concrete', ''),
+    # Neither of these files is in the fixture, so they are created rather than
+    # appended to - which the merge handles: nothing existing means nothing kept.
+    'der2_csRefset_AttributeValueMap': (
+        ['id', 'effectiveTime', 'active', 'moduleId', 'refsetId',
+         'referencedComponentId', 'mapTarget', 'value'], 'attrvaluemap', ''),
+    'der2_iRefset_SimpleMap': (
+        ['id', 'effectiveTime', 'active', 'moduleId', 'refsetId',
+         'referencedComponentId', 'mapTarget'], 'imaprefset', ''),
 }
 
 def is_authored(line: str) -> bool:
@@ -489,14 +551,17 @@ def main():
     refsets = author_refset_concept_descriptions(r)
     author_refset_disjointness_breach(r)
     author_same_refset_parentage(r)
+    maps = author_map_refset_files(r)
     print(f"  authored {members} class-refset members, each non-compliant in the ways "
           f"the corpus checks, plus one dangling attribute target")
     print(f"  authored {adrs} concepts from ADRS trigger patterns, "
           f"{refsets} refset concepts with non-canonical names, a disjointness "
           f"breach and a same-refset parent")
+    print(f"  authored {maps} rows in the two map-refset files the fixture lacked")
 
     buckets = {'concept': r.concept, 'desc': r.desc, 'rel': r.rel, 'lang': r.lang,
-               'simple': r.simple, 'concrete': r.concrete}
+               'simple': r.simple, 'concrete': r.concrete,
+               'attrvaluemap': r.attrvaluemap, 'imaprefset': r.imaprefset}
     total = 0
     for stem, (header, bucket, lang_suffix) in FILES.items():
         rows = buckets[bucket]
@@ -517,7 +582,11 @@ def main():
                 sep = '_' if stem.startswith('sct2_') else ''
                 name = f'{stem}{sep}{kind}{lang_suffix}_INT_{release}.txt'
                 path = base / kind / name
-                if not path.exists():
+                # The two map-refset files do not exist yet and must be created;
+                # everything else is an append to a file that does, and a missing
+                # one there means a name is wrong rather than a file is new.
+                creates = stem in ('der2_csRefset_AttributeValueMap', 'der2_iRefset_SimpleMap')
+                if not path.exists() and not (creates and emit):
                     continue
                 kept, added = merge(path, header, emit)
                 total += added
