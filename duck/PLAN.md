@@ -367,6 +367,72 @@ The table pages 25 at a time. The in-flight card is deliberately **not** paged -
 a run queued four days ago sorts below sixty finished ones and is exactly the run
 someone is looking for.
 
+**3.14 An absent dependency was silently shrinking 17 assertions. FIXED
+2026-09-10.** Asked whether there are actual per-assertion tests. There are,
+and checking them properly found this.
+
+**The oracle nobody had joined.** MySQL's per-assertion expectations for the
+regression fixture are already in this repo -
+`src/test/resources/regressionTestResults/*.json`, 330 assertions with
+`totalFailed` keyed by `assertionUuid` - and `AssertionCorpusDigestTest` runs
+the whole corpus over the SAME two fixture releases. Joining them gives **264
+assertions with both engines' numbers on identical data**, offline, in about
+three seconds. 230 agreed; 34 did not.
+
+**Why the 34 are not a parity measurement.** Those files were last touched
+**2023-02-09**, by a project reorganisation, against a corpus that is now
+`international@2026.07.27`. Most of the 34 are three and a half years of
+assertion SQL drift, so nothing is gated on them.
+
+**But one direction cannot be drift:** DuckDB finding FEWER than MySQL.
+`release-type-snapshot-concept-successive-states` has two statements that write
+findings, and the second ends
+`LEFT JOIN <DEPENDENCY>.concept_s AS e ... WHERE e.id IS NULL`. With no
+dependency the binder skipped it, so one of two checks ran and the report
+carried the survivor's count as the whole answer: **1 finding where MySQL found
+4**. No error, no not-run, nothing to notice - the failure mode this engine
+exists to remove.
+
+An anti-join requiring NULL is a **no-op** against an empty relation, so an
+empty dependency and an absent one give the same answer. Across the bundled
+corpus, for a release with no dependency - every edition run, and
+`releaseAsAnEdition=true` is what the nightly submits:
+
+| | |
+|---|---|
+| 324 | fully answered |
+| 3 | honestly not-run |
+| **17** | **silently partial** |
+
+Of those 17: **16** are anti-join statements in the
+`release-type-snapshot-*-successive-states` family, and **one**
+(`file-centric-snapshot-inactivated-component-module`, 28 statements) compares
+AGAINST the dependency and must still be skipped. Hence not "bind an empty
+schema and run everything" - that is MySQL's behaviour, and it is how one AU
+assertion reported 1,405,850 findings against a dependency that was never
+there.
+
+`DuckBinder` now stands in an empty schema for a statement whose ONLY use of the
+absent dependency is an anti-join, and refuses every other shape, including a
+half-anti-joined one and a LEFT JOIN whose alias is read rather than required to
+be NULL. `<PREVIOUS>` is never stood in for: "this did not exist before" and
+"there is no before" are different answers, and a first-time release is a real
+case.
+
+**Verified against an oracle that is not ours:** 15 of the 16 now match MySQL's
+recorded counts EXACTLY where they under-reported - concept 1->4, simple-map
+1->4, language 1->3, attribute-value 1->3, inferred-relationship 1->2, and four
+that moved NOT_RUN -> RAN. Fixture agreement 230/264 -> 236/264. The holdout is
+`description-successive-states` (MySQL 2, DuckDB 1), where the materialiser logs
+`description_s: strict read refused` - ragged rows in the fixture, not the
+assertion.
+
+*Consequence to expect:* baseline entry `26c25479`
+(`duckdb-reports-not-run-where-mysql-false-passes`) is keyed to
+`release-type-snapshot-owl-expression-successive-states`, which is in the fixed
+family. Its divergence should collapse, and the gate fails on a baseline entry
+that has stopped diverging - by design. Build **16337** decides it.
+
 ## 4. Known, deliberate, not scheduled
 
 * `minAssertions` 1,400 / `minSqlAssertions` 400 depend on the AMT overlay
