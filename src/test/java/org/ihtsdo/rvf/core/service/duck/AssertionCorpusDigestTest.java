@@ -420,12 +420,12 @@ class AssertionCorpusDigestTest {
 	 * This floor is a separate number in the source, and lowering it is an edit
 	 * a reviewer can see.
 	 *
-	 * <p>The figure is where deliberate authoring got to on 2026-09-10: 315 of
+	 * <p>The figure is where deliberate authoring got to on 2026-09-10: 328 of
 	 * the 360 find something, and 16 of the remainder are {@code -proc.sql} or
 	 * {@code res-table-*} assertions that build tables rather than report
-	 * findings, so 315 of 344 that can. See duck/PLAN.md 3.19.
+	 * findings, so 328 of 344 that can. See duck/PLAN.md 3.19.
 	 */
-	private static final int COVERAGE_FLOOR = 315;
+	private static final int COVERAGE_FLOOR = 328;
 
 	@Test
 	void coverageDoesNotRegress() {

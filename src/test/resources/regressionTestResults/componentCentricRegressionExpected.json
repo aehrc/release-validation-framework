@@ -975,7 +975,7 @@
       "tableName" : "rvf_regression_test_prospective.associationrefset_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 317
+    "totalFailed" : 320
   }, {
     "assertionName" : "Association reference records are referencing the same concept for both referencedComponentId and targetComponentId.",
     "assertionUuid" : "d2727004-cfed-4798-8710-1a088833e775",
@@ -1548,7 +1548,7 @@
       "tableName" : "rvf_regression_test_prospective.complexmaprefset_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 61
+    "totalFailed" : 63
   }, {
     "assertionName" : "IDs must be unique in the Simple Refset Snapshot file.",
     "assertionUuid" : "1cd8b7f9-5730-4db9-b508-13575825b28f",
@@ -2260,8 +2260,16 @@
       "fullComponent" : null,
       "tableName" : "rvf_regression_test_prospective.mrcmmodulescoperefset_s",
       "skipModuleCheck" : false
+    }, {
+      "conceptId" : "723596005",
+      "detail" : "MRCM MODULE SCOPE REFSET: id=3e337c6a-217c-518c-bdd8-0c012d461973 MrcmRuleRefsetId in MRCM MODULE SCOPE SNAPSHOT does not exist in the RefsetId values of MRCM DOMAIN SNAPSHOT or MRCM ATTRIBUTE DOMAIN SNAPSHOT or MRCM ATTRIBUTE RANGE SNAPSHOT",
+      "componentId" : "3e337c6a-217c-518c-bdd8-0c012d461973",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmmodulescoperefset_s",
+      "skipModuleCheck" : false
     } ],
-    "totalFailed" : 5
+    "totalFailed" : 6
   }, {
     "assertionName" : "All active FSNs for a given concept have the same semantic tag.",
     "assertionUuid" : "5c0186f3-0b72-4685-8aad-eff15a7f8880",

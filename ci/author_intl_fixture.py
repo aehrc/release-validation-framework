@@ -76,6 +76,7 @@ class Rows:
     def __init__(self):
         self.concept, self.desc, self.mdrs, self.assoc = [], [], [], []
         self.descriptor, self.extmap, self.owl, self.complexmap, self.rel = [], [], [], [], []
+        self.desctype, self.simplemap = [], []
         self._n = 0
 
     def uuid(self):
@@ -230,6 +231,49 @@ def author_map_and_axiom_defects(r: Rows):
     return n
 
 
+def author_duplicate_keys_and_modules(r: Rows):
+    """Duplicated member ids, and a member on the wrong module.
+
+    A refset file may not use one member id twice, and the -unique-id assertions
+    exist for that. They had nothing to find because every file in the fixture
+    was internally tidy. One duplicate per file is enough, and it is a real
+    failure mode: the same id emitted twice is what a bad merge produces.
+    """
+    n = 0
+    # refsetdescriptor: one id twice, and separately one (refset, attributeOrder)
+    # twice, which is the other key that has to be unique
+    dup_descriptor = r.uuid()
+    for order in ('2', '3'):
+        r.descriptor.append((dup_descriptor, CURR, '1', CORE_MODULE, '900000000000456007',
+                             KNOWN_CONCEPT, 'Referenced component', '900000000000461009', order))
+    n += 1
+    for _ in range(2):
+        r.descriptor.append((r.uuid(), CURR, '1', CORE_MODULE, '900000000000456007',
+                             KNOWN_CONCEPT, 'Attribute value', '900000000000461009', '4'))
+    n += 1
+
+    # module dependency: one id twice
+    dup_mdrs = r.uuid()
+    for target in (MODEL_MODULE, CORE_MODULE):
+        r.mdrs.append((dup_mdrs, CURR, '1', CORE_MODULE, MDRS_REFSET, target, CURR, CURR))
+    n += 1
+
+    # description type: one id twice
+    dup_type = r.uuid()
+    for length in ('255', '4096'):
+        r.desctype.append((dup_type, CURR, '1', CORE_MODULE, '900000000000538005',
+                           '900000000000003001', '900000000000540000', length))
+    n += 1
+
+    # simple map: a member on a module that is not the core one, which the
+    # assertion only checks when no included-modules filter is set - the case
+    # this fixture runs in
+    r.simplemap.append((r.uuid(), CURR, '1', MODEL_MODULE, '900000000000497000',
+                        KNOWN_CONCEPT, 'A00'))
+    n += 1
+    return n
+
+
 FILES = {
     'sct2_Concept': (['id', 'effectiveTime', 'active', 'moduleId', 'definitionStatusId'],
                      'concept', '', '_'),
@@ -256,6 +300,12 @@ FILES = {
     'sct2_sRefset_OWLExpression': (
         ['id', 'effectiveTime', 'active', 'moduleId', 'refsetId', 'referencedComponentId',
          'owlExpression'], 'owl', '', ''),
+    'der2_ciRefset_DescriptionType': (
+        ['id', 'effectiveTime', 'active', 'moduleId', 'refsetId', 'referencedComponentId',
+         'descriptionFormat', 'descriptionLength'], 'desctype', '', ''),
+    'der2_sRefset_SimpleMap': (
+        ['id', 'effectiveTime', 'active', 'moduleId', 'refsetId', 'referencedComponentId',
+         'mapTarget'], 'simplemap', '', ''),
     'sct2_Relationship': (
         ['id', 'effectiveTime', 'active', 'moduleId', 'sourceId', 'destinationId',
          'relationshipGroup', 'typeId', 'characteristicTypeId', 'modifierId'], 'rel', '', '_'),
@@ -287,10 +337,12 @@ def main():
     print(f"  authored {author_national_module_concepts(r)} national-module concepts with no FSN")
     print(f"  authored {author_association_defects(r)} association defects")
     print(f"  authored {author_map_and_axiom_defects(r)} map, axiom and character defects")
+    print(f"  authored {author_duplicate_keys_and_modules(r)} duplicate-key and wrong-module defects")
 
     buckets = {'concept': r.concept, 'desc': r.desc, 'mdrs': r.mdrs, 'assoc': r.assoc,
                'descriptor': r.descriptor, 'extmap': r.extmap, 'owl': r.owl,
-               'complexmap': r.complexmap, 'rel': r.rel}
+               'complexmap': r.complexmap, 'rel': r.rel,
+               'desctype': r.desctype, 'simplemap': r.simplemap}
     total = 0
     for stem, (header, bucket, lang_suffix, sep) in FILES.items():
         rows = buckets[bucket]

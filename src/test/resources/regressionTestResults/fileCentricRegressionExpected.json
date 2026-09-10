@@ -1,7 +1,7 @@
 {
   "assertionType" : "file-centric-validation",
   "totalAssertionsRun" : 114,
-  "totalAssertionsFailed" : 96,
+  "totalAssertionsFailed" : 101,
   "results" : [ {
     "assertionName" : "All the changes in the release are in the expected set of modules.",
     "assertionUuid" : "81a4f6a9-0f64-4b45-9e9d-310bac0ec4f8",
@@ -807,8 +807,16 @@
   }, {
     "assertionName" : "The module id of all SimpleMap members should be the core module id.",
     "assertionUuid" : "bb88a465-3f40-4890-b5be-14f94632c3a9",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "703860006",
+      "detail" : "Simple map refset: id=c0000001-0000-0000-0000-00000000029 has a wrong module id:900000000000012004",
+      "componentId" : "c0000001-0000-0000-0000-00000000029",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.simplemaprefset_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "The complexmap Refset moduleId,effectiveTime pair should always respect the MDRS.",
     "assertionUuid" : "bba16026-ed4c-4237-b52a-5e14743cfcb3",
@@ -968,8 +976,16 @@
   }, {
     "assertionName" : "Description Type Refset id must be unique in the snapshot file.",
     "assertionUuid" : "c1d2e3f4-5a6b-7c8d-9e0f-1a2b3c4d5e6f",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "900000000000003001",
+      "detail" : "Description Type Refset: id=c0000001-0000-0000-0000-00000000028 is duplicate in Snapshot file",
+      "componentId" : "c0000001-0000-0000-0000-00000000028",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.descriptiontyperefset_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "All referencedComponentIds in the MRCM Domain Refset Snapshot File must refer to valid concepts.",
     "assertionUuid" : "c3e6008a-2e9a-4b42-9a37-78ea6a4c7799",
@@ -1049,8 +1065,16 @@
   }, {
     "assertionName" : "Descriptor Refset id must be unique in the snapshot file.",
     "assertionUuid" : "d2e3f4a5-6b7c-8d9e-0f1a-2b3c4d5e6f7a",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "703860006",
+      "detail" : "Descriptor Refset: id=c0000001-0000-0000-0000-00000000024 is duplicate in Snapshot file",
+      "componentId" : "c0000001-0000-0000-0000-00000000024",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.refsetdescriptor_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "All referencedComponentIds in the Attribute Value Refset Snapshot File must refer to valid concepts.",
     "assertionUuid" : "d5c80582-ad32-4f26-a729-a91fe04a06b2",
@@ -1500,8 +1524,16 @@
   }, {
     "assertionName" : "Module Dependency Refset id must be unique in the snapshot file.",
     "assertionUuid" : "e3f4a5b6-7c8d-9e0f-1a2b-3c4d5e6f7a8b",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "900000000000012004",
+      "detail" : "Module Dependency Refset: id=c0000001-0000-0000-0000-00000000027 is duplicate in Snapshot file",
+      "componentId" : "c0000001-0000-0000-0000-00000000027",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.moduledependencyrefset_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "All moduleIds in the MRCM Attribute Domain Refset Snapshot File must refer to valid concepts.",
     "assertionUuid" : "e968c5d1-e06b-4351-9e96-3f62208d27d4",
@@ -1760,7 +1792,7 @@
       "tableName" : "rvf_regression_test_prospective.moduledependencyrefset_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 11
+    "totalFailed" : 12
   }, {
     "assertionName" : "All members refer to a description that is referenced in either the description table or the text definition table.",
     "assertionUuid" : "f5d9ae70-7856-11e1-b0c4-0800200c9a66",
@@ -1817,8 +1849,16 @@
   }, {
     "assertionName" : "There must not be more than one active refset descriptor entry with the same referencedComponentId, attributeDescription, attributeOrder and attributeType.",
     "assertionUuid" : "f8e7d6c5-b4a3-4291-8e7d-6c5b4a392817",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "703860006",
+      "detail" : "Refset descriptor: duplicate active entries for referencedComponentId=703860006, attributeDescription=0, attributeOrder=4, attributeType=900000000000461009 (member ids=c0000001-0000-0000-0000-00000000025, c0000001-0000-0000-0000-00000000026)",
+      "componentId" : "c0000001-0000-0000-0000-00000000025",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.refsetdescriptor_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "The current Language Refset snapshot file does not contain duplicate Member Ids.",
     "assertionUuid" : "fc24db60-7856-11e1-b0c4-0800200c9a66",
@@ -3457,7 +3497,7 @@
       "tableName" : null,
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 112
+    "totalFailed" : 114
   }, {
     "assertionName" : "There is a 1-to-1 relationship between the id and the immutable values in Inferred Relationship snapshot.",
     "assertionUuid" : "4dbfed80-79b9-11e1-b0c4-0800200c9a66",

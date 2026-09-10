@@ -318,21 +318,44 @@ def main():
         # which is why twelve of them stayed silent after the first MRCM pass.
         undeclared = undeclared_module_row(stem)
         flawed = flawed + undeclared
+        prev_full_only, inactive_both, prev_delta = [], [], []
         if not concrete and valid:
             # Distinct member ids, present in ONE file only. A first attempt
             # reused a flawed row, which appears in the snapshot and delta too -
             # so it broke no chain and moved nothing. "Full only" has to mean
             # only.
-            def stamp(row, seed):
-                return (member_id(stem + seed), CURR) + tuple(row[2:])
+            def stamp(row, seed, effective=CURR, active=None):
+                head = (member_id(stem + seed), effective)
+                tail = tuple(row[2:])
+                if active is not None:
+                    tail = (active,) + tail[1:]
+                return head + tail
             full_only = [stamp(valid[0], '-full-only')]
             delta_only = [stamp(valid[0], '-delta-only')]
-        for release, kinds in ((PREV, {'Snapshot': valid + prev_extra,
-                                       'Full': valid + prev_extra,
+
+            # release-type-full-validation-<refset> reads the PREVIOUS full left
+            # joined to the prospective one, so it fires on a row the previous
+            # release published and this one dropped. Only the previous full
+            # carries it.
+            prev_full_only = [stamp(valid[0], '-dropped-from-full', effective=PREV)]
+
+            # ...-successive-states wants a row that is INACTIVE now and was
+            # inactive in the previous snapshot too, at a different
+            # effectiveTime: "inactive but no active state found in the previous
+            # snapshot". Two states that never alternated.
+            inactive_both = [stamp(valid[0], '-never-active', active='0')]
+
+            # ...-delta-previous-snapshot-validation wants a delta row that does
+            # not match the previous snapshot it claims to restate, so this one
+            # is stamped for the previous release and appears nowhere else.
+            prev_delta = [stamp(valid[0], '-delta-not-in-previous', effective=PREV)]
+        prev_inactive_row = [(r[0], PREV) + tuple(r[2:]) for r in inactive_both]
+        for release, kinds in ((PREV, {'Snapshot': valid + prev_extra + prev_inactive_row,
+                                       'Full': valid + prev_extra + prev_full_only,
                                        'Delta': valid + prev_extra}),
-                               (CURR, {'Snapshot': valid + flawed + curr_extra,
-                                       'Full': valid + flawed + full_only + curr_extra,
-                                       'Delta': flawed + delta_only + curr_extra})):
+                               (CURR, {'Snapshot': valid + flawed + curr_extra + inactive_both,
+                                       'Full': valid + flawed + full_only + curr_extra + inactive_both,
+                                       'Delta': flawed + delta_only + curr_extra + prev_delta})):
             base = ROOT / f'SnomedCT_RegressionTest_{release}' / 'RF2Release'
             for kind, rows in kinds.items():
                 # The current release's Snapshot and Full carry the previous rows
