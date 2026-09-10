@@ -1,4 +1,4 @@
-id	effectiveTime	active	moduleId	refSetId	referencedComponentId	mapGroup	mapPriority	mapRule	mapAdvice	mapTarget	correlationId
+id	effectiveTime	active	moduleId	refsetId	referencedComponentId	mapGroup	mapPriority	mapRule	mapAdvice	mapTarget	correlationId
 a1a70070-7051-549e-9d0a-1fea31f4d87c	20140131	0	900000000000207008	447563008	220000	1	1			716.60	447557004
 0d0f7c90-cb39-5537-b069-b20eacfabc89	20140131	1	900000000000207008	447563008	702005	1	1			V72.5	447558009
 012fd0e6-0250-5458-83da-7867664cb716	20140131	1	900000000000207008	447563008	837001	1	1				447556008

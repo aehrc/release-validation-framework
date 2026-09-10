@@ -1,7 +1,7 @@
 {
   "assertionType" : "component-centric-validation",
   "totalAssertionsRun" : 96,
-  "totalAssertionsFailed" : 86,
+  "totalAssertionsFailed" : 88,
   "results" : [ {
     "assertionName" : "Active concepts must have correct definition status according to defined axioms.",
     "assertionUuid" : "8090d441-7aeb-4a48-bdc3-2545916aa26d",
@@ -562,7 +562,7 @@
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 52
+    "totalFailed" : 66
   }, {
     "assertionName" : "Active concepts do not have active inactivation indicators.",
     "assertionUuid" : "b72bc5f4-7afb-4a2e-ac3a-e0f4373b03e6",
@@ -660,7 +660,7 @@
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 110
+    "totalFailed" : 124
   }, {
     "assertionName" : "ReferencedComponentId in MRCM ATTRIBUTE DOMAIN SNAPSHOT exists in the ReferencedComponentId values of MRCM ATTRIBUTE RANGE SNAPSHOT.",
     "assertionUuid" : "bd3bb9ec-97ae-4c53-9686-9c8c63b8d67b",
@@ -975,7 +975,7 @@
       "tableName" : "rvf_regression_test_prospective.associationrefset_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 289
+    "totalFailed" : 309
   }, {
     "assertionName" : "Association reference records are referencing the same concept for both referencedComponentId and targetComponentId.",
     "assertionUuid" : "d2727004-cfed-4798-8710-1a088833e775",
@@ -1263,7 +1263,7 @@
       "tableName" : "rvf_regression_test_prospective.description_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 142
+    "totalFailed" : 156
   }, {
     "assertionName" : "Active historical association refset members have inactive concepts as reference components.",
     "assertionUuid" : "f7117eb0-7cd6-11e1-b0c4-0800200c9a66",
@@ -1463,7 +1463,7 @@
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 23
+    "totalFailed" : 35
   }, {
     "assertionName" : "All active Refset records are valid.",
     "assertionUuid" : "1a4e40a9-cf14-4703-b206-9f2fbeb56c7f",
@@ -1696,7 +1696,7 @@
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 35
+    "totalFailed" : 48
   }, {
     "assertionName" : "For a given concept, all description terms are unique.",
     "assertionUuid" : "2e0eb135-fd7d-4f24-83c1-0cba797ee766",
@@ -1737,8 +1737,16 @@
   }, {
     "assertionName" : "All active records in extended map refset are valid.",
     "assertionUuid" : "2e2542f9-64a4-43d0-bf4e-9029af8b7cf0",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "999999999999",
+      "detail" : "Reference component id:999999999999 for refset id: 447563008 in extended map refset must be valid.",
+      "componentId" : "c0000001-0000-0000-0000-0000000001e",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.extendedmaprefset_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "All inferred relationships in which the concept associated is inactive, are inactive relationships.",
     "assertionUuid" : "2e4fd620-7d08-11e1-b0c4-0800200c9a66",
@@ -1762,6 +1770,14 @@
       "conceptId" : "703649004",
       "detail" : "RELATIONSHIP: id=997399001025: Active inferred relationship is associated with an inactive destinationid concept.",
       "componentId" : "997399001025",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.relationship_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "703649004",
+      "detail" : "RELATIONSHIP: id=997700001027: Active inferred relationship is associated with an inactive destinationid concept.",
+      "componentId" : "997700001027",
       "moduleId" : null,
       "fullComponent" : null,
       "tableName" : "rvf_regression_test_prospective.relationship_s",
@@ -1799,7 +1815,7 @@
       "tableName" : "rvf_regression_test_prospective.relationship_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 7
+    "totalFailed" : 8
   }, {
     "assertionName" : "The concepts referenced by expressions in LOINC ExpressionAssociationRefset SNAPSHOT file must exist in the concept snapshot.",
     "assertionUuid" : "30947783-78f5-4ffc-a22b-b03d83c5909d",
@@ -2042,7 +2058,7 @@
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 72
+    "totalFailed" : 83
   }, {
     "assertionName" : "IDs must be unique in the Description Snapshot file.",
     "assertionUuid" : "3be8c763-a5bc-404b-af9f-a2cb681f6f3d",
@@ -2136,14 +2152,6 @@
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     }, {
-      "conceptId" : "703860006",
-      "detail" : "CONCEPT: id=703860006: Active concept has no active axiom in the same module as the concept.",
-      "componentId" : "703860006",
-      "moduleId" : null,
-      "fullComponent" : null,
-      "tableName" : "rvf_regression_test_prospective.concept_s",
-      "skipModuleCheck" : false
-    }, {
       "conceptId" : "703155005",
       "detail" : "CONCEPT: id=703155005: Active concept has no active axiom in the same module as the concept.",
       "componentId" : "703155005",
@@ -2199,8 +2207,16 @@
       "fullComponent" : null,
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
+    }, {
+      "conceptId" : "733073007",
+      "detail" : "CONCEPT: id=733073007: Active concept has no active axiom in the same module as the concept.",
+      "componentId" : "733073007",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.concept_s",
+      "skipModuleCheck" : false
     } ],
-    "totalFailed" : 119
+    "totalFailed" : 132
   }, {
     "assertionName" : "MrcmRuleRefsetId in MRCM MODULE SCOPE SNAPSHOT exists in the RefsetId values of MRCM DOMAIN SNAPSHOT or MRCM ATTRIBUTE DOMAIN SNAPSHOT or MRCM ATTRIBUTE RANGE SNAPSHOT.",
     "assertionUuid" : "57ae69cd-26f0-4001-ba2f-ae56129e2e28",
@@ -2360,8 +2376,16 @@
   }, {
     "assertionName" : "Active description of active concept consists of valid characters.",
     "assertionUuid" : "6614ff12-fca2-42b7-a5da-ea26353979fe",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "997500034004",
+      "detail" : "DESCRIPTION ID=997600035018: FSN=Concept with an @ in its fully specified name (finding) contains invalid character.",
+      "componentId" : "997600035018",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.description_d",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "All active records in extended map refset are valid.",
     "assertionUuid" : "6bed3e87-6d20-4b05-81ce-43d359a6f684",
@@ -2446,7 +2470,7 @@
       "tableName" : "rvf_regression_test_prospective.extendedmaprefset_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 26
+    "totalFailed" : 27
   }, {
     "assertionName" : "Active rule based extended map must have sequentially ordered mapGroup values without gaps.",
     "assertionUuid" : "6e70ea3e-c4dd-4ae3-8b75-f0567e42e650",
@@ -2591,7 +2615,7 @@
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 110
+    "totalFailed" : 124
   }, {
     "assertionName" : "ReferencedComponentId in MRCM ATTRIBUTE RANGE SNAPSHOT exists in the ReferencedComponentId values of MRCM ATTRIBUTE DOMAIN SNAPSHOT.",
     "assertionUuid" : "73772817-4654-4abf-b801-e849fbae1ba0",
@@ -2629,8 +2653,16 @@
       "fullComponent" : null,
       "tableName" : "rvf_regression_test_prospective.complexmaprefset_s",
       "skipModuleCheck" : false
+    }, {
+      "conceptId" : "703860006",
+      "detail" : "ComplexMap: id=c0000001-0000-0000-0000-00000000021: Non-sequential map group:2",
+      "componentId" : "c0000001-0000-0000-0000-00000000021",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.complexmaprefset_s",
+      "skipModuleCheck" : false
     } ],
-    "totalFailed" : 1
+    "totalFailed" : 2
   }, {
     "assertionName" : "Active extended maps have valid mapCategoryId.",
     "assertionUuid" : "7e70ea3e-c4dd-4ae3-8b75-f0567e42d630",
@@ -2793,8 +2825,16 @@
       "fullComponent" : null,
       "tableName" : "rvf_regression_test_prospective.complexmaprefset_s",
       "skipModuleCheck" : false
+    }, {
+      "conceptId" : "703860006",
+      "detail" : "ComplexMap: id=c0000001-0000-0000-0000-00000000021: Higher-level map group with only blank map targets",
+      "componentId" : "c0000001-0000-0000-0000-00000000021",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.complexmaprefset_s",
+      "skipModuleCheck" : false
     } ],
-    "totalFailed" : 2
+    "totalFailed" : 3
   }, {
     "assertionName" : "Active complex maps should not have the same mapTarget in different groups for a given referenced component.",
     "assertionUuid" : "7e70ea3e-c4dd-4ae3-8b75-f0567e44b550",

@@ -75,6 +75,7 @@ def sctid(prefix: str, seq: int, partition: str) -> str:
 class Rows:
     def __init__(self):
         self.concept, self.desc, self.mdrs, self.assoc = [], [], [], []
+        self.descriptor, self.extmap, self.owl, self.complexmap, self.rel = [], [], [], [], []
         self._n = 0
 
     def uuid(self):
@@ -158,6 +159,77 @@ def author_association_defects(r: Rows):
     return 3
 
 
+# Concepts the fixture already holds, used as referenced components so a finding
+# is about the row's own defect rather than a dangling reference.
+KNOWN_CONCEPT = '703860006'
+INACTIVE = '703649004'
+ABSENT = '999999999999'
+LATER = '20140131'          # after this release, which is what mdrs-violation wants
+NEVER_GROUPED_ATTRIBUTE = '703155005'   # ACTIVE_B, which ci/author_mrcm_fixture.py declares grouped=0
+
+
+def author_map_and_axiom_defects(r: Rows):
+    """One row per remaining finding-capable assertion, each into the file that
+    assertion's table is loaded from - which is not always the obvious one:
+    complexmaprefset_s comes from der2_iissscRefset_*ComplexMap and
+    extendedmaprefset_s from der2_iisssccRefset_*ExtendedMap, six s-and-c
+    characters apart.
+    """
+    n = 0
+
+    # mdrs-violation-<refsetdescriptor|extendedmaprefset>: a row whose module is
+    # one this release declares a dependency ON, stamped LATER than the version
+    # that dependency pins. That is the violation: content from a module version
+    # the release never said it depended on.
+    r.descriptor.append((r.uuid(), LATER, '1', MODEL_MODULE, '900000000000456007',
+                         KNOWN_CONCEPT, 'Referenced component', '900000000000461009', '1'))
+    n += 1
+    r.extmap.append((r.uuid(), LATER, '1', MODEL_MODULE, '447562003', KNOWN_CONCEPT,
+                     '1', '1', 'TRUE', 'ALWAYS A00', 'A00', '447561005', '447637006'))
+    n += 1
+
+    # referencedComponentID-in-extended-map: an active member whose referenced
+    # component is not an active concept, in a refset that is not one of the two
+    # the assertion excludes.
+    r.extmap.append((r.uuid(), CURR, '1', CORE_MODULE, '447563008', ABSENT,
+                     '1', '1', 'TRUE', 'ALWAYS A01', 'A01', '447561005', '447637006'))
+    n += 1
+
+    # owl-expression-unique-active-axiom-for-same-concept: the same axiom twice,
+    # active, for one concept.
+    axiom = f'SubClassOf(:{KNOWN_CONCEPT} :138875005)'
+    for _ in range(2):
+        r.owl.append((r.uuid(), CURR, '1', CORE_MODULE, '733073007', KNOWN_CONCEPT, axiom))
+    n += 1
+
+    # complexmap-blank-target: a member in map group 2 with no sibling row in
+    # that group carrying a target, which leaves the group unmappable.
+    r.complexmap.append((r.uuid(), CURR, '1', CORE_MODULE, '447562003', KNOWN_CONCEPT,
+                         '2', '1', 'TRUE', 'ALWAYS A02', '', '447561005'))
+    n += 1
+
+    # mrcm-never-grouped-relationship-grouped: a relationship whose type is
+    # declared ungrouped by the MRCM attribute domain refset, used in a group.
+    # The declaration comes from ci/author_mrcm_fixture.py, which is why the
+    # generators run in order.
+    rid = sctid('9977', 1, '02')
+    r.rel.append((rid, CURR, '1', CORE_MODULE, KNOWN_CONCEPT, INACTIVE, '1',
+                  NEVER_GROUPED_ATTRIBUTE, '900000000000011006', '900000000000451002'))
+    n += 1
+
+    # description-valid-characters: an FSN carrying a character the corpus bans.
+    # A tab is one of them and is deliberately NOT used - a tab inside a term
+    # splits the row and produces a ragged file, which is a different defect and
+    # one this fixture already had to be repaired for.
+    cid = r.next_id(CONCEPT_P, '00')
+    r.concept.append((cid, CURR, '1', CORE_MODULE, PRIMITIVE))
+    did = r.next_id(DESC_P, '01')
+    r.desc.append((did, CURR, '1', CORE_MODULE, cid, 'en', FSN,
+                   'Concept with an @ in its fully specified name (finding)', CASE_INSENSITIVE))
+    n += 1
+    return n
+
+
 FILES = {
     'sct2_Concept': (['id', 'effectiveTime', 'active', 'moduleId', 'definitionStatusId'],
                      'concept', '', '_'),
@@ -170,6 +242,23 @@ FILES = {
     'der2_cRefset_Association': (
         ['id', 'effectiveTime', 'active', 'moduleId', 'refsetId', 'referencedComponentId',
          'targetComponentId'], 'assoc', '', ''),
+    'der2_cciRefset_RefsetDescriptor': (
+        ['id', 'effectiveTime', 'active', 'moduleId', 'refsetId', 'referencedComponentId',
+         'attributeDescription', 'attributeType', 'attributeOrder'], 'descriptor', '', ''),
+    'der2_iisssccRefset_ExtendedMap': (
+        ['id', 'effectiveTime', 'active', 'moduleId', 'refSetId', 'referencedComponentId',
+         'mapGroup', 'mapPriority', 'mapRule', 'mapAdvice', 'mapTarget', 'correlationId',
+         'mapCategoryId'], 'extmap', '', ''),
+    'der2_iissscRefset_ComplexMap': (
+        ['id', 'effectiveTime', 'active', 'moduleId', 'refsetId', 'referencedComponentId',
+         'mapGroup', 'mapPriority', 'mapRule', 'mapAdvice', 'mapTarget', 'correlationId'],
+        'complexmap', '', ''),
+    'sct2_sRefset_OWLExpression': (
+        ['id', 'effectiveTime', 'active', 'moduleId', 'refsetId', 'referencedComponentId',
+         'owlExpression'], 'owl', '', ''),
+    'sct2_Relationship': (
+        ['id', 'effectiveTime', 'active', 'moduleId', 'sourceId', 'destinationId',
+         'relationshipGroup', 'typeId', 'characteristicTypeId', 'modifierId'], 'rel', '', '_'),
 }
 
 
@@ -177,7 +266,7 @@ def is_authored(line: str) -> bool:
     """Keyed on the id, not the module: these rows deliberately belong to other
     modules, which is the point of the national and MDRS cases."""
     first = line.split('\t')[0]
-    return first.startswith((CONCEPT_P, DESC_P, UUID_MARK))
+    return first.startswith((CONCEPT_P, DESC_P, '9977', UUID_MARK))
 
 
 def merge(path: pathlib.Path, header, rows):
@@ -197,8 +286,11 @@ def main():
           f"which is what the mdrs-violation family binds against")
     print(f"  authored {author_national_module_concepts(r)} national-module concepts with no FSN")
     print(f"  authored {author_association_defects(r)} association defects")
+    print(f"  authored {author_map_and_axiom_defects(r)} map, axiom and character defects")
 
-    buckets = {'concept': r.concept, 'desc': r.desc, 'mdrs': r.mdrs, 'assoc': r.assoc}
+    buckets = {'concept': r.concept, 'desc': r.desc, 'mdrs': r.mdrs, 'assoc': r.assoc,
+               'descriptor': r.descriptor, 'extmap': r.extmap, 'owl': r.owl,
+               'complexmap': r.complexmap, 'rel': r.rel}
     total = 0
     for stem, (header, bucket, lang_suffix, sep) in FILES.items():
         rows = buckets[bucket]

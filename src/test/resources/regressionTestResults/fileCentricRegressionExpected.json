@@ -1,7 +1,7 @@
 {
   "assertionType" : "file-centric-validation",
   "totalAssertionsRun" : 114,
-  "totalAssertionsFailed" : 94,
+  "totalAssertionsFailed" : 96,
   "results" : [ {
     "assertionName" : "All the changes in the release are in the expected set of modules.",
     "assertionUuid" : "81a4f6a9-0f64-4b45-9e9d-310bac0ec4f8",
@@ -86,7 +86,7 @@
       "tableName" : null,
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 321
+    "totalFailed" : 347
   }, {
     "assertionName" : "Unknown description type on snapshot description row.",
     "assertionUuid" : "82cc38ce-75d6-429e-bf45-551a100bfc52",
@@ -607,7 +607,7 @@
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 98
+    "totalFailed" : 111
   }, {
     "assertionName" : "Every active concept has one active preferred term in the en-GB language refset.",
     "assertionUuid" : "b7a09892-7124-4a06-b150-7d86b3a75ce4",
@@ -692,7 +692,7 @@
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 119
+    "totalFailed" : 133
   }, {
     "assertionName" : "ID is unique in the LOINC ExpressionAssociationRefset snapshot.",
     "assertionUuid" : "b9b535f0-5b68-4192-81f6-115dea2f49c0",
@@ -803,7 +803,7 @@
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 105
+    "totalFailed" : 118
   }, {
     "assertionName" : "The module id of all SimpleMap members should be the core module id.",
     "assertionUuid" : "bb88a465-3f40-4890-b5be-14f94632c3a9",
@@ -1032,9 +1032,9 @@
       "tableName" : "rvf_regression_test_prospective.simplerefset_s",
       "skipModuleCheck" : false
     }, {
-      "conceptId" : "997100498002",
-      "detail" : "Refset id:929360071000036103 and referencedcomponent Id:997100498002 are duplicated in the simple refset snapshot file.",
-      "componentId" : "00000000-0000-0000-0000-0000000001f4",
+      "conceptId" : "997100547005",
+      "detail" : "Refset id:929360071000036103 and referencedcomponent Id:997100547005 are duplicated in the simple refset snapshot file.",
+      "componentId" : "00000000-0000-0000-0000-000000000225",
       "moduleId" : null,
       "fullComponent" : null,
       "tableName" : "rvf_regression_test_prospective.simplerefset_s",
@@ -1411,7 +1411,7 @@
       "tableName" : "rvf_regression_test_prospective.relationship_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 143
+    "totalFailed" : 150
   }, {
     "assertionName" : "ReferenceComponentIds refers to valid concepts in the LOINC ExpressionAssociationRefset snapshot file.",
     "assertionUuid" : "e33922c3-5200-458b-b8f3-2cd08252234e",
@@ -1945,7 +1945,7 @@
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 143
+    "totalFailed" : 158
   }, {
     "assertionName" : "The module id of components should be in module dependency list.",
     "assertionUuid" : "0145fbad-f067-41ff-b700-cf54fc639e21",
@@ -2030,7 +2030,7 @@
       "tableName" : null,
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 322
+    "totalFailed" : 348
   }, {
     "assertionName" : "The refsetdescriptor moduleId,effectiveTime pair should always respect the MDRS.",
     "assertionUuid" : "020b2892-3e66-41a4-91fa-ffd75bf6663e",
@@ -2130,7 +2130,7 @@
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 168
+    "totalFailed" : 196
   }, {
     "assertionName" : "All domainIds in the MRCM Attribute Domain Refset Snapshot File must refer to valid concepts.",
     "assertionUuid" : "0bd6a234-58f9-424f-84b4-0dc800e5a70b",
@@ -2228,7 +2228,7 @@
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 14
+    "totalFailed" : 15
   }, {
     "assertionName" : "The refset id of components should be in refset descriptor list.",
     "assertionUuid" : "0e898ae0-15cb-45f9-b032-041193aa79e8",
@@ -2306,14 +2306,14 @@
       "skipModuleCheck" : false
     }, {
       "conceptId" : "0",
-      "detail" : "isimplemaprefset ::id= b0000001-0000-4000-8000-000000000001 ::refset id: 900000000000497000 is not in refset descriptor list",
+      "detail" : "extendedmaprefset ::id= c0000001-0000-0000-0000-0000000001e ::refset id: 447563008 is not in refset descriptor list",
       "componentId" : null,
       "moduleId" : null,
       "fullComponent" : null,
       "tableName" : null,
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 38
+    "totalFailed" : 39
   }, {
     "assertionName" : "All ruleStrengthIds in the MRCM Attribute Domain Refset Snapshot File must refer to valid concepts.",
     "assertionUuid" : "0e8e3549-e704-41a2-a853-fd91a60116ee",
@@ -2697,8 +2697,16 @@
   }, {
     "assertionName" : "Found grouped relationship for attribute marked as never-grouped.",
     "assertionUuid" : "21f3a8f3-a714-40b6-800e-4eeb0fa9b424",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "703860006",
+      "detail" : "Relationship groups a never-grouped relationship type: id=997700001027 has an invalid value 1 for the relationship group field.",
+      "componentId" : "997700001027",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.relationship_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "Every active concept defined in the Irish extension has a preferred FSN in the en-US language refset.",
     "assertionUuid" : "28fbe41f-132b-43b6-a7e2-ee1454dd7736",
@@ -2827,7 +2835,7 @@
       "tableName" : "rvf_regression_test_prospective.relationship_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 97
+    "totalFailed" : 102
   }, {
     "assertionName" : "The description moduleId,effectiveTime pair should always respect the MDRS.",
     "assertionUuid" : "316f2fb9-ceb1-458f-add9-99c4ba37b8ba",
@@ -2912,7 +2920,7 @@
       "tableName" : "rvf_regression_test_prospective.description_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 198
+    "totalFailed" : 211
   }, {
     "assertionName" : "All moduleIds in the MRCM Domain Refset Snapshot File must refer to valid concepts.",
     "assertionUuid" : "32bc5dc7-192c-441f-9693-6710020a6442",
@@ -3449,7 +3457,7 @@
       "tableName" : null,
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 108
+    "totalFailed" : 112
   }, {
     "assertionName" : "There is a 1-to-1 relationship between the id and the immutable values in Inferred Relationship snapshot.",
     "assertionUuid" : "4dbfed80-79b9-11e1-b0c4-0800200c9a66",
@@ -3708,7 +3716,7 @@
       "tableName" : null,
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 323
+    "totalFailed" : 350
   }, {
     "assertionName" : "The descriptions should not change the immutable fields either type id, language code or concept id since previous release.",
     "assertionUuid" : "5eb8b56c-33bb-4a16-92d7-893896f446d1",
@@ -3806,7 +3814,7 @@
       "tableName" : "rvf_regression_test_prospective.simplerefset_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 42
+    "totalFailed" : 58
   }, {
     "assertionName" : "All ruleStrengthIds in the MRCM Attribute Range Refset Snapshot File must refer to valid concepts.",
     "assertionUuid" : "618115ab-b5bc-4ed3-aaba-fec8536fe498",
@@ -3888,7 +3896,7 @@
       "tableName" : "rvf_regression_test_prospective.relationship_s",
       "skipModuleCheck" : false
     }, {
-      "conceptId" : "997100502009",
+      "conceptId" : "997100551007",
       "detail" : "RELATIONSHIP : id=997399001025: Relationship Id is repeated in the Inferred Relationship snapshot file.",
       "componentId" : "997399001025",
       "moduleId" : null,
@@ -3942,8 +3950,16 @@
   }, {
     "assertionName" : "The current OWL Expression snapshot file does not contain any duplicate active OWL axioms for the same concept.",
     "assertionUuid" : "6a5cf755-e2bb-4615-8f84-733b9546a3cf",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "703860006",
+      "detail" : "OWL Expression : ids =c0000001-0000-0000-0000-0000000001f, c0000001-0000-0000-0000-00000000020 : Duplicated active OWL axioms for the concept 703860006 in the OWL Expression snapshot.",
+      "componentId" : "c0000001-0000-0000-0000-0000000001f",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.owlexpressionrefset_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "All type ids found in the Relationship Concrete Values snapshot file exist in the Concept snapshot file.",
     "assertionUuid" : "6a7f2569-a5b9-447c-a067-51e894c20c30",
@@ -4395,6 +4411,6 @@
       "tableName" : "rvf_regression_test_prospective.relationship_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 159
+    "totalFailed" : 166
   } ]
 }

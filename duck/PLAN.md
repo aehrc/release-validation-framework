@@ -742,7 +742,7 @@ runs, finding proves it detects.
 
 | | executes on both | finds something | A/B |
 |---|---|---|---|
-| international 360 | 360 | **308 (85%)** | 219/220 identical, 0 unexplained |
+| international 360 | 360 | **315 (87%)** | 219/220 identical, 0 unexplained |
 | amtv4 200 | 200 | **144 (72%)** | 243/244 identical, 0 unexplained |
 
 Where it started: international 227, amtv4 **16**, and the amtv4 arm did not run
@@ -761,7 +761,7 @@ another repository and a retyped constant drifts the moment they change.
 **16 of the 360 international assertions cannot produce a finding by design.**
 Every `-proc.sql` and `res-table-*` defines a procedure or builds a resource
 table for other assertions to read. Against the 344 that can report, coverage is
-**308, or 89%**.
+**315, or 91%**.
 
 **11 of the 200 amtv4 assertions cannot fire at all**, and this one is an
 upstream SQL defect worth reporting rather than a denominator adjustment. They
@@ -795,7 +795,7 @@ has never checked anything.
 
 ### What the remaining gap actually needs
 
-International, 36 finding-capable and silent: mostly single assertions wanting
+International, 29 finding-capable and silent: mostly single assertions wanting
 one authored row each - an OWL axiom pair, a complex-map blank target, a
 description with an illegal character. No shared mechanism left; the clusters
 are done.
