@@ -19,7 +19,22 @@
     "defect was fixed belongs in removedAllowances with the commit that fixed it,",
     "so nobody re-adds it.",
     "",
-    "Keys are assertion UUIDs, because that is what the gate looks up. The slug field carries the human name."
+    "Keys are assertion UUIDs, because that is what the gate looks up. The slug field carries the human name.",
+    "",
+    "REMOVED 2026-09-10: `26c25479` / duckdb-reports-not-run-where-mysql-false-passes.",
+    "It described release-type-snapshot-owl-expression-successive-states reporting",
+    "not-run while MySQL answered 0 against a dependency that was not supplied. The",
+    "statement's only use of the dependency was an anti-join requiring NULL - a",
+    "no-op against an empty relation - so DuckDB now runs it and both engines",
+    "agree. Build 16337 listed the entry as no longer diverging, which is what",
+    "removing it is for. See duck/PLAN.md 3.14.",
+    "",
+    "If MySQL's PR #6 lands and it stops ERRORING on",
+    "file-centric-snapshot-inactivated-component-module, that assertion's 28",
+    "statements DO compare against the dependency, so MySQL would answer against",
+    "an empty schema where DuckDB still declines. That would be a new divergence",
+    "of this shape, and it should be classified then, with the numbers from the",
+    "run that shows it - not pre-registered here on a guess."
   ],
   "directions": {
     "candidate-higher": "DuckDB reports more failures than MySQL for an assertion",
@@ -79,38 +94,6 @@
       "slug": "mysql-errors-on-identifier-having-no-id-column",
       "directionNote": "MySQL -1 against DuckDB 0, so the tool reads it as candidate-higher. The arithmetic is on the sentinel, not on findings: MySQL abandoned the assertion and DuckDB executed it and found nothing.",
       "class": "mysql-errors-on-identifier-having-no-id-column"
-    },
-    "26c25479-c3ba-47f2-9851-bb05ae42ad48": {
-      "direction": "incumbent-higher",
-      "appliesTo": "any assertion whose SQL names <PREVIOUS> or <DEPENDENCY> when that release was not supplied to the run",
-      "assertionUuids": [
-        "26c25479-c3ba-47f2-9851-bb05ae42ad48"
-      ],
-      "observed": "DuckDB failureCount -1 with 'Not run: requires <DEPENDENCY>, which was not supplied to this validation'; MySQL 0 in assertionsPassed",
-      "cause": [
-        "MySqlQueryTransformer drops any statement still naming a release the run does",
-        "not hold. The assertion then executes with fewer statements, finds nothing,",
-        "and is reported as PASSED - a pass for work that was never attempted.",
-        "",
-        "DuckBinder mirrors the drop but reports the assertion as not executed, which",
-        "is what -1 means. So DuckDB is the honest one here and the divergence is in",
-        "the incumbent's favour only in appearance."
-      ],
-      "evidence": [
-        "release-type-snapshot-owl-expression-successive-states.sql names <DEPENDENCY>;",
-        "this run supplied previousRelease and no dependencyRelease.",
-        "",
-        "Same mechanism as the 53 assertions that carry -1 on a first-time release",
-        "while MySQL reports them passed - measured on the AU edition."
-      ],
-      "notThePlan": [
-        "A pass that means 'not attempted' is the more dangerous of the two",
-        "behaviours. The DuckDB side needs no change; the reporting gap is worth",
-        "raising with SI separately, since Release-Dashboard-UI renders -1 literally."
-      ],
-      "slug": "duckdb-reports-not-run-where-mysql-false-passes",
-      "directionNote": "MySQL 0 against DuckDB -1, so the tool reads it as incumbent-higher. Again the sentinel, not findings: MySQL passed an assertion it never fully ran and DuckDB declined to.",
-      "class": "duckdb-reports-not-run-where-mysql-false-passes"
     }
   },
   "coverage": {

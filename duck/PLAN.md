@@ -427,11 +427,23 @@ that moved NOT_RUN -> RAN. Fixture agreement 230/264 -> 236/264. The holdout is
 `description_s: strict read refused` - ragged rows in the fixture, not the
 assertion.
 
-*Consequence to expect:* baseline entry `26c25479`
-(`duckdb-reports-not-run-where-mysql-false-passes`) is keyed to
-`release-type-snapshot-owl-expression-successive-states`, which is in the fixed
-family. Its divergence should collapse, and the gate fails on a baseline entry
-that has stopped diverging - by design. Build **16337** decides it.
+*Confirmed on CI.* Build **16337**, same release and previous as 16329:
+
+```
+identical failureCount           148  (99.3%)     <- was 147 (98.7%)
+divergent                          1              <- was 2
+UNEXPLAINED                        0
+--- baseline entries that no longer diverge (remove them) ---
+26c25479-c3ba-47f2-9851-bb05ae42ad48  duckdb-reports-not-run-where-mysql-false-passes
+```
+
+That entry was keyed to `release-type-snapshot-owl-expression-successive-states`
+- in the fixed family - so it has been removed, with the reason and the build
+number in the baseline's own README. **One divergence is left on the AU arm**,
+and it is not ours: MySQL reports -1 on
+`file-centric-snapshot-inactivated-component-module` because
+`validate_inactivated_component_module` selects `t1.id` from every `%_d` table
+and `identifier_d` has no `id` column. Upstream PR #6 fixes it.
 
 ## 4. Known, deliberate, not scheduled
 
