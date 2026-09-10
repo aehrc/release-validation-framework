@@ -1,1 +1,60 @@
-{"_README": ["Placeholder: no AMT divergence has been classified yet."], "directions": {"candidate-higher": "DuckDB reports more failures", "incumbent-higher": "MySQL reports more failures"}, "divergences": {}, "coverage": {"allowUncovered": 0, "categories": {}}}
+{
+  "_README": [
+    "Classified divergences for ci/fixture_ab_amt.sh - the AMT arm of the fixture",
+    "harness, both engines, per assertion, on the amtv4 group.",
+    "",
+    "Its own file because the AMT corpus is not in this repository and must not be.",
+    "This arm also loads ci/known-engine-divergences.json (engine defects, which",
+    "apply anywhere), ci/known-fixture-divergences.json (the fixture's own causes)",
+    "and ci/known-engine-divergences-au.json, whose single entry is about a release",
+    "that ships no ccsRefset file - which is true of this fixture too.",
+    "",
+    "STATE 2026-09-10: 237 assertions joined, 236 identical (99.6%), 1 divergence",
+    "(the ccsRefset one, classified in the AU file), 1 accounted coverage gap",
+    "(below). MySQL 38 failures, DuckDB 37.",
+    "",
+    "Getting here took a republish, not a code change: the store the DuckDB leg",
+    "was pointed at had been published from a corpus revision in which 8 of 560",
+    "ADRS scripts differed, and the store-to-corpus guard refused the run rather",
+    "than execute one corpus's SQL while reporting another's text. Republishing",
+    "from the corpus on disk - 560 assertions, 1019 statements - resolved it."
+  ],
+  "directions": {
+    "candidate-higher": "DuckDB reports more failures than MySQL for an assertion",
+    "incumbent-higher": "MySQL reports more failures than DuckDB for an assertion"
+  },
+  "divergences": {},
+  "coverage": {
+    "_README": [
+      "Assertions one engine reports that the other does not. Zero is the target",
+      "everywhere else, and this arm has exactly one that is structural rather",
+      "than a defect."
+    ],
+    "allowUncovered": 0,
+    "categories": {
+      "prerequisite-is-an-assertion-to-the-incumbent": {
+        "match": "^pre-requisites\\.sql$",
+        "cause": [
+          "The AMT manifest declares pre-requisites.sql as a script under",
+          "`<useCase group=\"amtv4-prereq\">` with category=\"resource\", so the",
+          "incumbent imports it as an ASSERTION and reports a result for it.",
+          "",
+          "The DuckDB store does not: the publisher compiles prerequisites into",
+          "the store's prerequisite statements, which run before the assertions",
+          "and are not assertions themselves - there is no uuid to report a",
+          "failure count against.",
+          "",
+          "So the incumbent reports 238 and the store 237, and the difference is",
+          "the prerequisite. That is a difference in what the two engines CALL an",
+          "assertion, not a difference in what they check: the prerequisite's work",
+          "happens on both sides, and if it fails on either the assertions that",
+          "depend on it report incomplete, loudly, which is exactly what happened",
+          "before the duplicate-concept fix.",
+          "",
+          "Accounted for rather than allowed in bulk: allowUncovered stays 0, so",
+          "any OTHER uncovered assertion still fails the gate."
+        ]
+      }
+    }
+  }
+}

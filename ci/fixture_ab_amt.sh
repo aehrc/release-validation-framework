@@ -134,7 +134,7 @@ for group in ('amtv4-prereq', 'amtv4'):
 PY
 
 HEAP="${HEAP:-3g}" CORPUS="./amt-corpus/" DUCK_STORE="$AMT_STORE" \
-  BASELINES="${BASELINES:-ci/known-engine-divergences.json ci/known-fixture-divergences.json ci/known-fixture-divergences-amt.json}" \
+  BASELINES="${BASELINES:-ci/known-engine-divergences.json ci/known-engine-divergences-au.json ci/known-fixture-divergences.json ci/known-fixture-divergences-amt.json}" \
   ci/engine_ab_stack.sh \
     --release "releases/$PROSPECTIVE.zip" \
     --previous "$PREVIOUS.zip" \
