@@ -131,7 +131,10 @@
 <section id="panel-open" class="panel" role="tabpanel">
   <div class="card" id="runningCard" hidden>
     <div class="status-head">
-      <legend style="padding:0">Running now</legend>
+      <!-- Not "Running now": this card has always listed QUEUED and READY
+           runs too, and a run waiting for a worker is the one a person is
+           most likely to be looking for. -->
+      <legend style="padding:0">In flight</legend>
       <span class="muted" id="runningNote"></span>
     </div>
     <div id="runningList"></div>

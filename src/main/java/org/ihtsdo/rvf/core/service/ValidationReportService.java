@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 import jakarta.annotation.PostConstruct;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.security.NoSuchAlgorithmException;
 import java.util.Map;
 @Service
@@ -41,6 +42,7 @@ public class ValidationReportService {
 	private String stateFilePath;
 	private String resultsFilePath;
 	private String progressFilePath;
+	private String submittedFilePath;
 	private String structureTestReportPath;
 	private String failureArchivePath;
 	private Gson prettyGson;
@@ -56,6 +58,7 @@ public class ValidationReportService {
 		stateFilePath = rvfRoot + "state.txt";
 		resultsFilePath = rvfRoot + "results.json";
 		progressFilePath = rvfRoot + "progress.txt";
+		submittedFilePath = rvfRoot + "submitted.txt";
 		structureTestReportPath = rvfRoot + "structure_validation.txt";
 		failureArchivePath = rvfRoot + "failures.parquet";
 		prettyGson = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
@@ -93,6 +96,20 @@ public class ValidationReportService {
 	
 	public void writeState(final State state, String storageLocation) throws IOException, NoSuchAlgorithmException, DecoderException {
 		writeToS3(state.name(), storageLocation + stateFilePath);
+		if (state == State.QUEUED) {
+			// WHEN a run was submitted, written once, because state.txt is
+			// OVERWRITTEN on every transition - so its timestamp is the last
+			// state change and says nothing about how long a run has been going.
+			// The console showed "10s ago" for a run half an hour in, which is
+			// the progress file's age rather than the run's.
+			//
+			// QUEUED is the enqueue moment (ValidationQueueManager) and the
+			// first state any run reaches, so this fires exactly once per run.
+			// A separate file rather than a richer state.txt: that file's
+			// contents are parsed by this server, the console and SI's client,
+			// and none of them need to learn a new format for this.
+			writeToS3(Instant.now().toString(), storageLocation + submittedFilePath);
+		}
 	}
 	
 	public void writeProgress(final String progress,  String storageLocation) {

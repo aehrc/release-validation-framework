@@ -315,6 +315,38 @@ function ago(ms) {
   return '';
 }
 
+/* How long a run has been going, from its submission instant. Distinct from
+ * ago(): that answers "when did this last do something", which for a run in
+ * flight is the age of the progress file and not the age of the run. A run
+ * thirty minutes in that logged a phase ten seconds ago is 30m old, and the
+ * console used to call it "just now". */
+function since(iso) {
+  if (!iso) return '';
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return '';
+  const d = Math.max(0, Date.now() - t);
+  const s = Math.floor(d / 1000);
+  if (s < 60) return `${s}s`;
+  // No seconds past a minute: the panel refreshes every ten, so a seconds
+  // field would sit visibly wrong nine times out of ten.
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  return `${h}h ${m % 60}m`;
+}
+
+/* The wall clock of an instant, for "submitted at". Date, too, when it was not
+ * today: a queue that has been stuck since yesterday should not read 09:31. */
+function at(iso) {
+  if (!iso) return '';
+  const t = new Date(iso);
+  if (Number.isNaN(t.getTime())) return '';
+  const time = t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return t.toDateString() === new Date().toDateString()
+    ? time
+    : `${t.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${time}`;
+}
+
 function statePill(state, failures) {
   if (state === 'COMPLETE') {
     return failures > 0
@@ -364,13 +396,31 @@ function drawRunning() {
   if (!running.length) return;
 
   $('#runningNote').textContent = 'refreshing every 10 seconds';
-  $('#runningList').innerHTML = running.map((r) => `
+  $('#runningList').innerHTML = running.map((r) => {
+    // Two different questions, and the console used to answer only the second
+    // while looking like it answered the first: how long has this been going
+    // (submitted, written once when the run was enqueued) versus when did it
+    // last do anything (the state and progress files' mtime).
+    const elapsed = since(r.submitted);
+    const age = r.submitted
+      ? `<span class="jage" title="submitted ${esc(r.submitted)}">${esc(at(r.submitted))} &middot; ${esc(elapsed)}</span>`
+      // Runs submitted before that stamp existed have no age to show, so this
+      // says what it does know rather than passing activity off as duration.
+      // .jage is already muted; `dim` is scoped to the runs table only.
+      : `<span class="jage" title="this run predates the submission stamp, so only its last activity is known">last activity ${esc(ago(r.lastModified) || 'unknown')}</span>`;
+    const queued = r.state !== 'RUNNING'
+      // `off` is the neutral variant; a bare .pill has no background.
+      ? '<span class="pill off">queued</span>'
+      : '';
+    return `
     <div class="job">
       <span class="pulse" aria-hidden="true"></span>
       <span class="jname">${esc(r.testFileName || r.storageLocation)}</span>
+      ${queued}
       <span class="jphase">${esc(r.progress || (r.state === 'RUNNING' ? 'starting' : 'waiting for a worker'))}</span>
-      <span class="jage">${esc(ago(r.lastModified))}</span>
-    </div>`).join('');
+      ${age}
+    </div>`;
+  }).join('');
 }
 
 /* Poll only while something is in flight, and stop when nothing is. A console

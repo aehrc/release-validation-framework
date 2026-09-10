@@ -161,6 +161,36 @@ class ValidationRunCatalogueTest {
 	}
 
 	@Test
+	void carriesWhenTheRunWasSubmittedSoElapsedIsNotGuessedFromTheProgressFile() throws IOException {
+		// state.txt is overwritten on every transition, so its timestamp is the
+		// last state change: a run half an hour in that wrote progress ten
+		// seconds ago looks ten seconds old. submitted.txt is written once, at
+		// QUEUED, and is the only thing here that answers "how long".
+		writeRun("run_going", "RUNNING", null, "[12] of [409] assertions are completed.");
+		Files.writeString(store.resolve("run_going").resolve("rvf").resolve("submitted.txt"),
+				"2026-09-10T01:02:03Z");
+
+		List<ValidationRunCatalogue.RunSummary> runs = catalogue().list(50);
+
+		assertEquals(1, runs.size());
+		assertEquals("2026-09-10T01:02:03Z", runs.get(0).submitted());
+		assertEquals("RUNNING", runs.get(0).state());
+	}
+
+	@Test
+	void aRunSubmittedBeforeThatFileExistedStillLists() throws IOException {
+		// Every run already in the store predates submitted.txt. Absent means
+		// absent - not an epoch, and not the state file's age dressed up as one.
+		writeRun("run_old", "COMPLETE", report(9L, "old.zip", 3, 0));
+
+		List<ValidationRunCatalogue.RunSummary> runs = catalogue().list(50);
+
+		assertEquals(1, runs.size());
+		assertNull(runs.get(0).submitted());
+		assertEquals(Long.valueOf(9L), runs.get(0).runId());
+	}
+
+	@Test
 	void ignoresDirectoriesThatAreNotRuns() throws IOException {
 		writeRun("real_run", "COMPLETE", report(1L, "x.zip", 1, 0));
 		// This is what an uploaded release looks like in the same store.

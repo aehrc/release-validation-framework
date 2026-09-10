@@ -39,6 +39,7 @@ public class ValidationRunCatalogue {
 	private static final String STATE = "rvf/state.txt";
 	private static final String RESULTS = "rvf/results.json";
 	private static final String PROGRESS = "rvf/progress.txt";
+	private static final String SUBMITTED = "rvf/submitted.txt";
 
 	@Autowired
 	private ValidationJobResourceConfig jobResourceConfig;
@@ -60,6 +61,8 @@ public class ValidationRunCatalogue {
 			Integer totalWarnings,
 			String startTime,
 			String endTime,
+			/** ISO-8601 instant the run was enqueued, or null on older runs. */
+			String submitted,
 			long lastModified) {}
 
 	/**
@@ -115,17 +118,21 @@ public class ValidationRunCatalogue {
 		// of the file is what the run is doing now.
 		String progress = lastLine(dir.resolve(PROGRESS));
 		long modified = Math.max(lastModified(dir.resolve(STATE)), lastModified(dir.resolve(PROGRESS)));
+		// When the run was submitted, written once at QUEUED. Absent for runs
+		// submitted before that existed, and for those the caller has only
+		// lastModified - which is the last state change, not the run's age.
+		String submitted = readTrimmed(dir.resolve(SUBMITTED));
 
 		Path results = dir.resolve(RESULTS);
 		if (!Files.isRegularFile(results)) {
 			// Queued or running: the state is written before the report exists.
-			return new RunSummary(storageLocation, null, state, progress, null, null, null, null, null, null, null, modified);
+			return new RunSummary(storageLocation, null, state, progress, null, null, null, null, null, null, null, submitted, modified);
 		}
 		try {
-			return readSummary(results, storageLocation, state, progress, modified);
+			return readSummary(results, storageLocation, state, progress, submitted, modified);
 		} catch (IOException | RuntimeException e) {
 			LOGGER.warn("Could not summarise {}: {}", results, e.toString());
-			return new RunSummary(storageLocation, null, state, progress, null, null, null, null, null, null, null, modified);
+			return new RunSummary(storageLocation, null, state, progress, null, null, null, null, null, null, null, submitted, modified);
 		}
 	}
 
@@ -151,13 +158,13 @@ public class ValidationRunCatalogue {
 	 * the token stream and skips every array it does not need.
 	 */
 	private RunSummary readSummary(Path file, String storageLocation, String state, String progress,
-			long modified) throws IOException {
+			String submitted, long modified) throws IOException {
 		Fields f = new Fields();
 		try (JsonReader in = new JsonReader(Files.newBufferedReader(file, StandardCharsets.UTF_8))) {
 			readResultObject(in, f);
 		}
 		return new RunSummary(storageLocation, f.runId, state, progress, f.testFileName, f.groups,
-				f.totalTestsRun, f.totalFailures, f.totalWarnings, f.startTime, f.endTime, modified);
+				f.totalTestsRun, f.totalFailures, f.totalWarnings, f.startTime, f.endTime, submitted, modified);
 	}
 
 	/**
