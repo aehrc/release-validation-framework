@@ -63,6 +63,10 @@ stages:
 
           - template: steps-jdk25.yml
 
+          - template: steps-pinned-forks.yml
+            parameters:
+              repoLocal: $(Pipeline.Workspace)/.m2
+
           - task: Bash@3
             displayName: 'Build the jar'
             inputs:

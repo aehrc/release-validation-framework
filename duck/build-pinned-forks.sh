@@ -89,6 +89,31 @@ MAVEN_OPTS="$(printf '%s' "${MAVEN_OPTS:-}" | sed -E 's/-Dmaven\.repo\.local=[^ 
 export MAVEN_OPTS="${MAVEN_OPTS} -Dmaven.repo.local=$MAVEN_REPO_LOCAL"
 echo "==> maven repository: $MAVEN_REPO_LOCAL"
 
+# Already installed? Then say so and stop.
+#
+# These three take about sixteen minutes to clone and build, and the versions
+# are pinned - `-aehrc-perf` and friends exist in no remote repository - so a
+# local repository already holding that exact version can only have got it from
+# this script. That makes presence sufficient evidence, and it is what lets a
+# CI job restore a cached repository and skip the sixteen minutes instead of
+# rebuilding byte-identical jars on every push.
+#
+# FORCE_REBUILD=1 overrides, for the case that matters: a patch under duck/
+# changed and the installed jars are stale at the same version.
+installed() {
+  find "$MAVEN_REPO_LOCAL" -path "*$1/*" -name '*.jar' 2>/dev/null | grep -q .
+}
+if [ "${FORCE_REBUILD:-0}" != "1" ] \
+   && installed "org/ihtsdo/drools/snomed-drools-engine/$DROOLS_VERSION" \
+   && installed "org/snomed/quality/mrcm-validator/$MRCM_VERSION" \
+   && installed "org/ihtsdo/otf/snomed-query-service/$SQS_VERSION"; then
+  echo
+  echo "==> all three pinned forks are already installed in $MAVEN_REPO_LOCAL"
+  echo "    nothing to build. FORCE_REBUILD=1 rebuilds them anyway, which is what"
+  echo "    a changed patch under duck/ needs, since the version does not move."
+  exit 0
+fi
+
 DROOLS_BUILD_DIR="$BUILD_DIR/snomed-drools"   \
   bash "$SCRIPT_DIR/build-drools-engine.sh" "$DROOLS_VERSION"
 

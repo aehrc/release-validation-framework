@@ -157,23 +157,9 @@ stages:
                 echo "commit           : $(Build.SourceVersion)"
                 java -version 2>&1 | head -2
 
-          - task: Bash@3
-            displayName: 'Build the pinned forks'
-            # Build 16302 died here, 16 minutes in, with "Could not find
-            # artifact org.ihtsdo.drools:snomed-drools-engine:jar:6.1.3-aehrc-perf
-            # in ihtsdo-releases". The pom pins four libraries to -aehrc-perf
-            # versions that exist in NO remote repository - they are built from
-            # IHTSDO sources plus the patches in duck/ - so a fresh agent cannot
-            # resolve them and the message names a repository rather than the
-            # cause. The image pipeline has always done this; this one was
-            # written against a host whose .m2 already held them.
-            inputs:
-              targetType: 'inline'
-              script: |
-                set -euo pipefail
-                MAVEN_REPO_LOCAL="$(Pipeline.Workspace)/.m2" \
-                FORKS_BUILD_DIR="$(Agent.TempDirectory)/forks" \
-                  ./duck/build-pinned-forks.sh
+          - template: steps-pinned-forks.yml
+            parameters:
+              repoLocal: $(Pipeline.Workspace)/.m2
 
           - task: Bash@3
             displayName: 'Build the jar'

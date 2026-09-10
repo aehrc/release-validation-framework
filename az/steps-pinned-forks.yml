@@ -1,0 +1,52 @@
+# The three forked libraries this repo pins, built and installed locally.
+#
+# Shared, and NOT optional: the pom pins four libraries to -aehrc-perf versions
+# that exist in no remote repository, so `mvn package` on a fresh agent fails
+# with "Could not resolve dependencies" and names a repository rather than the
+# cause. Build 16302 died that way, and so did the first run of the fixture
+# pipeline - written, exactly as the nightly once was, against a host whose .m2
+# already held them. The comment saying so was in the file it was copied from.
+#
+# The cache is what makes this affordable to run on every push. The forks take
+# about sixteen minutes to clone and build; build-pinned-forks.sh now exits
+# early when all three are already installed, so a restored repository turns
+# this step into a few seconds. The key is the pom, since that is where the
+# pins live: a version bump misses the cache and rebuilds, which is correct.
+#
+# It does NOT key on the patches under duck/. A patch that changes without the
+# version moving would restore stale jars, and FORCE_REBUILD=1 is the way out.
+# Keying on the patches too would be safer and would also invalidate the cache
+# on every unrelated edit in that directory; the pins move rarely and the
+# patches move with them, so this is the trade taken deliberately.
+
+parameters:
+  - name: repoLocal
+    type: string
+
+steps:
+  - task: Cache@2
+    displayName: 'Restore the Maven repository'
+    inputs:
+      key: 'maven-forks | "$(Agent.OS)" | pom.xml'
+      restoreKeys: |
+        maven-forks | "$(Agent.OS)"
+      path: ${{ parameters.repoLocal }}
+
+  - task: Bash@3
+    displayName: 'Build the pinned forks'
+    # Build 16302 died here, 16 minutes in, with "Could not find
+    # artifact org.ihtsdo.drools:snomed-drools-engine:jar:6.1.3-aehrc-perf
+    # in ihtsdo-releases". The pom pins four libraries to -aehrc-perf
+    # versions that exist in NO remote repository - they are built from
+    # IHTSDO sources plus the patches in duck/ - so a fresh agent cannot
+    # resolve them and the message names a repository rather than the
+    # cause. The image pipeline has always done this; this one was
+    # written against a host whose .m2 already held them.
+    inputs:
+      targetType: 'inline'
+      script: |
+        set -euo pipefail
+        MAVEN_REPO_LOCAL="${{ parameters.repoLocal }}" \
+        FORKS_BUILD_DIR="$(Agent.TempDirectory)/forks" \
+          ./duck/build-pinned-forks.sh
+
