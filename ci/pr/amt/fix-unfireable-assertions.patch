@@ -1,0 +1,228 @@
+diff -r corpus-amtv4/scripts/amtv4/DNF Containered Trade Product Pack 30537011000036101 - 06b Concept 30537011000036101CTPP has SYN containered trade product pack or CTPP - containered trade product pack.sql corpus-amt-fixed/scripts/amtv4/DNF Containered Trade Product Pack 30537011000036101 - 06b Concept 30537011000036101CTPP has SYN containered trade product pack or CTPP - containered trade product pack.sql
+--- corpus-amtv4/scripts/amtv4/DNF Containered Trade Product Pack 30537011000036101 - 06b Concept 30537011000036101CTPP has SYN containered trade product pack or CTPP - containered trade product pack.sql	2026-08-30 20:13:33.765891991 +1000
++++ corpus-amt-fixed/scripts/amtv4/DNF Containered Trade Product Pack 30537011000036101 - 06b Concept 30537011000036101CTPP has SYN containered trade product pack or CTPP - containered trade product pack.sql	2026-09-10 23:53:17.414918916 +1000
+@@ -8,7 +8,7 @@
+ select get_cr_ADRS_PT(30537011000036101) = BINARY 'containered trade product pack';
+ 
+ EXECUTABLE_QUERY:
+-select * from (select '1' from dual where not exists(select get_cr_ADRS_PT(929360051000036108) = BINARY 'containered trade product pack reference set')) as query
++select * from (select '1' from dual where coalesce(get_cr_ADRS_PT(929360051000036108), '') <> BINARY 'containered trade product pack reference set') as query
+ 
+ */
+ 
+@@ -20,5 +20,5 @@
+ 	'06b Concept 30537011000036101|CTPP has SYN = containered trade product pack or CTPP - containered trade product pack',
+ 	null,
+ 	null
+-from (select '1' from dual where not exists(select get_cr_ADRS_PT(929360051000036108) = BINARY 'containered trade product pack reference set')) as query;
++from (select '1' from dual where coalesce(get_cr_ADRS_PT(929360051000036108), '') <> BINARY 'containered trade product pack reference set') as query;
+ 
+diff -r corpus-amtv4/scripts/amtv4/DNF Medicinal Product 30497011000036103 - 08 Concept 30497011000036103Medicinal Product has SYN medicinal product or MP - medicinal product.sql corpus-amt-fixed/scripts/amtv4/DNF Medicinal Product 30497011000036103 - 08 Concept 30497011000036103Medicinal Product has SYN medicinal product or MP - medicinal product.sql
+--- corpus-amtv4/scripts/amtv4/DNF Medicinal Product 30497011000036103 - 08 Concept 30497011000036103Medicinal Product has SYN medicinal product or MP - medicinal product.sql	2026-08-30 20:13:33.765891991 +1000
++++ corpus-amt-fixed/scripts/amtv4/DNF Medicinal Product 30497011000036103 - 08 Concept 30497011000036103Medicinal Product has SYN medicinal product or MP - medicinal product.sql	2026-09-10 23:53:17.415919010 +1000
+@@ -8,7 +8,7 @@
+ select get_cr_ADRS_PT(30497011000036103) = BINARY 'medicinal product';
+ 
+ EXECUTABLE_QUERY:
+-select * from (select '1' from dual where not exists(select get_cr_ADRS_PT(929360061000036106) = BINARY 'medicinal product reference set')) as query
++select * from (select '1' from dual where coalesce(get_cr_ADRS_PT(929360061000036106), '') <> BINARY 'medicinal product reference set') as query
+ 
+ */
+ 
+@@ -20,5 +20,5 @@
+ 	'08 Concept 30497011000036103|Medicinal Product has SYN = medicinal product or MP - medicinal product',
+ 	null,
+ 	null
+-from (select '1' from dual where not exists(select get_cr_ADRS_PT(929360061000036106) = BINARY 'medicinal product reference set')) as query;
++from (select '1' from dual where coalesce(get_cr_ADRS_PT(929360061000036106), '') <> BINARY 'medicinal product reference set') as query;
+ 
+diff -r corpus-amtv4/scripts/amtv4/DNF Medicinal Product Pack 30513011000036104 - 02 DNF 99.sql corpus-amt-fixed/scripts/amtv4/DNF Medicinal Product Pack 30513011000036104 - 02 DNF 99.sql
+--- corpus-amtv4/scripts/amtv4/DNF Medicinal Product Pack 30513011000036104 - 02 DNF 99.sql	2026-08-30 20:13:33.765891991 +1000
++++ corpus-amt-fixed/scripts/amtv4/DNF Medicinal Product Pack 30513011000036104 - 02 DNF 99.sql	2026-09-10 23:53:17.415919010 +1000
+@@ -9,7 +9,7 @@
+ select TRUNCATE(get_cr_PercentDefined(929360081000036101),1);
+ 
+ EXECUTABLE_QUERY:
+-select * from (select '99.8' from dual where not exists(select TRUNCATE(get_cr_PercentDefined(929360081000036101),1))) as query
++select * from (select '99.8' from dual where TRUNCATE(get_cr_PercentDefined(929360081000036101),1) <> 99.8) as query
+ 
+ */
+ 
+@@ -21,5 +21,5 @@
+ 	'02 DNF 99.8% Medicinal Product Pack are 900000000000073002|Defined|',
+ 	null,
+ 	null
+-from (select '99.8' from dual where not exists(select TRUNCATE(get_cr_PercentDefined(929360081000036101),1))) as query;
++from (select '99.8' from dual where TRUNCATE(get_cr_PercentDefined(929360081000036101),1) <> 99.8) as query;
+ 
+diff -r corpus-amtv4/scripts/amtv4/DNF Medicinal Product Pack 30513011000036104 - 06b Concept 30513011000036104MPUU has SYN medicinal product pack or MPP - medicinal product pack.sql corpus-amt-fixed/scripts/amtv4/DNF Medicinal Product Pack 30513011000036104 - 06b Concept 30513011000036104MPUU has SYN medicinal product pack or MPP - medicinal product pack.sql
+--- corpus-amtv4/scripts/amtv4/DNF Medicinal Product Pack 30513011000036104 - 06b Concept 30513011000036104MPUU has SYN medicinal product pack or MPP - medicinal product pack.sql	2026-08-30 20:13:33.765891991 +1000
++++ corpus-amt-fixed/scripts/amtv4/DNF Medicinal Product Pack 30513011000036104 - 06b Concept 30513011000036104MPUU has SYN medicinal product pack or MPP - medicinal product pack.sql	2026-09-10 23:53:17.416919104 +1000
+@@ -8,7 +8,7 @@
+ select get_cr_ADRS_PT(30513011000036104) = BINARY 'medicinal product pack';
+ 
+ EXECUTABLE_QUERY:
+-select * from (select '1' from dual where not exists(select get_cr_ADRS_PT(929360081000036101) = BINARY 'medicinal product pack reference set')) as query
++select * from (select '1' from dual where coalesce(get_cr_ADRS_PT(929360081000036101), '') <> BINARY 'medicinal product pack reference set') as query
+ 
+ */
+ 
+@@ -20,5 +20,5 @@
+ 	'06b Concept 30513011000036104|MPUU has SYN = medicinal product pack or MPP - medicinal product pack',
+ 	null,
+ 	null
+-from (select '1' from dual where not exists(select get_cr_ADRS_PT(929360081000036101) = BINARY 'medicinal product pack reference set')) as query;
++from (select '1' from dual where coalesce(get_cr_ADRS_PT(929360081000036101), '') <> BINARY 'medicinal product pack reference set') as query;
+ 
+diff -r corpus-amtv4/scripts/amtv4/DNF Medicinal Product Unit of Use 30450011000036109 - 07 Concept 30450011000036109MPUU has SYN medicinal product unit of use or MPUU - medicinal product unit of use.sql corpus-amt-fixed/scripts/amtv4/DNF Medicinal Product Unit of Use 30450011000036109 - 07 Concept 30450011000036109MPUU has SYN medicinal product unit of use or MPUU - medicinal product unit of use.sql
+--- corpus-amtv4/scripts/amtv4/DNF Medicinal Product Unit of Use 30450011000036109 - 07 Concept 30450011000036109MPUU has SYN medicinal product unit of use or MPUU - medicinal product unit of use.sql	2026-08-30 20:13:33.766892084 +1000
++++ corpus-amt-fixed/scripts/amtv4/DNF Medicinal Product Unit of Use 30450011000036109 - 07 Concept 30450011000036109MPUU has SYN medicinal product unit of use or MPUU - medicinal product unit of use.sql	2026-09-10 23:53:17.416919104 +1000
+@@ -8,7 +8,7 @@
+ select get_cr_ADRS_PT(30450011000036109) = BINARY 'medicinal product unit of use';
+ 
+ EXECUTABLE_QUERY:
+-select * from (select '1' from dual where not exists(select get_cr_ADRS_PT(929360071000036103) = BINARY 'medicinal product unit of use reference set')) as query
++select * from (select '1' from dual where coalesce(get_cr_ADRS_PT(929360071000036103), '') <> BINARY 'medicinal product unit of use reference set') as query
+ 
+ */
+ 
+@@ -20,5 +20,5 @@
+ 	'07 Concept 30450011000036109|MPUU has SYN = medicinal product unit of use or MPUU - medicinal product unit of use',
+ 	null,
+ 	null
+-from (select '1' from dual where not exists(select get_cr_ADRS_PT(929360071000036103) = BINARY 'medicinal product unit of use reference set')) as query;
++from (select '1' from dual where coalesce(get_cr_ADRS_PT(929360071000036103), '') <> BINARY 'medicinal product unit of use reference set') as query;
+ 
+diff -r corpus-amtv4/scripts/amtv4/DNF Trade Product 30560011000036108 - 08 Concept 30560011000036108Trade Product has SYN trade product or TP - trade product.sql corpus-amt-fixed/scripts/amtv4/DNF Trade Product 30560011000036108 - 08 Concept 30560011000036108Trade Product has SYN trade product or TP - trade product.sql
+--- corpus-amtv4/scripts/amtv4/DNF Trade Product 30560011000036108 - 08 Concept 30560011000036108Trade Product has SYN trade product or TP - trade product.sql	2026-08-30 20:13:33.766892084 +1000
++++ corpus-amt-fixed/scripts/amtv4/DNF Trade Product 30560011000036108 - 08 Concept 30560011000036108Trade Product has SYN trade product or TP - trade product.sql	2026-09-10 23:53:17.417919198 +1000
+@@ -8,7 +8,7 @@
+ select get_cr_ADRS_PT(30560011000036108) = BINARY 'trade product';
+ 
+ EXECUTABLE_QUERY:
+-select * from (select '1' from dual where not exists(select get_cr_ADRS_PT(929360021000036102) = BINARY 'trade product reference set')) as query
++select * from (select '1' from dual where coalesce(get_cr_ADRS_PT(929360021000036102), '') <> BINARY 'trade product reference set') as query
+ 
+ */
+ 
+@@ -20,5 +20,5 @@
+ 	'08 Concept 30560011000036108|Trade Product has SYN = trade product or TP - trade product',
+ 	null,
+ 	null
+-from (select '1' from dual where not exists(select get_cr_ADRS_PT(929360021000036102) = BINARY 'trade product reference set')) as query;
++from (select '1' from dual where coalesce(get_cr_ADRS_PT(929360021000036102), '') <> BINARY 'trade product reference set') as query;
+ 
+diff -r corpus-amtv4/scripts/amtv4/DNF Trade Product Pack 30404011000036106 - 06b Concept 30404011000036106TPP has SYN trade product pack or TPP - trade product pack.sql corpus-amt-fixed/scripts/amtv4/DNF Trade Product Pack 30404011000036106 - 06b Concept 30404011000036106TPP has SYN trade product pack or TPP - trade product pack.sql
+--- corpus-amtv4/scripts/amtv4/DNF Trade Product Pack 30404011000036106 - 06b Concept 30404011000036106TPP has SYN trade product pack or TPP - trade product pack.sql	2026-08-30 20:13:33.766892084 +1000
++++ corpus-amt-fixed/scripts/amtv4/DNF Trade Product Pack 30404011000036106 - 06b Concept 30404011000036106TPP has SYN trade product pack or TPP - trade product pack.sql	2026-09-10 23:53:17.418919292 +1000
+@@ -8,7 +8,7 @@
+ select get_cr_ADRS_PT(30404011000036106) = BINARY 'trade product pack';
+ 
+ EXECUTABLE_QUERY:
+-select * from (select '1' from dual where not exists(select get_cr_ADRS_PT(929360041000036105) = BINARY 'trade product pack reference set')) as query
++select * from (select '1' from dual where coalesce(get_cr_ADRS_PT(929360041000036105), '') <> BINARY 'trade product pack reference set') as query
+ 
+ */
+ 
+@@ -20,5 +20,5 @@
+ 	'06b Concept 30404011000036106|TPP has SYN = trade product pack or TPP - trade product pack',
+ 	null,
+ 	null
+-from (select '1' from dual where not exists(select get_cr_ADRS_PT(929360041000036105) = BINARY 'trade product pack reference set')) as query;
++from (select '1' from dual where coalesce(get_cr_ADRS_PT(929360041000036105), '') <> BINARY 'trade product pack reference set') as query;
+ 
+diff -r corpus-amtv4/scripts/amtv4/DNF Trade Product Unit of Use 30425011000036101 - 06b Concept 30425011000036101TPUU has SYN trade product unit of use or TPUU - trade product unit of use.sql corpus-amt-fixed/scripts/amtv4/DNF Trade Product Unit of Use 30425011000036101 - 06b Concept 30425011000036101TPUU has SYN trade product unit of use or TPUU - trade product unit of use.sql
+--- corpus-amtv4/scripts/amtv4/DNF Trade Product Unit of Use 30425011000036101 - 06b Concept 30425011000036101TPUU has SYN trade product unit of use or TPUU - trade product unit of use.sql	2026-08-30 20:13:33.766892084 +1000
++++ corpus-amt-fixed/scripts/amtv4/DNF Trade Product Unit of Use 30425011000036101 - 06b Concept 30425011000036101TPUU has SYN trade product unit of use or TPUU - trade product unit of use.sql	2026-09-10 23:53:17.419919386 +1000
+@@ -8,7 +8,7 @@
+ select get_cr_ADRS_PT(30425011000036101) = BINARY 'trade product unit of use';
+ 
+ EXECUTABLE_QUERY:
+-select * from (select '1' from dual where not exists(select get_cr_ADRS_PT(929360031000036100) = BINARY 'trade product unit of use reference set')) as query
++select * from (select '1' from dual where coalesce(get_cr_ADRS_PT(929360031000036100), '') <> BINARY 'trade product unit of use reference set') as query
+ 
+ */
+ 
+@@ -20,5 +20,5 @@
+ 	'06b Concept 30425011000036101|TPUU has SYN = trade product unit of use or TPUU - trade product unit of use',
+ 	null,
+ 	null
+-from (select '1' from dual where not exists(select get_cr_ADRS_PT(929360031000036100) = BINARY 'trade product unit of use reference set')) as query;
++from (select '1' from dual where coalesce(get_cr_ADRS_PT(929360031000036100), '') <> BINARY 'trade product unit of use reference set') as query;
+ 
+diff -r corpus-amtv4/scripts/amtv4/Full ccsRefset validation - 01 rf2 cr ccsRefset full has been populated.sql corpus-amt-fixed/scripts/amtv4/Full ccsRefset validation - 01 rf2 cr ccsRefset full has been populated.sql
+--- corpus-amtv4/scripts/amtv4/Full ccsRefset validation - 01 rf2 cr ccsRefset full has been populated.sql	2026-08-30 20:13:33.767892177 +1000
++++ corpus-amt-fixed/scripts/amtv4/Full ccsRefset validation - 01 rf2 cr ccsRefset full has been populated.sql	2026-09-10 23:53:17.421919573 +1000
+@@ -8,7 +8,7 @@
+ call TableIsPopulated('rf2_cr_ccsRefset_full');
+ 
+ EXECUTABLE_QUERY:
+-select * from (select '0' from dual where not exists( select count(1) from ccsRefset_f)) as query
++select * from (select '0' from dual where not exists( select 1 from ccsRefset_f)) as query
+ 
+ */
+ 
+@@ -20,5 +20,5 @@
+ 	'01 rf2_cr_ccsRefset_full has been populated',
+ 	null,
+ 	null
+-from (select '0' from dual where not exists( select count(1) from <PROSPECTIVE>.ccsRefset_<FULL>)) as query;
++from (select '0' from dual where not exists( select 1 from <PROSPECTIVE>.ccsRefset_<FULL>)) as query;
+ 
+diff -r corpus-amtv4/scripts/amtv4/Full csRefset validation - 01 rf2 cr csRefset full has been populated.sql corpus-amt-fixed/scripts/amtv4/Full csRefset validation - 01 rf2 cr csRefset full has been populated.sql
+--- corpus-amtv4/scripts/amtv4/Full csRefset validation - 01 rf2 cr csRefset full has been populated.sql	2026-08-30 20:13:33.767892177 +1000
++++ corpus-amt-fixed/scripts/amtv4/Full csRefset validation - 01 rf2 cr csRefset full has been populated.sql	2026-09-10 23:53:17.422919667 +1000
+@@ -8,7 +8,7 @@
+ call TableIsPopulated('rf2_cr_csRefset_full');
+ 
+ EXECUTABLE_QUERY:
+-select * from (select '0' from dual where not exists( select count(1) from attributevaluemap_f)) as query
++select * from (select '0' from dual where not exists( select 1 from attributevaluemap_f)) as query
+ 
+ */
+ 
+@@ -20,5 +20,5 @@
+ 	'01 rf2_cr_csRefset_full has been populated',
+ 	null,
+ 	null
+-from (select '0' from dual where not exists( select count(1) from <PROSPECTIVE>.attributevaluemap_<FULL>)) as query;
++from (select '0' from dual where not exists( select 1 from <PROSPECTIVE>.attributevaluemap_<FULL>)) as query;
+ 
+diff -r corpus-amtv4/scripts/amtv4/Full iRefset validation - 01 rf2 cr irefset full has been populated.sql corpus-amt-fixed/scripts/amtv4/Full iRefset validation - 01 rf2 cr irefset full has been populated.sql
+--- corpus-amtv4/scripts/amtv4/Full iRefset validation - 01 rf2 cr irefset full has been populated.sql	2026-08-30 20:13:33.767892177 +1000
++++ corpus-amt-fixed/scripts/amtv4/Full iRefset validation - 01 rf2 cr irefset full has been populated.sql	2026-09-10 23:53:17.423919761 +1000
+@@ -8,7 +8,7 @@
+ call TableIsPopulated('rf2_cr_irefset_full');
+ 
+ EXECUTABLE_QUERY:
+-select * from (select '0' from dual where not exists( select count(1) from isimplemaprefset_f)) as query
++select * from (select '0' from dual where not exists( select 1 from isimplemaprefset_f)) as query
+ 
+ */
+ 
+@@ -20,5 +20,5 @@
+ 	'01 rf2_cr_irefset_full has been populated',
+ 	null,
+ 	null
+-from (select '0' from dual where not exists( select count(1) from <PROSPECTIVE>.isimplemaprefset_<FULL>)) as query;
++from (select '0' from dual where not exists( select 1 from <PROSPECTIVE>.isimplemaprefset_<FULL>)) as query;
+ 
+diff -r corpus-amtv4/scripts/amtv4/Medication container type reference set 1183941000168107 content validation - 10 IS A child of 32570701000036108 Reference sets for Medications.sql corpus-amt-fixed/scripts/amtv4/Medication container type reference set 1183941000168107 content validation - 10 IS A child of 32570701000036108 Reference sets for Medications.sql
+--- corpus-amtv4/scripts/amtv4/Medication container type reference set 1183941000168107 content validation - 10 IS A child of 32570701000036108 Reference sets for Medications.sql	2026-08-30 20:13:33.769892364 +1000
++++ corpus-amt-fixed/scripts/amtv4/Medication container type reference set 1183941000168107 content validation - 10 IS A child of 32570701000036108 Reference sets for Medications.sql	2026-09-10 23:53:17.430920418 +1000
+@@ -9,7 +9,7 @@
+ select isChildOf_cr(1183941000168107, 32570701000036108);
+ 
+ EXECUTABLE_QUERY:
+-select * from (select '1' from dual where not exists(select isChildOf_cr(1183941000168107, 32570701000036108))) as query
++select * from (select '1' from dual where isChildOf_cr(1183941000168107, 32570701000036108) = 0) as query
+ 
+ */
+ 
+@@ -21,5 +21,5 @@
+ 	'10 IS A child of 32570701000036108 | Reference sets for Medications',
+ 	null,
+ 	null
+-from (select '1' from dual where not exists(select isChildOf_cr(1183941000168107, 32570701000036108))) as query;
++from (select '1' from dual where isChildOf_cr(1183941000168107, 32570701000036108) = 0) as query;
+ 
