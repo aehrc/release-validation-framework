@@ -139,3 +139,13 @@ HEAP="${HEAP:-3g}" CORPUS="./amt-corpus/" DUCK_STORE="$AMT_STORE" \
     --release "releases/$PROSPECTIVE.zip" \
     --previous "$PREVIOUS.zip" \
     --groups "$ASSERTION_GROUPS"
+
+# Keep this arm's reports under their own names. Both arms write
+# /data/work/engine-ab-{mysql,duck}.json, so running the international arm
+# afterwards overwrote them and a coverage measurement silently read the wrong
+# run - 0 of 200 AMT assertions present, which at least failed loudly.
+for engine in mysql duck; do
+  [ -f "/data/work/engine-ab-$engine.json" ] &&
+    cp "/data/work/engine-ab-$engine.json" "/data/work/engine-ab-amt-$engine.json"
+done
+echo "  reports kept at /data/work/engine-ab-amt-{mysql,duck}.json"

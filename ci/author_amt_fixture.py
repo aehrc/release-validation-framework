@@ -17,10 +17,13 @@ Every row here is derived from an assertion's own WHERE clause - the refset ids,
 the attribute types, the semantic tags and the ADRS dialect refset are read out
 of the published store, not guessed. Nothing is invented to make a number move.
 """
+import json
 import pathlib
+import re
 
 ROOT = pathlib.Path('/data/Projects/rvf-catchup/src/test/resources')
 PREV, CURR = '20130131', '20130731'
+STORE = pathlib.Path('/data/work/amt-build/store.json')
 
 # --- what the assertions read ------------------------------------------------
 AMT_MODULE = '32506021000036107'      # the AMT module, per the semantic-tag family
@@ -243,6 +246,185 @@ def author_product_model(r: Rows):
     return members
 
 
+def sample_matching(pattern: str) -> str | None:
+    """A shortest string this pattern accepts, for the subset the ADRS assertions
+    use: alternation, character classes, `.*`/`.+`, `?`, anchors, escapes.
+
+    Generated rather than hand-picked because there are 22 of them and the
+    patterns are the requirement - a term I chose myself would be a guess about
+    what the assertion means. Every result is checked against the pattern before
+    it is emitted, so a pattern this cannot handle produces None and its
+    assertion stays honestly silent instead of getting content that misses.
+    """
+    out, i, depth_alt = [], 0, None
+    while i < len(pattern):
+        c = pattern[i]
+        if c == '\\' and i + 1 < len(pattern):
+            out.append(pattern[i + 1]); i += 2; continue
+        if c in '^$':
+            i += 1; continue
+        if c == '.':
+            # `.*` and `.?` can be empty; a bare `.` or `.+` needs one character
+            nxt = pattern[i + 1] if i + 1 < len(pattern) else ''
+            out.append('' if nxt in ('*', '?') else 'x')
+            i += 2 if nxt in ('*', '?', '+') else 1
+            continue
+        if c == '[':
+            j = pattern.index(']', i)
+            body = pattern[i + 1:j]
+            pick = body[0] if body and body[0] != '^' else 'x'
+            nxt = pattern[j + 1] if j + 1 < len(pattern) else ''
+            out.append('' if nxt in ('*', '?') else pick)
+            i = j + (2 if nxt in ('*', '?', '+') else 1)
+            continue
+        if c == '(':
+            # the first alternative of the group, recursively
+            depth, j = 1, i + 1
+            while j < len(pattern) and depth:
+                if pattern[j] == '\\': j += 2; continue
+                depth += (pattern[j] == '(') - (pattern[j] == ')')
+                j += 1
+            inner = pattern[i + 1:j - 1]
+            if inner.startswith('?:'):
+                inner = inner[2:]
+            # split on top-level | only
+            parts, d, last = [], 0, 0
+            for k, ch in enumerate(inner):
+                if ch == '(': d += 1
+                elif ch == ')': d -= 1
+                elif ch == '|' and d == 0:
+                    parts.append(inner[last:k]); last = k + 1
+            parts.append(inner[last:])
+            nxt = pattern[j] if j < len(pattern) else ''
+            piece = '' if nxt in ('*', '?') else (sample_matching(parts[0]) or '')
+            out.append(piece)
+            i = j + (1 if nxt in ('*', '?', '+') else 0)
+            continue
+        nxt = pattern[i + 1] if i + 1 < len(pattern) else ''
+        out.append('' if nxt in ('*', '?') else c)
+        i += 2 if nxt in ('*', '?', '+') else 1
+    raw = ''.join(out)
+    if not raw.strip():
+        return None
+    # Some patterns require a trailing space - `[Ff]o?et(us|al) ` does - and a
+    # term with trailing whitespace is a DIFFERENT defect: it is what MySQL's
+    # PAD SPACE collation hides and what one baseline entry is already about.
+    # So the space is satisfied by a following word rather than left dangling.
+    for candidate in (raw.strip(), raw.strip() + ' specimen'):
+        try:
+            if re.search(pattern, candidate):
+                return candidate
+        except re.error:
+            return None
+    return None
+
+
+def author_adrs_pattern_gaps(r: Rows, requirements):
+    """One concept per ADRS assertion: a term its trigger pattern matches, and
+    where the assertion also reads GET_CR_ADRS_PT, a preferred ADRS synonym
+    matching whatever it wants to find there.
+
+    The shape of the family is "a term says X, so some other term must say Y":
+    a concept carrying only the trigger is exactly the violation.
+    """
+    made = 0
+    for name, trigger, adrs_pt in requirements:
+        term = sample_matching(trigger)
+        if not term:
+            continue
+        cid = r.next_id(CONCEPT_P, '00')
+        r.concept_row(cid, status=PRIMITIVE)
+        r.description_row(cid, f'{term} (observable entity)', typeid=FSN)
+        r.description_row(cid, term)
+        if adrs_pt:
+            pt = sample_matching(adrs_pt)
+            if pt:
+                did = r.description_row(cid, pt)
+                r.language_row(did)
+        made += 1
+    return made
+
+
+def author_refset_concept_descriptions(r: Rows):
+    """The class refsets' own concepts, with a synonym that is not one of the
+    names the DNF family allows.
+
+    Those assertions read `description_active WHERE conceptId = <the refset>`
+    and compare the term against two or three permitted spellings. The fixture
+    holds no description for any refset concept at all, so they could not fire:
+    there was nothing to compare. A concept and a deliberately non-canonical
+    synonym is the whole requirement, and an ADRS preferred term alongside it
+    covers the `GET_CR_ADRS_PT(<refset>) = '<name>'` variants.
+    """
+    for refset, label, _ in CLASS_REFSETS:
+        r.concept_row(refset, status=PRIMITIVE)
+        r.description_row(refset, f'{label} reference set (foundation metadata concept)', typeid=FSN)
+        did = r.description_row(refset, f'{label} refset under a name the corpus does not allow')
+        r.language_row(did)
+    return len(CLASS_REFSETS)
+
+
+def author_refset_disjointness_breach(r: Rows):
+    """One concept in two of the seven class refsets.
+
+    `GROUP BY referencedComponentId HAVING COUNT(refsetId) > 1` over the seven is
+    the assertion, and it is a genuine modelling error: a product cannot be both
+    a unit of use and a pack.
+    """
+    cid = r.next_id(CONCEPT_P, '00')
+    r.concept_row(cid, status=DEFINED)
+    r.description_row(cid, 'AMT product in two class refsets at once (clinical drug)', typeid=FSN)
+    for refset in ('929360071000036103', '929360081000036101'):
+        r.simple.append((r.next_uuid(), CURR, '1', AMT_MODULE, refset, cid))
+    return 1
+
+
+def author_same_refset_parentage(r: Rows):
+    """Two members of one class refset with an IsA between them, the parent
+    holding neither the attribute nor the concrete value the `DNF ... All <class>
+    are ...` assertions require of a parent that is in the same refset."""
+    parent = r.next_id(CONCEPT_P, '00')
+    child = r.next_id(CONCEPT_P, '00')
+    for cid, role in ((parent, 'parent'), (child, 'child')):
+        r.concept_row(cid, status=DEFINED)
+        r.description_row(cid, f'AMT TPUU {role} in the same refset (branded clinical drug)', typeid=FSN)
+        r.simple.append((r.next_uuid(), CURR, '1', AMT_MODULE, '929360031000036100', cid))
+    r.relationship_row(child, parent, typeid=IS_A)
+    return 2
+
+def adrs_pattern_requirements():
+    """Reads the ADRS assertions out of the published store: for each, the first
+    positive `REGEXP_MATCHES(term, ...)` and, if it reads the ADRS preferred
+    term, the pattern it wants to find there.
+
+    Read rather than transcribed. There are 22 of them, the patterns are the
+    requirement, and a pattern I retyped would drift the moment the corpus
+    changed - which it does, since the AMT scripts live in another repository.
+    """
+    if not STORE.exists():
+        return []
+    store = json.loads(STORE.read_text())['assertions']
+    out = []
+    for a in store.values():
+        if not a['file'].startswith('ADRS'):
+            continue
+        sql = ' '.join(a['statements'])
+        # a positive term match: not preceded by NOT
+        term = None
+        for m in re.finditer(r"(NOT\s+)?REGEXP_MATCHES\(\s*term\s*,\s*'((?:[^']|'')+)'", sql):
+            if not m.group(1):
+                term = m.group(2).replace("''", "'")
+                break
+        if not term:
+            continue
+        pt = None
+        m = re.search(r"(NOT\s+)?REGEXP_MATCHES\(\s*GET_CR_ADRS_PT\([^)]*\)\s*,\s*'((?:[^']|'')+)'", sql)
+        if m and not m.group(1):
+            pt = m.group(2).replace("''", "'")
+        out.append((a['file'], term, pt))
+    return out
+
+
 FILES = {
     'sct2_Concept': (['id', 'effectiveTime', 'active', 'moduleId', 'definitionStatusId'],
                      'concept', ''),
@@ -290,8 +472,15 @@ def main():
           f"{len(ADRS_HIERARCHIES)} hierarchies")
     print(f"  authored {tags} AMT-module concepts carrying a product-class semantic tag")
     members = author_product_model(r)
+    adrs = author_adrs_pattern_gaps(r, adrs_pattern_requirements())
+    refsets = author_refset_concept_descriptions(r)
+    author_refset_disjointness_breach(r)
+    author_same_refset_parentage(r)
     print(f"  authored {members} class-refset members, each non-compliant in the ways "
           f"the corpus checks, plus one dangling attribute target")
+    print(f"  authored {adrs} concepts from ADRS trigger patterns, "
+          f"{refsets} refset concepts with non-canonical names, a disjointness "
+          f"breach and a same-refset parent")
 
     buckets = {'concept': r.concept, 'desc': r.desc, 'rel': r.rel, 'lang': r.lang,
                'simple': r.simple, 'concrete': r.concrete}
