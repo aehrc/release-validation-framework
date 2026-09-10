@@ -1,0 +1,33 @@
+# The JDK this project targets, installed explicitly.
+#
+# Shared by every pipeline that compiles or runs the jar. Build 16305
+# compiled the forks with the agent's default JDK 17 and died in
+# maven-compiler-plugin: the parent BOM sets java.version=25 and this pool
+# ships 17.
+#
+# A template rather than a copy in each pipeline, because the copies drift
+# and the one that is not being watched breaks.
+
+steps:
+  - task: Bash@3
+    displayName: 'Install JDK 25'
+    # Build 16305 compiled the forks with the agent's default JDK 17 and
+    # died in maven-compiler-plugin. The parent BOM sets
+    # java.version=25, and this pool ships 17 - the image pipeline has
+    # always installed 25 explicitly and this one inherited a host where
+    # JAVA_HOME already pointed at it.
+    #
+    # Adoptium's API resolves the current GA build for a feature
+    # version, so no patch release is pinned that later disappears.
+    inputs:
+      targetType: 'inline'
+      script: |
+        set -euo pipefail
+        URL='https://api.adoptium.net/v3/binary/latest/25/ga/linux/x64/jdk/hotspot/normal/eclipse'
+        curl -fsSL -o /tmp/jdk25.tar.gz "$URL"
+        sudo mkdir -p /opt/jdk25
+        sudo tar -xzf /tmp/jdk25.tar.gz -C /opt/jdk25 --strip-components=1
+        echo "##vso[task.setvariable variable=JAVA_HOME]/opt/jdk25"
+        echo "##vso[task.prependpath]/opt/jdk25/bin"
+        /opt/jdk25/bin/java -version
+

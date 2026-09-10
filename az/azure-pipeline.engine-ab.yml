@@ -110,27 +110,7 @@ stages:
           - checkout: self
             fetchDepth: 1
 
-          - task: Bash@3
-            displayName: 'Install JDK 25'
-            # Build 16305 compiled the forks with the agent's default JDK 17 and
-            # died in maven-compiler-plugin. The parent BOM sets
-            # java.version=25, and this pool ships 17 - the image pipeline has
-            # always installed 25 explicitly and this one inherited a host where
-            # JAVA_HOME already pointed at it.
-            #
-            # Adoptium's API resolves the current GA build for a feature
-            # version, so no patch release is pinned that later disappears.
-            inputs:
-              targetType: 'inline'
-              script: |
-                set -euo pipefail
-                URL='https://api.adoptium.net/v3/binary/latest/25/ga/linux/x64/jdk/hotspot/normal/eclipse'
-                curl -fsSL -o /tmp/jdk25.tar.gz "$URL"
-                sudo mkdir -p /opt/jdk25
-                sudo tar -xzf /tmp/jdk25.tar.gz -C /opt/jdk25 --strip-components=1
-                echo "##vso[task.setvariable variable=JAVA_HOME]/opt/jdk25"
-                echo "##vso[task.prependpath]/opt/jdk25/bin"
-                /opt/jdk25/bin/java -version
+          - template: steps-jdk25.yml
 
           - task: Bash@3
             displayName: 'Preflight: disk and memory this run needs'
@@ -208,97 +188,10 @@ stages:
                   package -DskipTests -Ddependency-check.skip=true
                 ls -la target/release-validation-framework-*.jar
 
-          - task: Bash@3
-            displayName: 'Install MySQL (tarball, unprivileged)'
-            inputs:
-              targetType: 'inline'
-              script: |
-                set -euo pipefail
-                mkdir -p "$(workdir)"
-                cd "$(workdir)"
-                V='${{ parameters.mysqlVersion }}'
-                MAJOR="${V%.*}"
-                URL="https://dev.mysql.com/get/Downloads/MySQL-$MAJOR/mysql-$V-linux-glibc2.28-x86_64.tar.xz"
-                curl -fsSL -o mysql.tar.xz "$URL"
-                # Build 16306: `tar (child): xz: Cannot exec` - the container
-                # agents have no xz-utils, and tar shells out to it for .xz.
-                # Python's lzma is in the standard library and this pipeline
-                # already depends on python3, so decompressing here needs no
-                # apt-get and no root.
-                if command -v xz >/dev/null 2>&1; then
-                  tar -xf mysql.tar.xz
-                else
-                  echo "no xz on this agent; decompressing with python lzma"
-                  python3 -c 'import lzma, shutil, sys; shutil.copyfileobj(lzma.open(sys.argv[1]), open(sys.argv[2], "wb"))' mysql.tar.xz mysql.tar
-                  tar -xf mysql.tar
-                  rm -f mysql.tar
-                fi
-                mv "mysql-$V-linux-glibc2.28-x86_64" mysql8
-                # The generic tarball links against libraries the agent image
-                # does not ship. Build 16308 named two - libaio.so.1 AND
-                # libnuma.so.1 - and died with "error while loading shared
-                # libraries", exit 127, which reads like a broken binary.
-                #
-                # Driven by ldd rather than by a fixed list, so a library added
-                # by a later MySQL is reported by name instead of failing the
-                # same way. Downloaded and shimmed rather than installed: the
-                # pool is shared, and a build that mutates the agent's packages
-                # is a side effect the next build inherits.
-                #
-                # LIBS lives outside the work directory on purpose: it is
-                # symlinks, and PublishPipelineArtifact cannot follow them
-                # ("Unable to load symbolic/hard linked file", also 16308).
-                LIBS="$(Agent.TempDirectory)/mysql-libs"
-                rm -rf "$LIBS" && mkdir -p "$LIBS" aio
-                missing() { ldd mysql8/bin/mysqld 2>/dev/null | awk '/not found/ {print $1}'; }
-                NEEDED="$(missing)"
-                if [ -z "$NEEDED" ]; then
-                  echo "every library mysqld needs is already present"
-                else
-                  echo "mysqld is missing: $NEEDED"
-                  # apt-get download cannot find anything until the lists exist,
-                  # and 16307 showed that as "Unable to locate package" - a
-                  # missing index reading as a missing package.
-                  sudo apt-get update -qq
-                  for soname in $NEEDED; do
-                    # Both names, because 24.04 renamed these for the 64-bit
-                    # time_t transition and this pool is still 22.04: on jammy
-                    # only libaio1 exists, on noble only libaio1t64.
-                    case "$soname" in
-                      libaio.so.1) CANDIDATES='libaio1t64 libaio1' ;;
-                      libnuma.so.1) CANDIDATES='libnuma1t64 libnuma1' ;;
-                      *) echo "##vso[task.logissue type=error]no package known for $soname"; exit 1 ;;
-                    esac
-                    GOT=''
-                    for pkg in $CANDIDATES; do
-                      if apt-get download "$pkg" 2>/dev/null; then GOT="$pkg"; break; fi
-                    done
-                    [ -n "$GOT" ] || { echo "##vso[task.logissue type=error]none of [$CANDIDATES] could be downloaded for $soname"; exit 1; }
-                    echo "  $soname <- $GOT"
-                    dpkg-deb -x "$GOT"_*.deb aio
-                  done
-                  # By SEARCH, not by a guessed path: jammy puts these under
-                  # usr/lib/x86_64-linux-gnu and the t64 packages name the file
-                  # libX.so.1t64, so 16308's hardcoded pair matched neither.
-                  for soname in $NEEDED; do
-                    FOUND="$(find aio -name "${soname}*" | head -1)"
-                    [ -n "$FOUND" ] || { echo "##vso[task.logissue type=error]$GOT contained no $soname"; exit 1; }
-                    ln -sf "$PWD/$FOUND" "$LIBS/$soname"
-                  done
-                fi
-                export LD_LIBRARY_PATH="$LIBS"
-                STILL="$(missing)"
-                [ -z "$STILL" ] || { echo "##vso[task.logissue type=error]still missing after shimming: $STILL"; exit 1; }
-                echo "##vso[task.setvariable variable=mysqlLibs]$LIBS"
-                # Build 16310: "Can't get stat of .../mysqltmp" and "The
-                # designated data directory .../mysqldata/ is unusable" - both
-                # were simply absent. --initialize-insecure also requires the
-                # data directory to be EMPTY, so a re-run on the same agent
-                # workspace has to clear it rather than add to it.
-                rm -rf mysqldata && mkdir -p mysqldata mysqltmp
-                mysql8/bin/mysqld --initialize-insecure \
-                  --basedir="$PWD/mysql8" --datadir="$PWD/mysqldata" --tmpdir="$PWD/mysqltmp"
-                echo "mysqld initialised"
+          - template: steps-mysql-tarball.yml
+            parameters:
+              mysqlVersion: '${{ parameters.mysqlVersion }}'
+              workdir: $(workdir)
 
           - task: Bash@3
             displayName: 'Fetch the release and its previous release'

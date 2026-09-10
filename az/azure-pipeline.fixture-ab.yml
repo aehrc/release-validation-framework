@@ -1,0 +1,159 @@
+# Parity on the fixture, on every push - not only nightly against a real release.
+#
+# WHY THIS EXISTS. Until now the two fixture arms - ci/fixture_ab.sh and
+# ci/fixture_ab_amt.sh - ran only when someone ran them by hand. The one
+# automated proof of MySQL/DuckDB parity was pipeline 69 against a real 892 MB
+# release: sixty minutes, on a pool with one online agent, nightly. So a change
+# that broke parity on the fixture was caught a day later, behind whatever else
+# held the agent, or not at all.
+#
+# These arms need no release download and no Docker. The fixture is in the
+# repository, both engines read the same assertions from it, and each arm takes
+# under a minute. Setup is the long pole - JDK, jar, an unprivileged MySQL -
+# which is why it reuses the templates the nightly uses rather than its own copy.
+#
+# WHAT IT PROVES, AND WHAT IT DOES NOT. Per assertion, both engines, against
+# content authored so that assertions actually fire: every divergence is
+# classified by CAUSE against a baseline, so a new one fails the build and a
+# baseline entry that has STOPPED diverging fails it too. It does not prove
+# behaviour at edition scale - 892 MB, 24 minutes of MySQL, real module and
+# dependency wiring - and it is deliberately not a substitute for pipeline 69.
+
+trigger:
+  branches:
+    include:
+      - catchup-upgraded
+  paths:
+    include:
+      - src/
+      - ci/
+      - duck/
+      - pom.xml
+      - az/azure-pipeline.fixture-ab.yml
+      - az/steps-jdk25.yml
+      - az/steps-mysql-tarball.yml
+
+pr:
+  branches:
+    include:
+      - catchup-upgraded
+
+parameters:
+  - name: mysqlVersion
+    displayName: 'MySQL tarball version'
+    type: string
+    default: '8.4.6'
+
+variables:
+  - name: workdir
+    value: $(Pipeline.Workspace)/fixture-ab
+
+stages:
+  - stage: FixtureAB
+    displayName: 'MySQL vs DuckDB, on the fixture'
+    jobs:
+      - job: Compare
+        pool:
+          name: ncts-k8s-dedicated-pool
+        # Setup dominates; the two comparisons are about a minute each.
+        timeoutInMinutes: 45
+        steps:
+          - checkout: self
+            fetchDepth: 1
+
+          - template: steps-jdk25.yml
+
+          - task: Bash@3
+            displayName: 'Build the jar'
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                mvn -B -ntp -s duck/maven-settings.xml \
+                  -Dmaven.repo.local=$(Pipeline.Workspace)/.m2 \
+                  package -DskipTests -Ddependency-check.skip=true
+                ls -la target/release-validation-framework-*.jar
+
+          - template: steps-mysql-tarball.yml
+            parameters:
+              mysqlVersion: '${{ parameters.mysqlVersion }}'
+              workdir: $(workdir)
+
+          - task: Bash@3
+            displayName: 'International arm: all three groups'
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                # The same contract the nightly uses to call the stack script:
+                # WORK is where it looks for mysql8, the socket and the libs, and
+                # MYSQL_HOME has to agree with where the template unpacked it.
+                export WORK="$(workdir)"
+                export MYSQL_HOME="$(workdir)/mysql8"
+                export JAR=$(ls target/release-validation-framework-*.jar | head -1)
+                # The shim the MySQL template built. Without it mysqld dies with
+                # "error while loading shared libraries" and the stack script's
+                # own wait reports "mysql engine did not come up" - the symptom
+                # two steps from the cause.
+                export LD_LIBRARY_PATH="$(mysqlLibs)${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+                ci/fixture_ab.sh release-type-validation \
+                                 file-centric-validation \
+                                 component-centric-validation
+
+          - task: Bash@3
+            displayName: 'AMT arm, where the corpus and store exist'
+            # The AMT corpus is not in this repository and must not be, so this
+            # arm runs only on an agent carrying the overlay. Skipping LOUDLY is
+            # the point: failing a build for content it was never given is
+            # wrong, and passing silently would let the arm quietly stop running.
+            #
+            # succeededOrFailed so the international arm's verdict is not what
+            # decides whether this one is attempted - they gate independently.
+            condition: succeededOrFailed()
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                CORPUS="${AMT_CORPUS:-/data/work/corpus-amtv4}"
+                STORE="${AMT_STORE:-/data/work/amt-build/store.json}"
+                if [ ! -d "$CORPUS" ] || [ ! -f "$STORE" ]; then
+                  echo "AMT arm SKIPPED - no overlay on this agent:"
+                  echo "  corpus $CORPUS  $([ -d "$CORPUS" ] && echo present || echo ABSENT)"
+                  echo "  store  $STORE  $([ -f "$STORE" ] && echo present || echo ABSENT)"
+                  echo "The international arm above still gated. Publishing the AMT"
+                  echo "pack (PLAN 1.2) is what removes this condition."
+                  exit 0
+                fi
+                export WORK="$(workdir)"
+                export MYSQL_HOME="$(workdir)/mysql8"
+                export JAR=$(ls target/release-validation-framework-*.jar | head -1)
+                export LD_LIBRARY_PATH="$(mysqlLibs)${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+                AMT_CORPUS="$CORPUS" AMT_STORE="$STORE" ci/fixture_ab_amt.sh
+
+          - task: Bash@3
+            displayName: 'Collect the reports'
+            condition: succeededOrFailed()
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                # Named explicitly rather than by copying $WORK: the release
+                # caches beside them are hundreds of megabytes, and the AMT arm
+                # keeps its own copies precisely because both arms write
+                # engine-ab-{mysql,duck}.json and the second would overwrite the
+                # first.
+                mkdir -p "$(Build.ArtifactStagingDirectory)"
+                for f in engine-ab.json engine-ab.xml \
+                         engine-ab-mysql.json engine-ab-duck.json \
+                         engine-ab-amt-mysql.json engine-ab-amt-duck.json; do
+                  [ -f "$(workdir)/$f" ] && cp "$(workdir)/$f" "$(Build.ArtifactStagingDirectory)/" || true
+                done
+                ls -la "$(Build.ArtifactStagingDirectory)"
+
+          - task: PublishPipelineArtifact@1
+            displayName: 'Keep both comparison reports'
+            condition: succeededOrFailed()
+            inputs:
+              targetPath: $(Build.ArtifactStagingDirectory)
+              artifact: 'fixture-ab-reports'
+              publishLocation: 'pipeline'
