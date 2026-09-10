@@ -589,6 +589,82 @@ port defect would go unseen here. Closing it means adding MRCM refset rows that
 actually violate the domain/range/attribute rules - a fixture change with real
 content design in it, not a repair.
 
+**3.17 The test suite: all of it runs, all of it passes, and five defects fell
+out of making that true. 2026-09-10.**
+
+| | before | after |
+|---|---|---|
+| tests run | 526 | **579** |
+| failures | 0 | 0 |
+| errors | **14** | 0 |
+| skipped | **21** | 0 |
+
+The 14 errors were all `Could not find a valid Docker environment` - which in a
+summary is indistinguishable from 14 real failures - and the 21 were four
+`@Disabled` classes, including the per-assertion MySQL oracle this repository
+has had all along and never run.
+
+**The tests were stricter than the thing they test.** The A/B stack has never
+needed a daemon: it runs the official generic Linux tarball unprivileged, which
+is what makes it work on a build agent with no sudo. `IntegrationTest` now takes
+`-Drvf.test.mysql.url`, so the whole suite runs against that same mysqld; unset,
+it starts the container exactly as before and CI is unchanged.
+
+**Five defects, all in production code except the last two:**
+
+1. **A table name as a bind parameter.** `AssertionExecutionService` ran
+   `insert into ? ...` with `setString(1, qaResulTableName)`, so the server got
+   `insert into 'qa_result' (...)` and answered with a syntax error every time.
+   Every assertion whose statement starts with `select` reported failureCount
+   -1.
+2. **The fixtures were checked out as LF.** RF2 is CRLF and the loader says so -
+   `lines terminated by '\r\n' ignore 1 lines` - so it read each file as ONE
+   line, discarded it, and loaded **zero rows with no error**. `.gitattributes`
+   now marks them `text eol=crlf`.
+3. **A null component id crashed whitelisting.** The extractor normalised a
+   missing id to `""` when building items and dereferenced it unguarded when
+   matching what came back.
+4. **Any HQL query threw.** `antlr4-runtime` is pinned at 4.7.1 for
+   presto-parser and Hibernate 6 needs 4.13.1, so its HQL lexer could not
+   initialise. Measured both ways: at 4.13.1 Hibernate works and
+   `StatementSplitter` breaks instead. The pin stays with the measurement beside
+   it and the one call needing HQL is now native. The way out is dropping
+   presto-parser, used for exactly one class.
+5. **A JUnit 4 assertion in a JUnit 5 test.** The oracle compared names with
+   `assertEquals(message, expected, actual)`, so it compared the MESSAGE against
+   the expected name and could never agree - each group comparison died on
+   whichever assertion it reached first, whatever the data said.
+
+**Coverage went up, measured, not asserted:**
+
+| | before | after |
+|---|---|---|
+| MRCM | 6/61 | 32/61 |
+| concrete values | 0/11 | **11/11** |
+| whole corpus | 227/360 | **265/360** (63% -> 74%) |
+
+Of the four MRCM refsets only MRCMModuleScope existed and there was no
+`sct2_RelationshipConcreteValues` at all, so 66 assertions ran against absent
+files. `ci/author_mrcm_fixture.py` writes 102 rows across Snapshot, Full and
+Delta for both releases: each release internally consistent so the derivative
+assertions pass, with the flaws in the content where the content-centric
+assertions look. Two things had to be learned - the component-centric MRCM
+assertions scope to `res_edited_active_concepts`, so a flawed row has to be
+about a concept in the concept DELTA, and the `-unique-id` assertions had
+nothing to find until a member id was deliberately repeated.
+
+**And the parity held throughout.** `ci/fixture_ab.sh`: **212 of 213 identical
+(99.5%)**, 1 divergence explained, 0 unexplained, both engines finding 175
+failures. The one left is MySQL's `identifier_d` procedure bug (upstream PR #6).
+The fixture baseline is now EMPTY - every entry retired by a fix rather than by
+being ignored.
+
+*Still open:* 29 MRCM assertions need the expression-validation procedures and
+MDRS interactions exercised, which is content design rather than more rows. And
+MySQL's PAD SPACE collation is reproduced for GROUP BY but not for term JOINS -
+21 statements in 19 assertions - because rewriting those by pattern breaks three
+assertions outright. That belongs in the publisher, with the parse tree.
+
 ## 4. Known, deliberate, not scheduled
 
 * `minAssertions` 1,400 / `minSqlAssertions` 400 depend on the AMT overlay
