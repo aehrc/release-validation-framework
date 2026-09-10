@@ -1,0 +1,92 @@
+{
+  "_README": [
+    "Classified divergences for the AU/AMT arm of the A/B, keyed by assertion",
+    "UUID. Same contract as ci/known-engine-divergences.json: an unlisted",
+    "divergence fails the gate, and a listed one that stops diverging also fails,",
+    "because a baseline nobody prunes stops describing anything.",
+    "",
+    "This file exists separately because the AU arm runs a different corpus (the",
+    "360 international assertions plus the 200 AMT ones) against a different",
+    "release, so a cause proven here does not transfer to the international",
+    "nightly and must not be smuggled into its baseline.",
+    "",
+    "WHAT THE FIRST RUN FOUND, 2026-09-10. Three assertions diverged on the 894MB",
+    "AU release (amtv4-15912.zip). Only ONE of them belongs in a baseline; the",
+    "other two were artefacts of HOW the run was submitted, and are recorded here",
+    "as directions rather than allowances so that re-appearing after the",
+    "configuration is fixed is a failure and not a shrug.",
+    "",
+    "  1. 17b6c41e - MySQL 1,405,850 findings, DuckDB not-run.",
+    "  2. fc0f240c - MySQL 8 findings, DuckDB not-run.",
+    "",
+    "Both are the SAME cause: an AU extension is a dependent release, and this run",
+    "supplied no dependency. MySQL substitutes an absent schema and compares",
+    "against nothing, which is how one assertion produced 1.4M rows - a finding",
+    "per language refset member in the edition. DuckDB skips statements naming",
+    "<DEPENDENCY> and says so. Supplying --dependency-release removes both, and",
+    "until the AU arm does, its numbers are not a parity measurement. Neither is",
+    "listed as an allowance: fix the submission, do not baseline it.",
+    "",
+    "fc0f240c is also the reason this file exists at all. MySQL's 8 findings are",
+    "REAL - verified by hand against the isa closure, attributetype",
+    "900000000000469006 has 7 ancestors and 707000009 is not among them - and",
+    "DuckDB reported 0 and PASSED. Of that assertion's 12 statements exactly one",
+    "writes to qa_result and exactly that one needs the dependency, so 11",
+    "statements ran, none could report, and the run looked clean. The engine now",
+    "reports not-run when every qa_result writer was skipped, which is what turns",
+    "this from a silent false negative into divergence 2 above. See",
+    "DuckDbAssertionExecutionServiceTest#anAssertionWhoseOnlyFindingWriterIsSkippedIsNotRunRatherThanPassed."
+  ],
+  "directions": {
+    "candidate-higher": "DuckDB reports more failures than MySQL for an assertion",
+    "incumbent-higher": "MySQL reports more failures than DuckDB for an assertion"
+  },
+  "divergences": {
+    "5451f5c6-13c2-76a5-3590-fb889ae6a29f": {
+      "class": "mysql-errors-on-a-file-the-release-does-not-ship",
+      "slug": "mysql-errors-on-a-file-the-release-does-not-ship",
+      "direction": "candidate-higher",
+      "directionNote": "MySQL -1 against DuckDB 0, so the arithmetic reads as candidate-higher. The sentinel is the whole difference: MySQL abandoned the assertion on a missing table and DuckDB ran it against the empty one the store declares.",
+      "appliesTo": "Full ccsRefset validation - 01, on any release that does not ship a ccsRefset file",
+      "assertionUuids": [
+        "5451f5c6-13c2-76a5-3590-fb889ae6a29f"
+      ],
+      "observed": "MySQL failureCount -1 in assertionsFailed with 'Table rvf_au_20260831_<runid>.ccsRefset_f doesn't exist'; DuckDB 0 in assertionsPassed",
+      "cause": [
+        "The AU release ships no ccsRefset file at all - zero entries in the",
+        "894MB zip match the name. The assertion is 'rf2_cr_ccsRefset_full has",
+        "been populated', a single INSERT that reports when the table is empty.",
+        "",
+        "MySQL loads only the files a release contains, so the table is absent",
+        "rather than empty and the statement dies on a missing table. That is",
+        "reported as failureCount -1, an incomplete, which reads as a failure",
+        "against the assertion rather than against the release.",
+        "",
+        "The DuckDB store declares every RF2 table's columns in tableColumns,",
+        "including ccsrefset_f, so the dataset build creates the table empty and",
+        "the assertion runs. An empty table IS the answer: the refset is not",
+        "populated, which for a release that never claimed to ship one is not a",
+        "finding. DuckDB reports 0 and passes.",
+        "",
+        "Which is right depends on the question, and the question is 'is this",
+        "release valid'. MySQL cannot distinguish 'this file is missing' from",
+        "'this assertion is broken' and files both under incomplete; DuckDB",
+        "answers the assertion as written. Keeping DuckDB's answer is a",
+        "deliberate improvement, not a tolerance."
+      ],
+      "evidence": "Verified 2026-09-10 against amtv4-15912.zip: 0 zip entries matching ccsRefset, store.json tableColumns declares ccsrefset_f/_s/_d",
+      "moveWhen": "The AU release starts shipping a ccsRefset file, at which point both engines read the same rows and this entry must be removed"
+    }
+  },
+  "coverage": {
+    "_README": [
+      "Assertions one engine reports that do not join to the other by",
+      "assertionUuid. Zero is the target on the international arm; the AU arm",
+      "cannot reach zero until the dependency release is supplied, because a",
+      "not-run item and an incomplete are both reported but neither carries a",
+      "comparable count."
+    ],
+    "allowUncovered": 0,
+    "categories": {}
+  }
+}

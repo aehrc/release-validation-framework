@@ -364,7 +364,7 @@ f7117eb0-7cd6-11e1-b0c4-0800200c9a66	component-centric-snapshot-historical-assoc
 f7bd336c-4ced-48e3-881c-b61e23a19530	component-centric-delta-inactive-concepts-must-have-active-PT.sql	RAN	2	210249b4b75e9b6f433424ed2bf016a686eabd035ae55b6e33fd68ea448d701a
 f8e7d6c5-b4a3-4291-8e7d-6c5b4a392817	file-centric-snapshot-descriptor-unique-attribute-key.sql	RAN	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 fbfc4fd1-f10d-4fc2-889f-df0e089df4b7	release-type-delta-previous-snapshot-validation-relationship-concrete-values.sql	RAN	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-fc0f240c-4a07-4995-acf6-52a7f41f2ce6	component-centric-snapshot-refsets-descriptor-validation.sql	RAN	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+fc0f240c-4a07-4995-acf6-52a7f41f2ce6	component-centric-snapshot-refsets-descriptor-validation.sql	NOT_RUN	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 fc24db60-7856-11e1-b0c4-0800200c9a66	file-centric-snapshot-language-unique-id.sql	RAN	3	d8c95bc2e753941cdf0279b65485b4a51b788e2228ec6b89b30008a2eea072fd
 fd8ed390-94e9-4fd9-9e20-902a24273dca	release-type-full-validation-stated-relationship.sql	RAN	3	637131803237f8ff7fb938d5bf6d932bff6ffce50e68a91111e03df5d1538492
 ff94e202-39b9-47a1-bd69-3bd3d1a4210e	file-centric-snapshot-language-unique-fsn-ee.sql	RAN	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855

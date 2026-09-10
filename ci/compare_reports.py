@@ -112,19 +112,44 @@ def main():
     ap.add_argument("--candidate", required=True, help="DuckDB report json")
     ap.add_argument("--out", required=True)
     ap.add_argument("--junit")
-    ap.add_argument("--baseline", default=str(BASELINE),
-                    help="known-divergences.json (default: alongside this script)")
+    ap.add_argument("--baseline", action="append",
+                    help="known-divergences.json; repeatable, and repeating it "
+                         "MERGES - an arm running two corpora needs the causes "
+                         "proven for each. Given explicitly, the default drops out.")
     ap.add_argument("--gate", action="store_true",
                     help="exit 1 on unexplained divergence or new coverage gap")
     ap.add_argument("--fail-on-divergence", action="store_true",
                     help="strict: exit 1 on ANY divergence, explained or not")
     a = ap.parse_args()
 
-    base = json.loads(pathlib.Path(a.baseline).read_text())
-    known = base.get("divergences", {})
-    cov = base.get("coverage", {})
-    categories = cov.get("categories", {})
-    expected_gaps = cov.get("knownGaps", {}).get("expectedCount", 0)
+    # Default None, not a list: argparse APPENDS to a default, so a list
+    # default would leave the gate judging by a file the caller did not name.
+    baselines = a.baseline or [str(BASELINE)]
+    known, categories = {}, {}
+    expected_gaps = 0
+    for path in baselines:
+        base = json.loads(pathlib.Path(path).read_text())
+        for uuid, entry in base.get("divergences", {}).items():
+            if uuid in known:
+                # Two baselines claiming the same assertion would let one arm's
+                # tolerance decide another's verdict, which is the whole reason
+                # they are separate files.
+                raise SystemExit(f"{path}: {uuid} is already classified by another "
+                                 f"baseline; a divergence has one cause, in one file")
+            known[uuid] = entry
+            # These files are hand-edited, and the report groups divergences by
+            # `class`. Missing it used to surface 100 lines later as
+            # `KeyError: 'class'` on top of a finished comparison - a traceback
+            # where the honest answer is one sentence naming the file, the
+            # assertion and the key.
+            for required in ("class", "direction"):
+                if required not in entry:
+                    raise SystemExit(f"{path}: divergence {uuid} has no "
+                                     f"'{required}'; every classified divergence "
+                                     f"needs one")
+        cov = base.get("coverage", {})
+        categories.update(cov.get("categories", {}))
+        expected_gaps += cov.get("knownGaps", {}).get("expectedCount", 0)
 
     inc, inc_secs, _ = load(a.incumbent)
     cand, cand_secs, _ = load(a.candidate)

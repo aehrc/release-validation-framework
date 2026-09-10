@@ -186,11 +186,18 @@ public class DuckDbAssertionExecutionService {
 		// only as a row in a database we are trying to stop needing.
 		String assertionId = assertion.getUuid().toString();
 		List<String> skippedFor = new ArrayList<>();
+		// Could this assertion still report a finding? Only a statement that
+		// writes to qa_result can, so an assertion whose qa_result writers were
+		// all skipped performed NO CHECK - however many other statements ran.
+		boolean wroteFindingsPossible = false;
 		for (String raw : stored.statements()) {
 			DuckBinder.Bound bound = binder.bind(raw, assertionId);
 			if (bound.isSkipped()) {
 				skippedFor.add(bound.skippedFor());
 				continue;
+			}
+			if (DuckBinder.QA_RESULT.matcher(raw).find()) {
+				wroteFindingsPossible = true;
 			}
 			try (Statement st = connection.createStatement()) {
 				st.execute(bound.sql());
@@ -220,11 +227,25 @@ public class DuckDbAssertionExecutionService {
 				return item;
 			}
 		}
-		if (!skippedFor.isEmpty() && countExecuted(stored, skippedFor) == 0) {
-			// Every statement wanted a release this run does not hold, so the
-			// assertion did not run at all. Saying so is the honest outcome: a
-			// zero failure count here would report a pass for a check nothing
-			// performed.
+		if (!skippedFor.isEmpty() && !wroteFindingsPossible) {
+			// The failure this catches, found by comparing the AMT run against
+			// MySQL: component-centric-snapshot-refsets-descriptor-validation
+			// has TWELVE statements and exactly ONE that writes a finding - and
+			// that one joins <DEPENDENCY>. With no dependency release it is
+			// skipped, the other eleven build their temp tables successfully,
+			// and the assertion reported zero failures and PASSED. MySQL found
+			// 8, and spot-checking one by hand against the isa closure showed
+			// MySQL was right.
+			//
+			// Counting statements could not see this: eleven of twelve ran. The
+			// question is not how many statements executed but whether any of
+			// them could still have reported something.
+			//
+			// This DOES diverge from the incumbent, deliberately. MySQL skips on
+			// the literal placeholder and reports a pass in the same situation.
+			// A pass for a check nothing performed is not a behaviour worth
+			// preserving for parity's sake - it is the exact failure this engine
+			// exists to remove.
 			item.setFailureMessage("Not run: requires " + String.join(", ", skippedFor.stream().distinct().toList())
 					+ ", which was not supplied to this validation");
 		}

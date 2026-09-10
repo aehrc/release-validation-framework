@@ -67,6 +67,32 @@ def run_gate(incumbent, candidate, baseline=None):
                 json.loads((tmp / "out.json").read_text()),
                 (tmp / "out.xml").read_text())
 
+def run_gate_two_baselines(incumbent, candidate, first, second):
+    """As run_gate, but with --baseline twice: the merge path."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = pathlib.Path(tmp)
+        (tmp / "inc.json").write_text(json.dumps(incumbent))
+        (tmp / "cand.json").write_text(json.dumps(candidate))
+        (tmp / "one.json").write_text(json.dumps(first))
+        (tmp / "two.json").write_text(json.dumps(second))
+        proc = subprocess.run(
+            [sys.executable, str(GATE),
+             "--incumbent", str(tmp / "inc.json"),
+             "--candidate", str(tmp / "cand.json"),
+             "--baseline", str(tmp / "one.json"),
+             "--baseline", str(tmp / "two.json"),
+             "--out", str(tmp / "out.json"),
+             "--junit", str(tmp / "out.xml"), "--gate"],
+            capture_output=True, text=True)
+        return proc.returncode, proc.stdout + proc.stderr
+
+
+def baseline_with(uuid, direction="incumbent-higher"):
+    return {"divergences": {uuid: {"direction": direction, "cause": ["test"],
+                                   "class": f"test-cause-{uuid}",
+                                   "assertionUuids": [uuid]}},
+            "coverage": {"categories": {}, "knownGaps": {"expectedCount": 0}}}
+
 
 CASES = []
 
@@ -187,6 +213,43 @@ def the_agreement_percentage_no_longer_hides_the_denominator():
     assert res["identicalNeitherRan"] == 9, res
     assert res["identicalWithFindings"] == 1, res
     assert "1 of 10 agreements ran on both engines" in out, out
+
+
+@case
+def two_baselines_merge_so_each_arm_keeps_its_own_causes():
+    # The AU arm runs the international corpus AND the AMT one, so a cause
+    # proven for either must explain its own assertion without either file
+    # having to carry the other's entries.
+    code, out = run_gate_two_baselines(
+        report([rec("intl", 5), rec("amt", 9)]),
+        report([rec("intl", 0), rec("amt", 0)]),
+        baseline_with("intl"), baseline_with("amt"))
+    assert code == 0, out
+    assert "explained by baseline          2" in out, out
+
+
+@case
+def the_same_assertion_in_two_baselines_is_refused():
+    # Otherwise one arm's tolerance decides another arm's verdict, silently,
+    # and whichever file loaded last wins.
+    code, out = run_gate_two_baselines(
+        report([rec("u1", 5)]), report([rec("u1", 0)]),
+        baseline_with("u1"), baseline_with("u1", "candidate-higher"))
+    assert code != 0, out
+    assert "already classified by another baseline" in out, out
+
+
+@case
+def a_baseline_entry_with_no_class_is_named_not_a_traceback():
+    # The report groups by class, so a hand-edited entry missing it used to
+    # crash AFTER the comparison ran, with a KeyError and no filename.
+    bad = baseline_with("u1")
+    del bad["divergences"]["u1"]["class"]
+    code, out = run_gate_two_baselines(
+        report([rec("u1", 5)]), report([rec("u1", 0)]), bad, baseline_with("u2"))
+    assert code != 0, out
+    assert "has no 'class'" in out and "u1" in out, out
+    assert "Traceback" not in out, out
 
 
 def main():

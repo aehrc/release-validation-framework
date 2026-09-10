@@ -121,6 +121,12 @@ def summarise(label: str, report: dict) -> None:
           f"time={result.get('timeTakenInSeconds')}s")
 
 
+# Both corpora run in every A/B this makes - the international 360 and the AMT
+# 200 - so both proven-cause files apply unless the caller says otherwise.
+DEFAULT_BASELINES = [str(HERE / "known-engine-divergences.json"),
+                     str(HERE / "known-engine-divergences-au.json")]
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -141,7 +147,13 @@ def main() -> int:
     ap.add_argument("--timeout", type=int, default=5400,
                     help="per-leg wait; the MySQL leg loads whole editions and is slow")
     ap.add_argument("--submit-timeout", type=int, default=300)
-    ap.add_argument("--baseline", default=str(HERE / "known-engine-divergences.json"))
+    # Repeatable: the AU arm runs the international corpus and the AMT one,
+    # and each has its own proven causes. Both defaults apply because both
+    # corpora are in every run this pipeline makes.
+    # Repeatable, and default None rather than a list: argparse APPENDS to a
+    # default, so a list default would keep both files even when the caller
+    # named one - a gate judging by a baseline nobody asked for.
+    ap.add_argument("--baseline", action="append")
     ap.add_argument("--out", default="engine-ab.json")
     ap.add_argument("--junit", default="engine-ab.xml")
     ap.add_argument("--skip-mysql", action="store_true",
@@ -176,11 +188,17 @@ def main() -> int:
             return 1
 
     print("\n--- gate ---", flush=True)
+    # Every baseline given, in order. An arm running two corpora is judged by
+    # the causes proven for each, and compare_reports.py refuses a UUID that
+    # two of them claim.
+    baselines = []
+    for path in (args.baseline or DEFAULT_BASELINES):
+        baselines += ["--baseline", path]
     gate = subprocess.run(
         [sys.executable, str(HERE / "compare_reports.py"),
          "--incumbent", args.mysql_report, "--candidate", args.duck_report,
          "--out", args.out, "--junit", args.junit,
-         "--baseline", args.baseline, "--gate"],
+         *baselines, "--gate"],
         check=False)
     return gate.returncode
 

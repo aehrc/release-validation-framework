@@ -87,8 +87,22 @@ public final class DuckBinder {
 				return new Bound(null, release);
 			}
 		}
-		return new Bound(s.replaceAll("\\bqa_result\\b", config.qaResultTable()), null);
+		return new Bound(QA_RESULT.matcher(s).replaceAll(config.qaResultTable()), null);
 	}
+
+	/**
+	 * The qa_result table as a statement names it, before binding.
+	 *
+	 * <p>Exposed because a caller needs the SAME definition to answer "could
+	 * this statement have reported a finding at all". The store declares a
+	 * {@code qaResultToken} and this does not read it: the binder has always
+	 * matched the literal word, so the field describes the format rather than
+	 * driving the rewrite - and a caller that trusted the field got an EMPTY
+	 * string from a store that omits it, making {@code contains("")} true for
+	 * every statement. A word-boundary pattern cannot fail that way.
+	 */
+	public static final java.util.regex.Pattern QA_RESULT =
+			java.util.regex.Pattern.compile("\\bqa_result\\b");
 
 	/**
 	 * The run's value for a placeholder.

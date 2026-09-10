@@ -57,6 +57,11 @@ class DuckDbAssertionExecutionServiceTest {
 			   "statements": [
 				"create table rvfph_prospective_.tmp_active_desc as select id from rvfph_previous_.concept_s",
 				"insert into qa_result (run_id, assertion_id, concept_id, details) select 424242424242424242, 'rvfph_assertionuuid_', id, 'y' from rvfph_prospective_.tmp_active_desc"]},
+			  "66666666-6666-6666-6666-666666666666": {
+			   "file": "only-writer-needs-previous.sql", "text": "Only writer needs previous", "keywords": "k",
+			   "statements": [
+				"create table rvfph_prospective_.tmp_all as select id from rvfph_prospective_.concept_s",
+				"insert into qa_result (run_id, assertion_id, concept_id, details) select 424242424242424242, 'rvfph_assertionuuid_', t.id, 'z' from rvfph_prospective_.tmp_all t join rvfph_previous_.concept_s p on p.id = t.id"]},
 			  "33333333-3333-3333-3333-333333333333": {
 			   "file": "broken.sql", "text": "Broken SQL", "keywords": "k",
 			   "statements": ["select * from rvfph_prospective_.no_such_table"]},
@@ -179,6 +184,28 @@ class DuckDbAssertionExecutionServiceTest {
 		assertNotNull(item.getFailureMessage());
 		assertTrue(item.getFailureMessage().contains("<PREVIOUS>"), item.getFailureMessage());
 		assertTrue(item.getFailureMessage().startsWith("Not run:"), item.getFailureMessage());
+	}
+
+	@Test
+	void anAssertionWhoseOnlyFindingWriterIsSkippedIsNotRunRatherThanPassed() {
+		// The silent false negative this catches, found by comparing the AMT run
+		// against MySQL. component-centric-snapshot-refsets-descriptor-validation
+		// has TWELVE statements and exactly ONE that writes a finding - and that
+		// one joins <DEPENDENCY>. With no dependency release supplied it was
+		// skipped, the other eleven built their temp tables successfully, and
+		// the assertion reported zero failures and PASSED. MySQL found 8, and
+		// checking one by hand against the isa closure showed MySQL was right.
+		//
+		// Counting executed statements cannot see this: eleven of twelve ran.
+		service.prepareSchema();
+		TestRunItem item = service.execute(List.of(
+				assertion("66666666-6666-6666-6666-666666666666", 506L, "Only writer needs previous")))
+				.get(0);
+
+		assertNotNull(item.getFailureMessage(),
+				"an assertion that could not have reported anything must not read as a pass");
+		assertTrue(item.getFailureMessage().startsWith("Not run:"), item.getFailureMessage());
+		assertTrue(item.getFailureMessage().contains("<PREVIOUS>"), item.getFailureMessage());
 	}
 
 	@Test

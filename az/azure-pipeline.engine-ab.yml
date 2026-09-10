@@ -60,9 +60,22 @@ parameters:
     type: string
     default: 'si-daily-builds'
   - name: previousRelease
-    displayName: 'Previous release blob, or empty for a first-time release'
+    displayName: 'Previous release path within previousShare, or empty to resolve the newest published edition before this one'
     type: string
     default: ''
+  - name: previousShare
+    displayName: 'Azure Files share holding the PUBLISHED editions'
+    # A different share from the daily builds on purpose. A build under test is
+    # compared against the last PUBLISHED edition, because a daily build's delta
+    # is cumulative from that publication - so yesterday's build shares no delta
+    # boundary with today's and would fail the derivation assertions on correct
+    # content. This is the layout azure-pipeline.keep-release.yml already reads.
+    type: string
+    default: 'snomed-versioned-content'
+  - name: previousDirectory
+    displayName: 'Directory of dated editions within previousShare'
+    type: string
+    default: 'prod/AU_32506021000036107'
   - name: groups
     displayName: 'Assertion groups'
     type: string
@@ -306,24 +319,29 @@ stages:
                 mkdir -p shared-jobs/releases store/previous
                 SHARE='${{ parameters.releaseShare }}'
 
-                fetch() {   # <path-in-share> <destination-dir>
+                # Two shares are in play - the daily builds under test, and the
+                # published editions to compare against - so the share is an
+                # argument rather than a global. Both open with the same key.
+                fetch_on() {   # <share> <path-in-share> <destination-dir>
                   az storage file download \
                     --account-name '$(storageAccount)' --account-key "$SOURCE_KEY" \
-                    --share-name "$SHARE" --path "$1" --dest "$2" \
+                    --share-name "$1" --path "$2" --dest "$3" \
                     --only-show-errors >/dev/null
                 }
+                fetch() { fetch_on "$SHARE" "$1" "$2"; }
 
                 # `az storage file list` on this CLI has no --recursive (build
                 # 16313: "unrecognized arguments: --recursive"), and the layout
                 # is two levels - <run>/output-files/<zip> - so it is walked
                 # explicitly. Every listing is printed: when this picks the
                 # wrong thing, or nothing, the log has to show what it saw.
-                ls_share() {   # [path]
+                ls_share_on() {   # <share> [path]
                   az storage file list \
                     --account-name '$(storageAccount)' --account-key "$SOURCE_KEY" \
-                    --share-name "$SHARE" ${1:+--path "$1"} --only-show-errors \
+                    --share-name "$1" ${2:+--path "$2"} --only-show-errors \
                     --query '[].{n:name,t:type}' -o tsv
                 }
+                ls_share() { ls_share_on "$SHARE" ${1:+"$1"}; }
 
                 REL='${{ parameters.release }}'
                 if [ -z "$REL" ]; then
@@ -359,13 +377,60 @@ stages:
                   echo "no release given; using $REL"
                 fi
                 fetch "$REL" shared-jobs/releases
-                if [ -n '${{ parameters.previousRelease }}' ]; then
-                  # The previous release goes in the RELEASE store, not the job
-                  # store: that is what previousRelease resolves against, in both
-                  # engines.
-                  fetch '${{ parameters.previousRelease }}' store/previous
+
+                # THE PREVIOUS RELEASE IS NOT OPTIONAL FOR A PARITY RUN.
+                #
+                # Build 16325 ran without one and reported 99/149 identical
+                # (66.4%) with 49 unexplained divergences - and every single one
+                # was the same shape: `rvf=<n> duck=-1`, a release-type assertion
+                # naming <PREVIOUS>. DuckDB skips those statements and says
+                # not-run; MySQL substitutes an empty schema and answers anyway,
+                # which is how one assertion returned 7,015,456 findings (a row
+                # per language refset member) and others returned a false 0.
+                #
+                # So an absent previous release does not cost coverage, it
+                # INVENTS a disagreement on a third of the corpus. There is
+                # nothing to baseline here and nothing to measure: resolve one or
+                # fail.
+                PREV='${{ parameters.previousRelease }}'
+                PREV_SHARE='${{ parameters.previousShare }}'
+                PREV_DIR='${{ parameters.previousDirectory }}'
+                if [ -z "$PREV" ]; then
+                  # A daily build's previous release is the last PUBLISHED
+                  # edition, NOT yesterday's build. A daily build's delta is
+                  # cumulative from the last publication, so comparing two builds
+                  # lines up no deltas at all and would fail the derivation
+                  # assertions for a release that is perfectly correct - a
+                  # comparison worse than none, because it looks like evidence.
+                  #
+                  # Published editions live on a different share in dated
+                  # directories - the layout azure-pipeline.keep-release.yml has
+                  # been fetching from - so this walks that, not si-daily-builds.
+                  REL_DATE="$(basename "$REL" | grep -oE '[0-9]{8}' | tail -1)"
+                  [ -n "$REL_DATE" ] || { echo "##vso[task.logissue type=error]cannot read an effective date out of $(basename "$REL"), so cannot choose a previous release"; exit 1; }
+                  echo "--- published editions under $PREV_SHARE/$PREV_DIR ---"
+                  PREV_DIRS="$(ls_share_on "$PREV_SHARE" "$PREV_DIR" \
+                               | awk -F'\t' '$2 == "dir" {print $1}' \
+                               | grep -E '^[0-9]{8}$' | sort)"
+                  echo "$PREV_DIRS" | tail -6 | sed 's/^/    /'
+                  # Strictly before: an edition published the same day as the
+                  # build under test is the same content, and would agree with
+                  # itself for the wrong reason.
+                  PREV_DATE="$(echo "$PREV_DIRS" | awk -v d="$REL_DATE" '$1 < d' | tail -1)"
+                  [ -n "$PREV_DATE" ] || { echo "##vso[task.logissue type=error]no published edition under $PREV_DIR predates $REL_DATE, so the release-type assertions cannot be compared. Pin one with the previousRelease parameter."; exit 1; }
+                  PREV_ZIP="$(ls_share_on "$PREV_SHARE" "$PREV_DIR/$PREV_DATE" \
+                              | awk -F'\t' '$2 != "dir" {print $1}' \
+                              | grep -iE '\.zip$' | sort | tail -1)"
+                  [ -n "$PREV_ZIP" ] || { echo "##vso[task.logissue type=error]$PREV_DIR/$PREV_DATE holds no zip"; exit 1; }
+                  PREV="$PREV_DIR/$PREV_DATE/$PREV_ZIP"
+                  echo "no previous release given; using $PREV (release is $REL_DATE)"
                 fi
+                # The previous release goes in the RELEASE store, not the job
+                # store: that is what previousRelease resolves against, in both
+                # engines.
+                fetch_on "$PREV_SHARE" "$PREV" store/previous
                 echo "##vso[task.setvariable variable=releaseName]$(basename "$REL")"
+                echo "##vso[task.setvariable variable=previousReleaseName]$(basename "$PREV")"
                 ls -la shared-jobs/releases store/previous
 
           - task: Bash@3
@@ -402,9 +467,11 @@ stages:
                 # parameter empty it picked the newest itself, and the stack
                 # script needs the file that is actually on disk.
                 ARGS=(--release "releases/$(releaseName)" --groups '${{ parameters.groups }}')
-                if [ -n '${{ parameters.previousRelease }}' ]; then
-                  ARGS+=(--previous "${{ parameters.previousRelease }}")
-                fi
+                # Same reason for the previous release, which the fetch step now
+                # always resolves: it failed the run rather than leave this empty,
+                # because build 16325 proved an absent previous release does not
+                # reduce coverage, it manufactures 49 divergences.
+                ARGS+=(--previous "$(previousReleaseName)")
                 ci/engine_ab_stack.sh "${ARGS[@]}"
 
 
