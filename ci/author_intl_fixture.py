@@ -104,6 +104,26 @@ def author_mdrs_for_this_release(r: Rows):
     """
     for module in (CORE_MODULE, '449080006'):
         r.mdrs.append((r.uuid(), CURR, '1', module, MDRS_REFSET, MODEL_MODULE, CURR, CURR))
+
+    # With the family alive, its content checks have something to stand on, and
+    # each wants one specific inconsistency. One row each, so a finding names a
+    # cause rather than a row failing six assertions at once.
+    other = '449080006'
+    third = '32570231000036109'
+
+    # sourceEffectiveTime must equal the row's own effectiveTime
+    r.mdrs.append((r.uuid(), CURR, '1', CORE_MODULE, MDRS_REFSET, third, PREV, PREV))
+    # a dependency cannot be on a version LATER than the source
+    r.mdrs.append((r.uuid(), CURR, '1', other, MDRS_REFSET, third, PREV, CURR))
+    # the module dependency refset is 900000000000534007 and nothing else
+    r.mdrs.append((r.uuid(), CURR, '1', CORE_MODULE, '900000000000497000', MODEL_MODULE, CURR, CURR))
+    # a dependency on a module whose concept is inactive in this release
+    r.mdrs.append((r.uuid(), CURR, '1', CORE_MODULE, MDRS_REFSET, '703649004', CURR, CURR))
+    # A depends on B and B on C, with no A -> C row: the set is not
+    # transitively closed, which is what makes a dependency chain unresolvable.
+    r.mdrs.append((r.uuid(), CURR, '1', third, MDRS_REFSET, other, CURR, CURR))
+    # two rows for one target at different versions - version skew
+    r.mdrs.append((r.uuid(), CURR, '1', other, MDRS_REFSET, MODEL_MODULE, CURR, PREV))
     return len(r.mdrs)
 
 
