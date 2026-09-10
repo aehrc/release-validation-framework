@@ -445,6 +445,56 @@ and it is not ours: MySQL reports -1 on
 `validate_inactivated_component_module` selects `t1.id` from every `%_d` table
 and `identifier_d` has no `id` column. Upstream PR #6 fixes it.
 
+**3.15 The strong per-assertion MySQL oracle is switched off. FOUND
+2026-09-10, needs a decision.** Asked whether the 2023 expectation files execute
+green. They do not execute at all.
+
+`RVFAssertionsRegressIntegrationTest` is **`@Disabled`**, since **2025-12-23**
+(`909d8f75`, "PIP-613 Add testcontainers"), and every build reports it as 10
+skipped. Its own docstring says why it was never automatable: drop
+`rvf_master`, run the application to load the assertions, then run the harness
+by hand.
+
+**What it would prove if it ran.** Per assertion, against the fixture: exact
+`totalFailed` equality, assertion name equality, `firstNInstances` containment,
+and BOTH-direction presence checks - a missing assertion and an unexpected one
+each fail. Over 330 expectations across three groups (release-type 134,
+component-centric 93, file-centric 103). That is a stronger oracle than
+anything else in the repo.
+
+**Why it is nearly runnable now.** It extends `IntegrationTest`, which since
+that same commit provides a real MySQL through testcontainers - `@Container
+MySQLContainer` with `@DynamicPropertySource`. The manual setup the docstring
+describes is what a fresh container plus application startup now does. It was
+disabled in the commit that added the machinery to run it.
+
+**Coverage against today's corpus**, which is the catch:
+
+| | |
+|---|---|
+| 264 | current assertions with a 2023 expectation (73% of 360) |
+| 96 | current assertions with none - added since |
+| 66 | expectations naming assertions no longer in the corpus |
+| 28 | of the 264 still disagree after 3.14 (was 34) |
+
+So reviving it means regenerating the expectations, which means accepting
+whatever MySQL currently produces on the fixture as the recorded truth. That is
+a real decision, not a chore: it is how the 2023 file came to be, and it is why
+nobody could tell drift from defect today.
+
+*Two paths, both verifiable, neither started:*
+
+* **Revive on testcontainers.** Remove `@Disabled`, regenerate, commit the
+  expectations with the corpus version they were taken from. Then the DuckDB
+  digest and the MySQL expectations can be compared per assertion IN THE BUILD -
+  the automated cross-engine parity test that does not exist today. Cannot be
+  verified on this workstation: no Docker, no podman, nothing. The image
+  pipeline runs the suite, so iterating there builds and pushes images.
+* **Reuse the A/B stack on the fixture.** `ci/engine_ab_stack.sh` already
+  installs MySQL from a tarball unprivileged - no Docker - and runs both engines.
+  Pointed at a zipped fixture instead of an 892MB release it would take minutes,
+  and it produces the same per-assertion comparison the nightly gate does.
+
 ## 4. Known, deliberate, not scheduled
 
 * `minAssertions` 1,400 / `minSqlAssertions` 400 depend on the AMT overlay
