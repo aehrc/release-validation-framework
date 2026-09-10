@@ -1,0 +1,1 @@
+{"_README": ["Placeholder: no AMT divergence has been classified yet."], "directions": {"candidate-higher": "DuckDB reports more failures", "incumbent-higher": "MySQL reports more failures"}, "divergences": {}, "coverage": {"allowUncovered": 0, "categories": {}}}

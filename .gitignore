@@ -39,3 +39,4 @@ shared-jobs/
 bench/duckdb-cp.txt
 ab-corpus
 __pycache__/
+amt-corpus
