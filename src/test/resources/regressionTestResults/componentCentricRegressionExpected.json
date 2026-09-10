@@ -660,7 +660,7 @@
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 131
+    "totalFailed" : 136
   }, {
     "assertionName" : "ReferencedComponentId in MRCM ATTRIBUTE DOMAIN SNAPSHOT exists in the ReferencedComponentId values of MRCM ATTRIBUTE RANGE SNAPSHOT.",
     "assertionUuid" : "bd3bb9ec-97ae-4c53-9686-9c8c63b8d67b",
@@ -877,7 +877,7 @@
       "tableName" : "rvf_regression_test_prospective.description_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 44
+    "totalFailed" : 45
   }, {
     "assertionName" : "Grouped value is either 0 or 1 in MRCM ATTRIBUTE DOMAIN snapshot file.",
     "assertionUuid" : "ce8f4bae-0c51-4248-9c42-8f05a2cccdb4",
@@ -975,7 +975,7 @@
       "tableName" : "rvf_regression_test_prospective.associationrefset_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 313
+    "totalFailed" : 317
   }, {
     "assertionName" : "Association reference records are referencing the same concept for both referencedComponentId and targetComponentId.",
     "assertionUuid" : "d2727004-cfed-4798-8710-1a088833e775",
@@ -1263,7 +1263,7 @@
       "tableName" : "rvf_regression_test_prospective.description_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 163
+    "totalFailed" : 173
   }, {
     "assertionName" : "Active historical association refset members have inactive concepts as reference components.",
     "assertionUuid" : "f7117eb0-7cd6-11e1-b0c4-0800200c9a66",
@@ -1455,9 +1455,9 @@
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     }, {
-      "conceptId" : "997100371002",
-      "detail" : "997100371002 |AMT concept whose ADRS preferred term is the defect (observable entity)|",
-      "componentId" : "997100371002",
+      "conceptId" : "997100394001",
+      "detail" : "997100394001 |AMT concept whose ADRS preferred term is the defect (observable entity)|",
+      "componentId" : "997100394001",
       "moduleId" : null,
       "fullComponent" : null,
       "tableName" : "rvf_regression_test_prospective.concept_s",
@@ -1680,17 +1680,17 @@
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     }, {
-      "conceptId" : "997100430007",
-      "detail" : "Fully defined concept: id=997100430007 has no Axiom record with the words EquivalentClasses.",
-      "componentId" : "997100430007",
+      "conceptId" : "997100453008",
+      "detail" : "Fully defined concept: id=997100453008 has no Axiom record with the words EquivalentClasses.",
+      "componentId" : "997100453008",
       "moduleId" : null,
       "fullComponent" : null,
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     }, {
-      "conceptId" : "997100434003",
-      "detail" : "Fully defined concept: id=997100434003 has no Axiom record with the words EquivalentClasses.",
-      "componentId" : "997100434003",
+      "conceptId" : "997100457009",
+      "detail" : "Fully defined concept: id=997100457009 has no Axiom record with the words EquivalentClasses.",
+      "componentId" : "997100457009",
       "moduleId" : null,
       "fullComponent" : null,
       "tableName" : "rvf_regression_test_prospective.concept_s",
@@ -1717,17 +1717,17 @@
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     }, {
-      "conceptId" : "997100361004",
+      "conceptId" : "997100381003",
       "detail" : "Duplicate term=subfraction",
-      "componentId" : "997100361004",
+      "componentId" : "997100381003",
       "moduleId" : null,
       "fullComponent" : null,
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     }, {
-      "conceptId" : "997100381003",
+      "conceptId" : "997100404008",
       "detail" : "Duplicate term=chang",
-      "componentId" : "997100381003",
+      "componentId" : "997100404008",
       "moduleId" : null,
       "fullComponent" : null,
       "tableName" : "rvf_regression_test_prospective.concept_s",
@@ -2058,7 +2058,7 @@
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 85
+    "totalFailed" : 90
   }, {
     "assertionName" : "IDs must be unique in the Description Snapshot file.",
     "assertionUuid" : "3be8c763-a5bc-404b-af9f-a2cb681f6f3d",
@@ -2216,7 +2216,7 @@
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 139
+    "totalFailed" : 144
   }, {
     "assertionName" : "MrcmRuleRefsetId in MRCM MODULE SCOPE SNAPSHOT exists in the RefsetId values of MRCM DOMAIN SNAPSHOT or MRCM ATTRIBUTE DOMAIN SNAPSHOT or MRCM ATTRIBUTE RANGE SNAPSHOT.",
     "assertionUuid" : "57ae69cd-26f0-4001-ba2f-ae56129e2e28",
@@ -2615,7 +2615,7 @@
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 131
+    "totalFailed" : 136
   }, {
     "assertionName" : "ReferencedComponentId in MRCM ATTRIBUTE RANGE SNAPSHOT exists in the ReferencedComponentId values of MRCM ATTRIBUTE DOMAIN SNAPSHOT.",
     "assertionUuid" : "73772817-4654-4abf-b801-e849fbae1ba0",
