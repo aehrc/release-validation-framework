@@ -149,6 +149,40 @@ def rows_mrcm_attribute_range():
     return valid, flawed
 
 
+MODULE_SCOPE_REFSET = '723563008'
+UNDECLARED_MODULE = '32506021000036107'   # the AMT module, deliberately not in the MDRS
+
+
+def rows_mrcm_module_scope():
+    """id effectiveTime active moduleId refsetId referencedComponentId mrcmRuleRefsetId
+
+    This file was never authored, so nineteen assertions read the fixture's own
+    three rows and found them consistent. The flaws are the same shapes the
+    other three MRCM refsets get, plus a member in a module this release does
+    not declare a dependency on, which is what the mdrs-violation family wants.
+    """
+    valid = [
+        (member_id('scope-core'), PREV, '1', CORE_MODULE, MODULE_SCOPE_REFSET,
+         CORE_MODULE, ALL_CONTENT),
+    ]
+    flawed = [
+        # referencedComponentId that is no concept in this release
+        (member_id('scope-absent'), CURR, '1', CORE_MODULE, MODULE_SCOPE_REFSET,
+         ABSENT, ALL_CONTENT),
+        # an active member for an inactive concept
+        (member_id('scope-inactive'), CURR, '1', CORE_MODULE, MODULE_SCOPE_REFSET,
+         INACTIVE, ALL_CONTENT),
+        # a REPEATED member id, for the -unique-id assertion
+        (member_id('scope-core'), CURR, '1', CORE_MODULE, MODULE_SCOPE_REFSET,
+         ACTIVE_A, ALL_CONTENT),
+        # a member on a module this release never declared: the whole
+        # mdrs-violation family exists for exactly this
+        (member_id('scope-undeclared'), CURR, '1', UNDECLARED_MODULE, MODULE_SCOPE_REFSET,
+         ACTIVE_B, ALL_CONTENT),
+    ]
+    return valid, flawed
+
+
 def rows_concrete_values():
     """id effectiveTime active moduleId sourceId value relationshipGroup typeId
     characteristicTypeId modifierId"""
@@ -209,6 +243,29 @@ def concrete_full_only():
     return [('3100000006026', CURR, '1', CORE_MODULE, ACTIVE_A, '#99', '0', ACTIVE_B, INFERRED, NOT_REFINABLE)]
 
 
+def undeclared_module_row(stem):
+    """One member per MRCM refset on a module this release does not declare.
+
+    file-centric-snapshot-mdrs-violation-<refset> joins the refset to the module
+    dependency rows for THIS module and version, so it needs both: a module
+    dependency row stamped for the release, which ci/author_intl_fixture.py adds,
+    and a component on a module that row does not cover.
+    """
+    if stem == 'der2_sssssssRefset_MRCMDomain':
+        return [(member_id('domain-undeclared'), CURR, '1', UNDECLARED_MODULE, DOMAIN_REFSET,
+                 ACTIVE_C, '<< ' + ACTIVE_C, ROOT_CONCEPT, '<< ' + ACTIVE_C, '',
+                 '[[+id(<< ' + ACTIVE_C + ')]]', '', 'http://snomed.org/mrcm')]
+    if stem == 'der2_cissccRefset_MRCMAttributeDomain':
+        return [(member_id('attrdom-undeclared'), CURR, '1', UNDECLARED_MODULE,
+                 ATTRIBUTE_DOMAIN_REFSET, ACTIVE_C, ROOT_CONCEPT, '1', '0..*', '0..1',
+                 MANDATORY, ALL_CONTENT)]
+    if stem == 'der2_ssccRefset_MRCMAttributeRange':
+        return [(member_id('attrrange-undeclared'), CURR, '1', UNDECLARED_MODULE,
+                 ATTRIBUTE_RANGE_REFSET, ACTIVE_C, '<< ' + ROOT_CONCEPT,
+                 '[[+id(<< ' + ROOT_CONCEPT + ')]]', MANDATORY, ALL_CONTENT)]
+    return []
+
+
 FILES = {
     'der2_sssssssRefset_MRCMDomain': (
         ['id', 'effectiveTime', 'active', 'moduleId', 'refsetId', 'referencedComponentId',
@@ -225,6 +282,10 @@ FILES = {
         ['id', 'effectiveTime', 'active', 'moduleId', 'refsetId', 'referencedComponentId',
          'rangeConstraint', 'attributeRule', 'ruleStrengthId', 'contentTypeId'],
         rows_mrcm_attribute_range),
+    'der2_cRefset_MRCMModuleScope': (
+        ['id', 'effectiveTime', 'active', 'moduleId', 'refsetId', 'referencedComponentId',
+         'mrcmRuleRefsetId'],
+        rows_mrcm_module_scope),
     'sct2_RelationshipConcreteValues': (
         ['id', 'effectiveTime', 'active', 'moduleId', 'sourceId', 'value',
          'relationshipGroup', 'typeId', 'characteristicTypeId', 'modifierId'],
@@ -250,6 +311,22 @@ def main():
         prev_inactive, curr_inactive = (concrete_inactive_both_releases() if concrete else (None, None))
         prev_extra = [prev_inactive] if concrete else []
         curr_extra = [curr_inactive] if concrete else []
+        # A row in FULL that is in neither the delta nor the previous full, and
+        # one in DELTA that never reaches the full file. Every refset has
+        # release-type full/delta/snapshot assertions whose whole subject is that
+        # chain, and with a self-consistent release they had nothing to find -
+        # which is why twelve of them stayed silent after the first MRCM pass.
+        undeclared = undeclared_module_row(stem)
+        flawed = flawed + undeclared
+        if not concrete and valid:
+            # Distinct member ids, present in ONE file only. A first attempt
+            # reused a flawed row, which appears in the snapshot and delta too -
+            # so it broke no chain and moved nothing. "Full only" has to mean
+            # only.
+            def stamp(row, seed):
+                return (member_id(stem + seed), CURR) + tuple(row[2:])
+            full_only = [stamp(valid[0], '-full-only')]
+            delta_only = [stamp(valid[0], '-delta-only')]
         for release, kinds in ((PREV, {'Snapshot': valid + prev_extra,
                                        'Full': valid + prev_extra,
                                        'Delta': valid + prev_extra}),

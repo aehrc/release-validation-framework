@@ -1,0 +1,2 @@
+id	effectiveTime	active	moduleId	refsetId	referencedComponentId	mrcmRuleRefsetId
+a36f6c67-0c7a-5b55-bf8f-c361ac6256a0	20130131	1	900000000000207008	723563008	900000000000207008	723596005
