@@ -348,6 +348,11 @@ def author_adrs_pattern_gaps(r: Rows, requirements):
                     any(re.search(p, term) for p in req['avoid']):
                 skipped.append(req['name'])
                 continue
+            # Under a disjunction it is enough that ONE companion is missed.
+            companions = req.get('avoid_any') or []
+            if companions and all(re.search(p, term) for p in companions):
+                skipped.append(req['name'])
+                continue
         cid = r.next_id(CONCEPT_P, '00')
         r.concept_row(cid, status=PRIMITIVE)
         if term:
@@ -789,10 +794,22 @@ def adrs_pattern_requirements():
         def inside_excluded(pos):
             return any(a <= pos < b for a, b in excluded_spans)
 
-        want, avoid = [], []
+        # A disjunction of negated companions - "(NOT in-medial OR NOT
+        # in-tibial)" - is satisfied by failing EITHER, so matching one of them
+        # is fine. Read as a conjunction it looks unsatisfiable, and eight
+        # assertions were skipped for exactly that: the trigger pattern and one
+        # companion overlap by construction, since "has lidocaine, lacks
+        # lignocaine" triggers on either spelling.
+        disjunctive = bool(re.search(r'NOT\s+\w+\s+IN\s*\(.*?\)\s*OR\s+NOT', sql, re.I | re.S)) \
+            or bool(re.search(r'NOT\s+REGEXP_MATCHES\([^)]*\)[^)]*\)\s*OR\s+NOT', sql, re.I))
+
+        want, avoid, avoid_any = [], [], []
         for m in re.finditer(r"(NOT\s+)?REGEXP_MATCHES\(\s*term\s*,\s*'((?:[^']|'')+)'", sql):
             pattern = m.group(2).replace("''", "'")
-            (avoid if (m.group(1) or inside_excluded(m.start())) else want).append(pattern)
+            if m.group(1) or inside_excluded(m.start()):
+                (avoid_any if disjunctive else avoid).append(pattern)
+            else:
+                want.append(pattern)
         pt_want = pt_avoid = None
         for m in re.finditer(r"(NOT\s+)?REGEXP_MATCHES\(\s*GET_CR_ADRS_PT\([^)]*\)\s*,\s*'((?:[^']|'')+)'", sql):
             if m.group(1):
@@ -803,7 +820,7 @@ def adrs_pattern_requirements():
         under = [m.group(2) for m in re.finditer(r"(?<!NOT )(IS(?:KINDOF|DESCENDENTOF))_CR\(\s*\w+\s*,\s*(\d+)\)", sql)
                  if 'NOT ' + m.group(1) not in sql[max(0, m.start() - 4):m.end()]]
         out.append({'name': a['file'], 'want': want, 'avoid': avoid,
-                    'pt_want': pt_want, 'pt_avoid': pt_avoid,
+                    'avoid_any': avoid_any, 'pt_want': pt_want, 'pt_avoid': pt_avoid,
                     'under': under[:1]})
     return out
 
