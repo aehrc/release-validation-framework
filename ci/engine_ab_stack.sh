@@ -36,6 +36,7 @@ CORPUS="${CORPUS:-./snomed-release-validation-assertions/}"
 # extension corpus from $CORPUS, and the A/B would compare two different
 # assertion sets and call the difference a divergence.
 DUCK_STORE="${DUCK_STORE:-}"
+BASELINES="${BASELINES:-}"
 # How many failing components each report carries per assertion. The default is
 # a sample, which is enough to compare COUNTS - and counts are not parity: a
 # transpiled regex can match the wrong rows and still match as many. Raise it
@@ -238,6 +239,11 @@ ARGS=(--mysql-url "$MYSQL_URL" --duck-url "$DUCK_URL" --release "$RELEASE"
       --out "$WORK/engine-ab.json" --junit "$WORK/engine-ab.xml"
       --mysql-report "$WORK/engine-ab-mysql.json" --duck-report "$WORK/engine-ab-duck.json")
 [ -n "$FAILURE_EXPORT_MAX" ] && ARGS+=(--failure-export-max "$FAILURE_EXPORT_MAX")
+# Which proven-cause files judge this run. Space-separated, and naming any
+# REPLACES the defaults rather than adding to them: an arm has its own causes,
+# and one arm's tolerance must not decide another's verdict. The fixture arm
+# sets this; the nightly leaves it unset and gets the two release baselines.
+for b in $BASELINES; do ARGS+=(--baseline "$b"); done
 [ -n "$PREVIOUS" ] && ARGS+=(--previous-release "$PREVIOUS")
 [ -n "$DEPENDENCY" ] && ARGS+=(--dependency-release "$DEPENDENCY")
 [ -n "$EFFECTIVE_TIME" ] && ARGS+=(--effective-time "$EFFECTIVE_TIME")

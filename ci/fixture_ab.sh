@@ -72,11 +72,27 @@ out = pathlib.Path(sys.argv[2])
 base = src / 'RF2Release'
 if not base.is_dir():
     raise SystemExit(f"{src} has no RF2Release directory")
+crlf = 0
 with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as z:
     for p in sorted(base.rglob('*')):
-        if p.is_file():
-            z.write(p, pathlib.Path(src.name) / p.relative_to(base))
-print(f"  {out}  {out.stat().st_size} bytes")
+        if not p.is_file():
+            continue
+        name = str(pathlib.Path(src.name) / p.relative_to(base))
+        data = p.read_bytes()
+        if p.suffix == '.txt' and b'\r\n' not in data:
+            # RF2 files are CRLF, and RVF's MySQL loader says so:
+            #   load data local infile ... lines terminated by '\r\n' ignore 1 lines
+            # The fixture in this repo is LF-only, so that statement reads the
+            # whole file as ONE line, `ignore 1 lines` discards it, and 0 rows
+            # load with no error at all - 90 empty tables and every
+            # previous-dependent assertion passing over nothing. A real release
+            # is CRLF throughout (checked: 350 CRLF, 0 bare LF in the AU
+            # edition's concept snapshot), so normalising here makes the
+            # fixture a CONFORMANT package rather than papering over anything.
+            data = data.replace(b'\n', b'\r\n')
+            crlf += 1
+        z.writestr(name, data)
+print(f"  {out}  {out.stat().st_size} bytes ({crlf} files normalised to CRLF)")
 PY
 }
 
@@ -91,7 +107,10 @@ rm -f "store/binaryArchives/$PREVIOUS.zip"
 
 # 3g per JVM is the documented figure for this stack, and the fixture needs
 # nothing like the 8g default that two JVMs plus MySQL would want.
-HEAP="${HEAP:-3g}" exec ci/engine_ab_stack.sh \
+# This arm is judged by the causes proven ON THE FIXTURE. The release
+# baselines describe real editions and do not apply to 2013 test data.
+HEAP="${HEAP:-3g}" BASELINES="${BASELINES:-ci/known-fixture-divergences.json}" \
+  exec ci/engine_ab_stack.sh \
   --release "releases/$PROSPECTIVE.zip" \
   --previous "$PREVIOUS.zip" \
   --groups "$ASSERTION_GROUPS"
