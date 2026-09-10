@@ -701,6 +701,217 @@ def author_generic_defects(r: Rows):
     return n
 
 
+# AU-specific refsets and modules, read from the assertions that name them.
+AU_EDRS_PD = '933600531000036100'
+AUEDRS = '1244621000168103'
+THIRD_PARTY_MODULE = '351000168100'
+LEMI, LMBC = '1545561000168103', '1495581000168106'
+ARTGID = '11000168105'
+RANZCR, RCPA = '933483571000036108', '1072351000168102'
+SIMPLE_TYPE_ROOT = '446609009'          # "Simple type reference set"
+AU_METADATA_MODULE = '900062011000036108'
+EN_GB_REFSET = '900000000000508004'
+PROCEDURE_ROOT = '71388002'
+MEDICINAL_PRODUCT = '763158003'
+MEDICINAL_PRODUCT_PACKAGE = '781405001'
+BOSS = '732943007'                      # Has basis of strength substance
+DOSE_FORM = '411116001'                 # Has manufactured dose form
+MULTIPACK_ATTRS = ['999000011000168107', '999000111000168106']
+BLACK_TRIANGLE = '1514151000168100'
+ABSENT_COMPONENT = '999999999999'       # deliberately no concept with this id
+
+
+def author_au_refset_defects(r: Rows):
+    """The AU-specific refsets, each with the one defect its assertion names.
+
+    These are simple-type refsets outside the seven product classes - emergency
+    department funding, third-party pricing, the ARTG identifier map, the two
+    requesting refsets - and they were silent for the same reason as everything
+    else: the fixture has no AU content at all, so the checks read empty tables.
+    """
+    n = 0
+
+    # "All active members of <refset> are active": an ACTIVE membership row
+    # pointing at an id that is no active concept. The real failure is retiring
+    # a concept and leaving its memberships behind.
+    for refset in (AU_EDRS_PD, AUEDRS):
+        r.simple.append((r.next_uuid(), CURR, '1', AMT_MODULE, refset, ABSENT_COMPONENT))
+        n += 1
+
+    # The same, but selected by MODULE rather than by refset id.
+    r.simple.append((r.next_uuid(), CURR, '1', THIRD_PARTY_MODULE,
+                     '1184031000168105', ABSENT_COMPONENT))
+    n += 1
+
+    # LEMI and LMBC members must be on the Third Party module; these are not.
+    for refset in (LEMI, LMBC):
+        r.simple.append((r.next_uuid(), CURR, '1', AMT_MODULE, refset, '703860006'))
+        n += 1
+
+    # The ARTG identifier map: a member of the ARTGID refset that is not in the
+    # CTPP membership the assertion joins against.
+    r.attrvaluemap.append(('a0000002-0000-4000-8000-000000000001', CURR, '1', AMT_MODULE,
+                           ARTGID, ABSENT_COMPONENT, '', '123456'))
+    n += 1
+
+    # The two requesting refsets take procedures only. A substance is not one.
+    for refset in (RANZCR, RCPA):
+        cid = r.next_id(CONCEPT_P, '00')
+        r.concept_row(cid, status=DEFINED)
+        r.description_row(cid, f'AMT non-procedure in a requesting refset (substance)', typeid=FSN)
+        r.simple.append((r.next_uuid(), CURR, '1', AMT_MODULE, refset, cid))
+        n += 1
+
+    # "Mixed AMT Tests - 01" and "All AU refset memberships are on the same
+    # module as the refsetId" both need a refset CONCEPT to exist, in a named
+    # module, under the simple-type root - so one concept serves both, and the
+    # membership rows differ in what they get wrong.
+    au_refset = r.next_id(CONCEPT_P, '00')
+    r.concept.append((au_refset, CURR, '1', AU_METADATA_MODULE, PRIMITIVE))
+    r.description_row(au_refset, 'AMT AU simple type reference set (foundation metadata concept)',
+                      typeid=FSN, module=AU_METADATA_MODULE)
+    r.relationship_row(au_refset, SIMPLE_TYPE_ROOT, typeid=IS_A)
+    # member of it that is no active concept
+    r.simple.append((r.next_uuid(), CURR, '1', AU_METADATA_MODULE, au_refset, ABSENT_COMPONENT))
+    n += 1
+    # and a member row on a DIFFERENT module from the refset concept's
+    r.simple.append((r.next_uuid(), CURR, '1', THIRD_PARTY_MODULE, au_refset, '703860006'))
+    n += 1
+
+    # "All simple type refsets appear in the export": a refset concept on an AU
+    # module, under the simple-type root, that nothing is a member of.
+    unused = r.next_id(CONCEPT_P, '00')
+    r.concept_row(unused, status=PRIMITIVE)
+    r.description_row(unused, 'AMT reference set with no members in this export (foundation metadata concept)',
+                      typeid=FSN)
+    r.relationship_row(unused, SIMPLE_TYPE_ROOT, typeid=IS_A)
+    n += 1
+
+    # en-GB language refset rows must not be on an AU module.
+    did = r.description_row('703860006', 'AMT en-GB description on an AU module')
+    r.lang.append((r.next_uuid(), CURR, '1', AMT_MODULE, EN_GB_REFSET, did, PREFERRED))
+    n += 1
+    return n
+
+
+def author_medicine_model(r: Rows):
+    """The product model proper: concepts that qualify for a class and are not
+    in it, packs that subsume across classes, and a dose form that is not a
+    subtype of its parent's.
+
+    This is the part that needed several interlocking rows rather than one. Each
+    group below is a small tree - a pack, its unit of use, the attributes that
+    make it one - built so that exactly one assertion's condition holds.
+    """
+    n = 0
+    target = r.next_id(CONCEPT_P, '00')
+    r.concept_row(target, status=DEFINED)
+    r.description_row(target, 'AMT model attribute target (product)', typeid=FSN)
+
+    # "All Has BoSS relationship sourceIds are members of MPUU or TPUU": a
+    # basis-of-strength relationship on a concept in neither.
+    boss = r.next_id(CONCEPT_P, '00')
+    r.concept_row(boss, status=DEFINED)
+    r.description_row(boss, 'AMT has-BoSS source in no unit-of-use refset (clinical drug)', typeid=FSN)
+    r.relationship_row(boss, target, typeid=BOSS, group='1')
+    n += 1
+
+    # "No concepts are both a descendent of Medicinal Product and Medicinal
+    # Product Package" - the two hierarchies are disjoint by design.
+    both = r.next_id(CONCEPT_P, '00')
+    r.concept_row(both, status=DEFINED)
+    r.description_row(both, 'AMT concept under product and package at once (clinical drug)', typeid=FSN)
+    r.relationship_row(both, MEDICINAL_PRODUCT, typeid=IS_A)
+    r.relationship_row(both, MEDICINAL_PRODUCT_PACKAGE, typeid=IS_A)
+    n += 1
+
+    # "MPUU reference set contains ALL expected concepts": has one of the
+    # unit-of-use attributes, has no trade-product attribute, is the DESTINATION
+    # of a pack's quantity relationship, and is not in MPUU.
+    mpuu_like = r.next_id(CONCEPT_P, '00')
+    r.concept_row(mpuu_like, status=DEFINED)
+    r.description_row(mpuu_like, 'AMT unit of use absent from the MPUU refset (clinical drug)', typeid=FSN)
+    r.relationship_row(mpuu_like, target, typeid='127489000', group='1')
+    pack_of_it = r.next_id(CONCEPT_P, '00')
+    r.concept_row(pack_of_it, status=DEFINED)
+    r.description_row(pack_of_it, 'AMT pack pointing at that unit of use (clinical drug package)', typeid=FSN)
+    r.relationship_row(pack_of_it, mpuu_like, typeid=ASSOCIATED_WITH, group='1')
+    n += 1
+
+    # "TPP reference set contains ALL concepts with TPP attributes": has a pack
+    # attribute and a trade-product attribute, has no container-type attribute,
+    # and is not in TPP.
+    tpp_like = r.next_id(CONCEPT_P, '00')
+    r.concept_row(tpp_like, status=DEFINED)
+    r.description_row(tpp_like, 'AMT pack absent from the TPP refset (branded clinical drug package)', typeid=FSN)
+    r.relationship_row(tpp_like, target, typeid=ASSOCIATED_WITH, group='1')
+    r.relationship_row(tpp_like, target, typeid='774158006', group='1')
+    n += 1
+
+    # The two "multipack X do not subsume non-multipack Y" assertions: an IsA
+    # between class members where the PARENT has no multipack attribute and the
+    # CHILD does. Deliberately the way round the SQL tests, which is not the way
+    # the assertion name reads.
+    for parent_refset, child_refset in (('929360041000036105', '929360081000036101'),
+                                        ('929360051000036108', '929360041000036105')):
+        parent = r.next_id(CONCEPT_P, '00')
+        child = r.next_id(CONCEPT_P, '00')
+        r.concept_row(parent, status=DEFINED)
+        r.description_row(parent, 'AMT non-multipack subsuming a multipack (branded clinical drug package)', typeid=FSN)
+        r.simple.append((r.next_uuid(), CURR, '1', AMT_MODULE, parent_refset, parent))
+        r.concept_row(child, status=DEFINED)
+        r.description_row(child, 'AMT multipack subsumed by a non-multipack (clinical drug package)', typeid=FSN)
+        r.simple.append((r.next_uuid(), CURR, '1', AMT_MODULE, child_refset, child))
+        r.relationship_row(child, target, typeid=MULTIPACK_ATTRS[0], group='1')
+        r.relationship_row(parent, child, typeid=IS_A)
+        n += 1
+
+    # "TPPs have the same number of Contains clinical drug relationships as
+    # their MPP": a TPP with two and its MPP parent with one.
+    tpp = r.next_id(CONCEPT_P, '00')
+    mpp = r.next_id(CONCEPT_P, '00')
+    r.concept_row(tpp, status=DEFINED)
+    r.description_row(tpp, 'AMT TPP containing more than its MPP (branded clinical drug package)', typeid=FSN)
+    r.simple.append((r.next_uuid(), CURR, '1', AMT_MODULE, '929360041000036105', tpp))
+    r.concept_row(mpp, status=DEFINED)
+    r.description_row(mpp, 'AMT MPP containing fewer than its TPP (clinical drug package)', typeid=FSN)
+    r.simple.append((r.next_uuid(), CURR, '1', AMT_MODULE, '929360081000036101', mpp))
+    r.relationship_row(tpp, mpp, typeid=IS_A)
+    r.relationship_row(tpp, target, typeid=ASSOCIATED_WITH, group='1')
+    r.relationship_row(tpp, mpuu_like, typeid=ASSOCIATED_WITH, group='2')
+    r.relationship_row(mpp, target, typeid=ASSOCIATED_WITH, group='1')
+    n += 1
+
+    # "TPUU Has manufactured dose form destination is a subtype of its parent's":
+    # a TPUU whose dose form is unrelated to its MPUU parent's.
+    form_parent = r.next_id(CONCEPT_P, '00')
+    form_child = r.next_id(CONCEPT_P, '00')
+    tpuu = r.next_id(CONCEPT_P, '00')
+    mpuu_parent = r.next_id(CONCEPT_P, '00')
+    for cid, label, tag in ((form_parent, 'dose form of the parent', 'dose form'),
+                            (form_child, 'unrelated dose form', 'dose form'),
+                            (tpuu, 'TPUU with an unrelated dose form', 'branded clinical drug'),
+                            (mpuu_parent, 'MPUU parent', 'clinical drug')):
+        r.concept_row(cid, status=DEFINED)
+        r.description_row(cid, f'AMT {label} ({tag})', typeid=FSN)
+    r.simple.append((r.next_uuid(), CURR, '1', AMT_MODULE, '929360031000036100', tpuu))
+    r.simple.append((r.next_uuid(), CURR, '1', AMT_MODULE, '929360071000036103', mpuu_parent))
+    r.relationship_row(tpuu, form_child, typeid=DOSE_FORM, group='1')
+    r.relationship_row(tpuu, mpuu_parent, typeid=IS_A)
+    r.relationship_row(mpuu_parent, form_parent, typeid=DOSE_FORM, group='1')
+    n += 1
+
+    # Black Triangle: a TPUU in the scheme with nothing in the scheme pointing
+    # at it, which is what breaks the propagation the refset relies on.
+    bt = r.next_id(CONCEPT_P, '00')
+    r.concept_row(bt, status=DEFINED)
+    r.description_row(bt, 'AMT black triangle TPUU nothing points at (branded clinical drug)', typeid=FSN)
+    for refset in ('929360031000036100', BLACK_TRIANGLE):
+        r.simple.append((r.next_uuid(), CURR, '1', AMT_MODULE, refset, bt))
+    n += 1
+    return n
+
+
 def author_map_refset_files(r: Rows):
     """The two map-refset files the fixture does not have at all.
 
@@ -895,6 +1106,8 @@ def main():
     s8 = author_s8_membership_gaps(r)
     generic = author_generic_defects(r)
     qualifying = author_qualifying_non_members(r)
+    au = author_au_refset_defects(r)
+    model = author_medicine_model(r)
     print(f"  authored {members} class-refset members, each non-compliant in the ways "
           f"the corpus checks, plus one dangling attribute target")
     if adrs_skipped:
@@ -908,6 +1121,7 @@ def main():
     print(f"  authored {s8} S8 cases: a scheduled product whose counterpart is not scheduled")
     print(f"  authored {generic} single-mechanism defects for the remaining tail")
     print(f"  authored {qualifying} concepts that qualify for a class refset and are not in it")
+    print(f"  authored {au} AU refset defects and {model} medicine-model cases")
 
     buckets = {'concept': r.concept, 'desc': r.desc, 'rel': r.rel, 'lang': r.lang,
                'simple': r.simple, 'concrete': r.concrete,
