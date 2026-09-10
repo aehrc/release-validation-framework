@@ -743,7 +743,7 @@ runs, finding proves it detects.
 | | executes on both | finds something | A/B |
 |---|---|---|---|
 | international 360 | 360 | **315 (87%)** | 219/220 identical, 0 unexplained |
-| amtv4 200 | 200 | **144 (72%)** | 243/244 identical, 0 unexplained |
+| amtv4 200 | 200 | **146 (73%)** | 254/255 identical, 0 unexplained |
 
 Where it started: international 227, amtv4 **16**, and the amtv4 arm did not run
 on DuckDB at all - the store-to-corpus guard refused it, correctly, and a
@@ -800,7 +800,7 @@ one authored row each - an OWL axiom pair, a complex-map blank target, a
 description with an illegal character. No shared mechanism left; the clusters
 are done.
 
-amtv4, 45 silent and fireable: the same, plus the medicine-model families that
+amtv4, 43 silent and fireable: the same, plus the medicine-model families that
 want *several* interlocking rows - a pack hierarchy with matching Contains
 cardinalities, unit-of-use strengths that agree with their pack sizes. Those are
 content design, and the honest estimate is a day of it, not an afternoon.
