@@ -1,0 +1,3 @@
+id	effectiveTime	active	moduleId	refsetId	referencedComponentId	domainConstraint	parentDomain	proximalPrimitiveConstraint	proximalPrimitiveRefinement	domainTemplateForPrecoordination	domainTemplateForPostcoordination	guideURL
+e339cbd9-9c52-57d4-8af4-49828816da32	20130131	1	900000000000207008	723560006	703860006	<< 703860006		<< 703860006		[[+id(<< 703860006)]]		http://snomed.org/mrcm
+ab3bacc4-58fa-5ef7-b287-c52c8ca15c0b	20130131	1	900000000000207008	723560006	702769005	<< 702769005	703860006	<< 702769005		[[+id(<< 702769005)]]		http://snomed.org/mrcm
