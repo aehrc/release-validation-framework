@@ -178,8 +178,8 @@ CLASS_REFSETS = [
     ('929360041000036105', 'TPP', 'branded clinical drug package'),
     ('929360081000036101', 'MPP', 'clinical drug package'),
     ('929360071000036103', 'MPUU', 'clinical drug'),
-    ('929360021000036102', 'MP', 'product name'),
-    ('929360061000036106', 'TP', 'product name'),
+    ('929360021000036102', 'TP', 'product name'),
+    ('929360061000036106', 'MP', 'product name'),
     ('1050951000168102', 'S8', 'branded clinical drug'),
     ('1514151000168100', 'refset-1514151', 'clinical drug'),
     ('1183941000168107', 'refset-1183941', 'clinical drug'),
@@ -436,6 +436,11 @@ def author_same_refset_parentage(r: Rows):
         r.description_row(cid, f'AMT TPUU {role} in the same refset (branded clinical drug)', typeid=FSN)
         r.simple.append((r.next_uuid(), CURR, '1', AMT_MODULE, '929360031000036100', cid))
     r.relationship_row(child, parent, typeid=IS_A)
+    # "DNF All TPUUs are ... - 20" fires when the PARENT of a same-refset IsA
+    # holds a pack-size attribute or a concrete pack quantity, so the parent
+    # gets one. Without it the LEFT JOINs both miss and the WHERE's
+    # `NOT dest.id IS NULL OR NOT destVal.id IS NULL` is false.
+    r.relationship_row(parent, '703860006', typeid='774163005', group='1')
     return 2
 
 S8_REFSET = '1050951000168102'
@@ -970,8 +975,12 @@ def author_preferred_term_defects(r: Rows):
 
     # "No MP refset members have an INT style preferred term" - the
     # international "... containing product" wording, which AMT does not use.
+    # 929360061000036106 is the Medicinal Product refset - the id the assertion
+    # names. MP_REFSET below is 929360021000036102, which is Trade Product: the
+    # labels in CLASS_REFSETS had those two the wrong way round, and using the
+    # label instead of the id put this member in the wrong refset entirely.
     with_adrs_pt('AMT paracetamol containing product', 'product',
-                 refsets=(MP_REFSET,))
+                 refsets=('929360061000036106',))
     n += 1
 
     # "All TPs are ... 14b": a relationship between two MP-refset members where
@@ -989,7 +998,11 @@ def author_preferred_term_defects(r: Rows):
     # from their WHERE clauses directly. Each needs a term the trigger matches
     # and NO companion term, and each excludes hierarchies this content stays
     # out of by simply having no IsA at all.
-    for term, tag in (('AMT post-operative wound care', 'observable entity'),
+    # 'post-operative' looks right and does not match: the term pattern is
+    # `([Pp]ost|...)( |-)?(Operat|surg)`, case-SENSITIVE, so it wants a capital
+    # O or the string 'surg'. 'post-surgical' satisfies both that and the
+    # preferred-term pattern, which is case-insensitive but requires the hyphen.
+    for term, tag in (('AMT post-surgical wound care', 'observable entity'),
                       ('AMT stammer of speech', 'observable entity'),
                       ('AMT tendonitis of the shoulder', 'observable entity')):
         cid = r.next_id(CONCEPT_P, '00')
@@ -1156,6 +1169,20 @@ FILES = {
          'referencedComponentId', 'mapTarget'], 'imaprefset', ''),
 }
 
+# Every id shape this generator mints, for the idempotence check below.
+AUTHORED_IDS = (CONCEPT_P, DESC_P, REL_P, LANG_P,
+                '00000000-0000',      # next_uuid(), counter-derived
+                'a0000001-', 'a0000002-', 'b0000001-')   # the map-refset rows
+
+
+SEPARATOR = {
+    # RF2 puts an underscore before the kind for component files and none for
+    # refset files, and this fixture's concrete-values file follows the refset
+    # convention because that is how ci/author_mrcm_fixture.py created it.
+    'sct2_RelationshipConcreteValues': '',
+}
+
+
 def is_authored(line: str) -> bool:
     """Every row this generator writes carries the AMT module, and no row in the
     international fixture does - so that is the idempotence key.
@@ -1168,7 +1195,20 @@ def is_authored(line: str) -> bool:
     component and refset file, which is what makes one rule cover them all.
     """
     parts = line.split('\t')
-    return len(parts) > 3 and parts[3] == AMT_MODULE
+    if len(parts) > 3 and parts[3] == AMT_MODULE:
+        return True
+    # The module alone is not enough any more. The AU refset cases deliberately
+    # sit on OTHER modules - Third Party, AU metadata - because that is what
+    # they are about, so those rows matched neither the module nor any id
+    # prefix, survived as "existing", and were appended again on every run. The
+    # file reached 102 rows with 94 distinct ids, and the loader keeps one row
+    # per id: the AUEDRS membership lost to its duplicate and its assertion
+    # read as a content gap.
+    #
+    # So the id is checked too. Every id this generator mints is either an
+    # SCTID with one of its prefixes or a counter-derived UUID, and nothing in
+    # the international fixture looks like either.
+    return parts[0].startswith(AUTHORED_IDS)
 
 
 def merge(path: pathlib.Path, header, rows):
@@ -1238,14 +1278,30 @@ def main():
                 # refset name (der2_Refset_SimpleSnapshot). Getting this wrong
                 # silently writes nothing, since the append is skipped when the
                 # file does not exist.
-                sep = '_' if stem.startswith('sct2_') else ''
-                name = f'{stem}{sep}{kind}{lang_suffix}_INT_{release}.txt'
+                # The separator is per FILE, not per prefix. sct2_Concept is
+                # sct2_Concept_Snapshot; sct2_RelationshipConcreteValues, as
+                # ci/author_mrcm_fixture.py writes it, has none. A prefix rule
+                # got that one wrong, looked for a file that does not exist, and
+                # the skip below swallowed it - so the S8 single-ingredient
+                # assertion had no concrete strength to find and read as a
+                # content gap for three passes.
+                name = f'{stem}{SEPARATOR.get(stem, "_" if stem.startswith("sct2_") else "")}' \
+                       f'{kind}{lang_suffix}_INT_{release}.txt'
                 path = base / kind / name
                 # The two map-refset files do not exist yet and must be created;
                 # everything else is an append to a file that does, and a missing
                 # one there means a name is wrong rather than a file is new.
                 creates = stem in ('der2_csRefset_AttributeValueMap', 'der2_iRefset_SimpleMap')
                 if not path.exists() and not (creates and emit):
+                    # LOUD, not silent. Twice now a silent skip has hidden a
+                    # filename mistake and the missing content read as a
+                    # coverage gap - first the sct2_/der2_ separator, then this
+                    # file's lack of one. A bucket with rows and nowhere to put
+                    # them is a bug in this generator, so it says so.
+                    if emit and release == CURR and kind == 'Snapshot':
+                        raise SystemExit(
+                            f"FATAL: {len(emit)} row(s) for {stem} but no file at {path}.\n"
+                            f"       The name is wrong, or SEPARATOR needs an entry for it.")
                     continue
                 kept, added = merge(path, header, emit)
                 total += added

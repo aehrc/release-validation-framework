@@ -743,7 +743,7 @@ runs, finding proves it detects.
 | | executes on both | finds something | A/B |
 |---|---|---|---|
 | international 360 | 360 | **328 (91%)** | 219/220 identical, 0 unexplained |
-| amtv4 200 | 200 | **151 (76%)**, 161 with the proposed corpus fix | 254/255 identical, 0 unexplained |
+| amtv4 200 | 200 | **183 (92%)** - 183 of the 185 that can fire | 259/260 identical, 0 unexplained |
 
 Where it started: international 227, amtv4 **16**, and the amtv4 arm did not run
 on DuckDB at all - the store-to-corpus guard refused it, correctly, and a
@@ -763,45 +763,62 @@ Every `-proc.sql` and `res-table-*` defines a procedure or builds a resource
 table for other assertions to read. Against the 344 that can report, coverage is
 **328, or 95%**.
 
-**12 of the 200 amtv4 assertions cannot fire at all** - they report
+**15 of the 200 amtv4 assertions cannot fire at all** - they report
 `assertionsPassed` with a failure count of zero for every release ever
-validated, and always will. This is an upstream SQL defect, not a denominator
-adjustment. Two shapes, both turning on the same fact - a `SELECT` that reads no
-rows still RETURNS a row:
+validated, and always will. Upstream SQL defects, not a denominator adjustment.
+Four shapes, all found by reading the assertions in order to author content for
+them, and every one verified silent in a real run before being called a defect:
 
 ```sql
-NOT EXISTS(SELECT GET_CR_ADRS_PT(x) = 'y')      -- 9, no FROM at all
-NOT EXISTS(SELECT COUNT(1) FROM ccsRefset_f)    -- 3, ungrouped aggregate
+NOT EXISTS(SELECT GET_CR_ADRS_PT(x) = 'y')            -- 9, no FROM at all
+NOT EXISTS(SELECT COUNT(1) FROM ccsRefset_f)          -- 3, ungrouped aggregate
+NOT f(id, R) AND f(id, R)                             -- 2, a contradiction
+WHERE val.typeid = (null)                             -- 1, never true
 ```
 
 A `FROM`-less `SELECT` yields exactly one row, so `EXISTS` is true and `NOT
-EXISTS` is false. So does `COUNT` with no `GROUP BY`, **even over an empty
-table** - and that is the sharper case, because the three assertions carrying it
-exist to detect that the file is empty. Demonstrated, not argued: with
-`ccsRefset_f` created and left empty, `SELECT COUNT(1) FROM ccsRefset_f` returns
-`(0)`, so the assertion inserts nothing. This release ships no ccsRefset file at
-all, so the condition was present the whole time and the check said "pass".
+EXISTS` false. So does `COUNT` with no `GROUP BY`, **even over an empty table** -
+the sharpest case, since those three exist to detect an empty file.
+Demonstrated, not argued: with `ccsRefset_f` created and left empty, `SELECT
+COUNT(1) FROM ccsRefset_f` returns `(0)`, so the assertion inserts nothing. This
+release ships no ccsRefset file at all, so the condition was present the whole
+time and the check said "pass".
 
-Both engines agree on all 12 - they are silent on MySQL for the same reason - so
-this is not an engine difference and the gate stays green. It is twelve checks
-that have never checked anything.
+The two contradictions are both named "Contains all Active <class>s". The intent
+is evident - a concept that QUALIFIES for the refset and is not in it - but the
+qualifying half is absent from the SQL, and what it was meant to be cannot be
+recovered from what is there. Reported, not repaired.
 
-`AssertionCanFireTest` now scans the bundled store for both shapes on every
-build. The international 360 have none, and that is pinned rather than assumed:
-the detector is tested against the real shapes and against the three healthy
-patterns it must leave alone, because a green light wired to nothing is the same
-failure it exists to catch. The amtv4 pack is not bundled here, so its twelve
-cannot be pinned - they belong upstream, with the corpus. The names stay out of
-this repository; the shape and the count are enough to find them.
+The NULL comparison is worse than inert: the statement is `A AND B OR C`, so
+with A dead, C runs against EVERY concrete value instead of the type the
+assertion meant to single out. The guard does not guard.
+
+Both engines agree on all 15 - silent on MySQL for the same reasons - so this is
+not an engine difference and the gate stays green. Fifteen checks that have
+never checked anything.
+
+`ci/assertion_lint.py` finds all four shapes in raw SQL, with no store, schema
+or database, and `ci/pr/` packages it for the repositories that own the
+assertions. `AssertionCanFireTest` runs the same checks over the bundled store
+on every build; the international 360 have none. Both are pinned against false
+positives as well as false negatives: an early contradiction check scanned whole
+statements and flagged two assertions that demonstrably fire, because the same
+predicate legitimately appears across an OR and in separate EXISTS subqueries.
+Requiring the two calls to be adjacent conjuncts fixed it. **15 flagged, 0 of
+them fire.**
 
 ### Two more that no fixture can trigger
 
-* an assertion requiring a **disjunction** of exclusions ("has MCL and lacks
-  TCL, *or* has TCL and lacks MCL") - satisfiable in principle, but not by one
-  concept, and the generator authors one concept per assertion.
 * `Relationship identifiers are not duplicated` - the loader collapses duplicate
   ids before any assertion sees them, so the defect cannot survive the import it
   is meant to be caught after.
+* `All AMT 7 Noteable refsets have some change every release` - it needs the
+  seven refset CONCEPTS to exist, and nine `refsetId is an active concept`
+  assertions need them absent. No fixture satisfies both, and nine beats one.
+  Worth noting separately that its condition is `effectiveTime >
+  STRFTIME(NOW(), '%Y%m%d')`, which no published release can satisfy - so with
+  the concepts present it would fire for all seven, every time. A check that
+  always fires is as useless as one that never does.
 
 ### What the remaining gap actually needs
 
@@ -810,7 +827,7 @@ one authored row each - an OWL axiom pair, a complex-map blank target, a
 description with an illegal character. No shared mechanism left; the clusters
 are done.
 
-amtv4, 38 silent and fireable: the same, plus the medicine-model families that
+amtv4: none left that a fixture can reach: the same, plus the medicine-model families that
 want *several* interlocking rows - a pack hierarchy with matching Contains
 cardinalities, unit-of-use strengths that agree with their pack sizes. Those are
 content design, and the honest estimate is a day of it, not an afternoon.

@@ -562,7 +562,7 @@
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 73
+    "totalFailed" : 96
   }, {
     "assertionName" : "Active concepts do not have active inactivation indicators.",
     "assertionUuid" : "b72bc5f4-7afb-4a2e-ac3a-e0f4373b03e6",
@@ -660,7 +660,7 @@
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 136
+    "totalFailed" : 167
   }, {
     "assertionName" : "ReferencedComponentId in MRCM ATTRIBUTE DOMAIN SNAPSHOT exists in the ReferencedComponentId values of MRCM ATTRIBUTE RANGE SNAPSHOT.",
     "assertionUuid" : "bd3bb9ec-97ae-4c53-9686-9c8c63b8d67b",
@@ -975,7 +975,7 @@
       "tableName" : "rvf_regression_test_prospective.associationrefset_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 320
+    "totalFailed" : 350
   }, {
     "assertionName" : "Association reference records are referencing the same concept for both referencedComponentId and targetComponentId.",
     "assertionUuid" : "d2727004-cfed-4798-8710-1a088833e775",
@@ -1263,7 +1263,7 @@
       "tableName" : "rvf_regression_test_prospective.description_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 173
+    "totalFailed" : 207
   }, {
     "assertionName" : "Active historical association refset members have inactive concepts as reference components.",
     "assertionUuid" : "f7117eb0-7cd6-11e1-b0c4-0800200c9a66",
@@ -1463,7 +1463,7 @@
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 41
+    "totalFailed" : 55
   }, {
     "assertionName" : "All active Refset records are valid.",
     "assertionUuid" : "1a4e40a9-cf14-4703-b206-9f2fbeb56c7f",
@@ -1548,7 +1548,7 @@
       "tableName" : "rvf_regression_test_prospective.complexmaprefset_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 63
+    "totalFailed" : 67
   }, {
     "assertionName" : "IDs must be unique in the Simple Refset Snapshot file.",
     "assertionUuid" : "1cd8b7f9-5730-4db9-b508-13575825b28f",
@@ -1696,7 +1696,7 @@
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 55
+    "totalFailed" : 81
   }, {
     "assertionName" : "For a given concept, all description terms are unique.",
     "assertionUuid" : "2e0eb135-fd7d-4f24-83c1-0cba797ee766",
@@ -2058,7 +2058,7 @@
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 90
+    "totalFailed" : 111
   }, {
     "assertionName" : "IDs must be unique in the Description Snapshot file.",
     "assertionUuid" : "3be8c763-a5bc-404b-af9f-a2cb681f6f3d",
@@ -2216,7 +2216,7 @@
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 144
+    "totalFailed" : 175
   }, {
     "assertionName" : "MrcmRuleRefsetId in MRCM MODULE SCOPE SNAPSHOT exists in the RefsetId values of MRCM DOMAIN SNAPSHOT or MRCM ATTRIBUTE DOMAIN SNAPSHOT or MRCM ATTRIBUTE RANGE SNAPSHOT.",
     "assertionUuid" : "57ae69cd-26f0-4001-ba2f-ae56129e2e28",
@@ -2623,7 +2623,7 @@
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 136
+    "totalFailed" : 167
   }, {
     "assertionName" : "ReferencedComponentId in MRCM ATTRIBUTE RANGE SNAPSHOT exists in the ReferencedComponentId values of MRCM ATTRIBUTE DOMAIN SNAPSHOT.",
     "assertionUuid" : "73772817-4654-4abf-b801-e849fbae1ba0",
