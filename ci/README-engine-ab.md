@@ -96,6 +96,23 @@ printed, because four of those cost a 25-minute round trip to learn one line of
 fact. And the release is chosen by walking the share the nightly already reads
 with the key it already has, rather than from a layout nobody had checked.
 
+### The previous release is not optional, 2026-09-10
+
+Build 16325 ran without one and reported 99/149 identical with 49 unexplained
+divergences - all `rvf=<n> duck=-1` on release-type assertions. MySQL answers
+against an empty schema (7,015,456 findings on one) and DuckDB says not-run, so
+an absent previous release invents disagreement on a third of the corpus rather
+than losing coverage.
+
+The fetch step resolves it now: the newest **published** edition dated strictly
+before the build under test, from `snomed-versioned-content` under
+`prod/AU_32506021000036107/<date>/`, which is the layout
+`azure-pipeline.keep-release.yml` already reads. Published, not yesterday's
+daily build - a build's delta is cumulative from the last publication, so two
+builds share no delta boundary and the derivation assertions would fail on
+correct content. Unresolvable means the run fails, because 66% agreement is not
+a parity measurement.
+
 ### Two bugs this found by being run
 
 **The group list was never sent.** `GROUPS` is a bash special variable holding

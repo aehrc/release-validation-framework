@@ -269,12 +269,29 @@ two entries are an INT-release module rule and the `<PREVIOUS>`/`<DEPENDENCY>`
 skip class - and an AU+AMT run diverges for its own reasons, which is why
 today's three are recorded in the plan rather than in that file.
 
-*Acceptance:* an AU/AMT divergence baseline with each of the three classified
-(the 1,405,850-finding MySQL defect is `incumbent-higher` with evidence; the
-other two need diagnosis), and `az/azure-pipeline.engine-ab.yml` able to run
-with `--groups amtv4` and gate against it. The prerequisite is 3.6a, which is
-already done: without the corpus declaring `pre-requisites.sql`, MySQL cannot
-run these assertions at all.
+**DONE 2026-09-10, and the three resolved into one.** Build **16325** is the
+first A/B to run both engines end to end (149 in both, MySQL 1980s vs DuckDB
+120s, 16.5x). It gated FAIL with 49 unexplained divergences, and every one was
+`rvf=<n> duck=-1` on a release-type assertion, because the run supplied no
+previous release. An absent previous release does not lose coverage, it
+MANUFACTURES disagreement on a third of the corpus - MySQL substitutes an empty
+schema and answers anyway (7,015,456 findings on one assertion, a false 0 on
+others) while DuckDB skips `<PREVIOUS>` and says so. Nothing there to baseline:
+the fetch step now resolves the newest PUBLISHED edition dated strictly before
+the build under test, and fails the run rather than reporting 66% agreement.
+
+Of §3.6b's three, therefore:
+
+| assertion | verdict |
+|---|---|
+| `17b6c41e` (1,405,850 findings) | submission artefact - no dependency release. Fixed by supplying one, not baselined |
+| `fc0f240c` (MySQL 8, DuckDB 0) | **our defect, fixed today.** MySQL's 8 are real - `900000000000469006` has 7 ancestors and `707000009` is not among them. Of 12 statements exactly one writes `qa_result` and exactly that one needs the dependency, so 11 ran, nothing could be reported, and it PASSED. Now reports not-run unless a finding-writer executed |
+| `5451f5c6` (ccsRefset) | genuine engine difference, and the one entry in `ci/known-engine-divergences-au.json`: the AU release ships no ccsRefset file, MySQL errors on the missing table, DuckDB runs the assertion against the empty one its store declares |
+
+`--baseline` is now repeatable and merges, because this arm runs the
+international corpus AND the AMT one and each has its own proven causes; a UUID
+claimed by two baselines is refused rather than letting one arm's tolerance
+decide another's verdict. Run **16329** is the first with all of it in place.
 
 **3.12 The international corpus as a pack, and what a pin cannot reproduce.**
 Also asked: *what about the pack for the international tests?* Today it is not a
