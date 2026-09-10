@@ -734,6 +734,91 @@ revision in which **8 of 560 ADRS scripts differ** from the one on disk, 0
 absent. That is exactly what the guard is for - a store executing one corpus's
 SQL while reporting another's text - and it is a republish, not a code change.
 
+## 3.19 Assertion coverage, 2026-09-10: what fires and what cannot
+
+Both engines, both corpora, measured rather than estimated. Coverage means an
+assertion *finds something* on the regression fixture - executing proves it
+runs, finding proves it detects.
+
+| | executes on both | finds something | A/B |
+|---|---|---|---|
+| international 360 | 360 | **308 (85%)** | 219/220 identical, 0 unexplained |
+| amtv4 200 | 200 | **144 (72%)** | 243/244 identical, 0 unexplained |
+
+Where it started: international 227, amtv4 **16**, and the amtv4 arm did not run
+on DuckDB at all - the store-to-corpus guard refused it, correctly, and a
+republish from the corpus on disk was the fix.
+
+The generators are `ci/author_mrcm_fixture.py`, `ci/author_amt_fixture.py` and
+`ci/author_intl_fixture.py`, and they must run in that order: the first owns its
+files outright, the other two append. Every value in them is read out of the
+published store - refset ids, attribute types, semantic tags, regex patterns,
+hierarchy roots - rather than transcribed, because the AMT scripts live in
+another repository and a retyped constant drifts the moment they change.
+
+### A denominator that means something
+
+**16 of the 360 international assertions cannot produce a finding by design.**
+Every `-proc.sql` and `res-table-*` defines a procedure or builds a resource
+table for other assertions to read. Against the 344 that can report, coverage is
+**308, or 89%**.
+
+**11 of the 200 amtv4 assertions cannot fire at all**, and this one is an
+upstream SQL defect worth reporting rather than a denominator adjustment. They
+are of the form:
+
+```sql
+SELECT ... FROM (SELECT 1 FROM dual WHERE NOT EXISTS(SELECT <scalar>)) AS query
+```
+
+where the inner `SELECT` has **no `FROM`**. A `FROM`-less `SELECT` always returns
+exactly one row, so `EXISTS` is always true, `NOT EXISTS` is always false, and
+the assertion reports nothing whatever the release contains. Nine wrap a function
+call (`NOT EXISTS(SELECT ISCHILDOF_CR(a, b))`, `NOT EXISTS(SELECT
+GET_CR_ADRS_PT(x) = 'y')`) and two wrap an aggregate (`NOT EXISTS(SELECT
+COUNT(1) FROM <table>)`, where `COUNT` returns a row even over an empty table).
+The named assertions are not listed here because this repository is public and
+that corpus is not; the shape and the count are enough to find them.
+
+Both engines agree on all 11 - they are silent on MySQL for the same reason -
+so this is not an engine difference and the gate stays green. It is a check that
+has never checked anything.
+
+### Two more that no fixture can trigger
+
+* an assertion requiring a **disjunction** of exclusions ("has MCL and lacks
+  TCL, *or* has TCL and lacks MCL") - satisfiable in principle, but not by one
+  concept, and the generator authors one concept per assertion.
+* `Relationship identifiers are not duplicated` - the loader collapses duplicate
+  ids before any assertion sees them, so the defect cannot survive the import it
+  is meant to be caught after.
+
+### What the remaining gap actually needs
+
+International, 36 finding-capable and silent: mostly single assertions wanting
+one authored row each - an OWL axiom pair, a complex-map blank target, a
+description with an illegal character. No shared mechanism left; the clusters
+are done.
+
+amtv4, 45 silent and fireable: the same, plus the medicine-model families that
+want *several* interlocking rows - a pack hierarchy with matching Contains
+cardinalities, unit-of-use strengths that agree with their pack sizes. Those are
+content design, and the honest estimate is a day of it, not an afternoon.
+
+### How to re-measure, and how long it takes
+
+```
+mvn -o test -Dtest=AssertionCorpusDigestTest -Dduck.digests.write=true   # 11s
+ci/fixture_ab.sh release-type-validation file-centric-validation \
+                 component-centric-validation                            # 50s
+ci/fixture_ab_amt.sh                                                     # 50s
+```
+
+The digest is the guard for the international side: it pins what every one of
+the 360 finds, so a fixture edit that silently drops coverage fails the build.
+The AMT side has no in-repo guard because the store is not in the repo - its
+state lives in `ci/known-fixture-divergences-amt.json`.
+
 ## 4. Known, deliberate, not scheduled
 
 * `minAssertions` 1,400 / `minSqlAssertions` 400 depend on the AMT overlay

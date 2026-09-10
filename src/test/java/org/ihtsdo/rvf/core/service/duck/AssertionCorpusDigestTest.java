@@ -410,6 +410,34 @@ class AssertionCorpusDigestTest {
 						+ " are comparing a different corpus");
 	}
 
+	/**
+	 * Coverage is a ratchet: it may rise, and a fall has to be argued for here.
+	 *
+	 * <p>{@link #theFixtureStillProducesFindings()} compares against the golden
+	 * file, which is regenerated with {@code -Dduck.digests.write=true} - so a
+	 * change that dropped twenty assertions to silent passes the moment someone
+	 * regenerates, and the diff that would have shown it is 360 lines of hashes.
+	 * This floor is a separate number in the source, and lowering it is an edit
+	 * a reviewer can see.
+	 *
+	 * <p>The figure is where deliberate authoring got to on 2026-09-10: 308 of
+	 * the 360 find something, and 16 of the remainder are {@code -proc.sql} or
+	 * {@code res-table-*} assertions that build tables rather than report
+	 * findings, so 308 of 344 that can. See duck/PLAN.md 3.19.
+	 */
+	private static final int COVERAGE_FLOOR = 308;
+
+	@Test
+	void coverageDoesNotRegress() {
+		long producing = ACTUAL.values().stream().filter(o -> o.findings() > 0).count();
+		assertTrue(producing >= COVERAGE_FLOOR,
+				() -> "assertion coverage fell to " + producing + " from a floor of "
+						+ COVERAGE_FLOOR + ". Either the fixture lost content the"
+						+ " assertions were authored against - check ci/author_*_fixture.py"
+						+ " ran, and in order - or the drop is intended and this floor"
+						+ " moves in the same commit, with the reason.");
+	}
+
 	// ---- fixture plumbing -----------------------------------------------
 
 	/**
