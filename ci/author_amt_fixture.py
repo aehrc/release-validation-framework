@@ -229,7 +229,14 @@ def author_product_model(r: Rows):
         r.description_row(cid, f'AMT {label} member with the wrong tag (observable entity)', typeid=FSN)
         did = r.description_row(cid, f'AMT {label} member with the wrong tag')
         r.language_row(did)
-        r.simple.append((r.next_uuid(), CURR, '1', AMT_MODULE, refset, cid))
+        # The TP refset's member is stamped for the PREVIOUS release on purpose.
+        # "All AMT 7 Noteable refsets have some change every release" fires on a
+        # refset with no member dated in THIS one, and with all seven carrying a
+        # current member it had nothing to find. A snapshot legitimately holds
+        # rows at their original effective time, so this is a real shape rather
+        # than a contrived one: a refset nobody touched this cycle.
+        stamped = PREV if refset == '929360061000036106' else CURR
+        r.simple.append((r.next_uuid(), stamped, '1', AMT_MODULE, refset, cid))
         for typeid in AMT_ATTRIBUTES:
             r.relationship_row(cid, dangling, typeid=typeid, group='1')
         members += 1
@@ -912,6 +919,92 @@ def author_medicine_model(r: Rows):
     return n
 
 
+AMT_PRODUCT_ROOT = '30506011000036107'      # the root the units assertions scope to
+MP_REFSET = '929360021000036102'
+
+
+def author_preferred_term_defects(r: Rows):
+    """Assertions that read the ADRS PREFERRED term and object to what it says.
+
+    They all need the same three rows - a concept, a synonym, and a preferred
+    language row in the ADRS dialect - and differ only in the text and in which
+    hierarchy or refset the concept has to sit in. Which is why they were all
+    silent together: the fixture had no ADRS preferred terms at all until this
+    generator started writing them, and these particular texts still had to be
+    authored, because the assertions are about specific wording conventions.
+    """
+    n = 0
+
+    def with_adrs_pt(term, tag, refsets=(), under=None, module=AMT_MODULE):
+        cid = r.next_id(CONCEPT_P, '00')
+        r.concept_row(cid, status=DEFINED, module=module)
+        r.description_row(cid, f'{term} ({tag})', typeid=FSN, module=module)
+        did = r.description_row(cid, term, module=module)
+        r.language_row(did)
+        for refset in refsets:
+            r.simple.append((r.next_uuid(), CURR, '1', AMT_MODULE, refset, cid))
+        if under:
+            r.relationship_row(cid, under, typeid=IS_A)
+        return cid
+
+    # "AMT preferred terms do not contain LD50" - a dose expressed as a lethal
+    # dose, which is a laboratory measure and not a clinical one.
+    with_adrs_pt('AMT vaccine 40 LD50 per dose injection', 'clinical drug',
+                 refsets=('929360071000036103',))
+    n += 1
+
+    # "No active AMT products contain antigen without antigen units" - 'antigen'
+    # on its own leaves the quantity unitless.
+    with_adrs_pt('AMT vaccine 25 antigen per dose suspension', 'clinical drug',
+                 under=AMT_PRODUCT_ROOT)
+    n += 1
+
+    # The two International Units assertions and the Kyowa one: a unit that only
+    # a handful of named products may use, on a product that is not one of them.
+    with_adrs_pt('AMT somatropin 10 international units injection', 'clinical drug',
+                 under=AMT_PRODUCT_ROOT)
+    n += 1
+    with_adrs_pt('AMT filgrastim 300 Kyowa units injection', 'clinical drug',
+                 under=AMT_PRODUCT_ROOT)
+    n += 1
+
+    # "No MP refset members have an INT style preferred term" - the
+    # international "... containing product" wording, which AMT does not use.
+    with_adrs_pt('AMT paracetamol containing product', 'product',
+                 refsets=(MP_REFSET,))
+    n += 1
+
+    # "All TPs are ... 14b": a relationship between two MP-refset members where
+    # neither is a TPUU, which is what that check forbids.
+    a = r.next_id(CONCEPT_P, '00')
+    b = r.next_id(CONCEPT_P, '00')
+    for cid, label in ((a, 'source'), (b, 'destination')):
+        r.concept_row(cid, status=DEFINED)
+        r.description_row(cid, f'AMT product-name {label} in no unit-of-use refset (product name)', typeid=FSN)
+        r.simple.append((r.next_uuid(), CURR, '1', AMT_MODULE, MP_REFSET, cid))
+    r.relationship_row(a, b, typeid='774158006', group='1')
+    n += 1
+
+    # The three ADRS assertions the pattern reader could not satisfy, authored
+    # from their WHERE clauses directly. Each needs a term the trigger matches
+    # and NO companion term, and each excludes hierarchies this content stays
+    # out of by simply having no IsA at all.
+    for term, tag in (('AMT post-operative wound care', 'observable entity'),
+                      ('AMT stammer of speech', 'observable entity'),
+                      ('AMT tendonitis of the shoulder', 'observable entity')):
+        cid = r.next_id(CONCEPT_P, '00')
+        r.concept_row(cid, status=PRIMITIVE)
+        r.description_row(cid, f'{term} ({tag})', typeid=FSN)
+        r.description_row(cid, term)
+        # An ADRS preferred term that exists and deliberately does not carry the
+        # companion wording - the NULL trap again: with no preferred term at all
+        # the NOT REGEXP_MATCHES is NULL rather than true.
+        did = r.description_row(cid, f'{term} as the preferred term')
+        r.language_row(did)
+        n += 1
+    return n
+
+
 def author_map_refset_files(r: Rows):
     """The two map-refset files the fixture does not have at all.
 
@@ -1108,6 +1201,7 @@ def main():
     qualifying = author_qualifying_non_members(r)
     au = author_au_refset_defects(r)
     model = author_medicine_model(r)
+    pts = author_preferred_term_defects(r)
     print(f"  authored {members} class-refset members, each non-compliant in the ways "
           f"the corpus checks, plus one dangling attribute target")
     if adrs_skipped:
@@ -1122,6 +1216,7 @@ def main():
     print(f"  authored {generic} single-mechanism defects for the remaining tail")
     print(f"  authored {qualifying} concepts that qualify for a class refset and are not in it")
     print(f"  authored {au} AU refset defects and {model} medicine-model cases")
+    print(f"  authored {pts} preferred-term and wording defects")
 
     buckets = {'concept': r.concept, 'desc': r.desc, 'rel': r.rel, 'lang': r.lang,
                'simple': r.simple, 'concrete': r.concrete,
