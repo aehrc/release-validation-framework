@@ -847,6 +847,24 @@ rediscovering all of it; extraction was checked for content loss, 107 lines
 moved and 0 lost, and both pipelines were compiled server-side through the
 preview API before either was trusted.
 
+**First green run: 20260910.4 (build 16366).** 235 of 236 identical, 0
+unexplained, 0 uncovered, PASS - the same verdict the local runs give, now
+automated. Agent time on a warm cache, which is what this has to be cheap for:
+
+| step | seconds |
+|---|---|
+| restore the Maven repository | 9 |
+| build the pinned forks | **under 2** - cache hit, script short-circuits |
+| install MySQL (tarball) | 68 |
+| build the jar | 25 |
+| international arm, three groups | 65 |
+| AMT arm | 3, skipped - no overlay on this agent |
+
+Under four minutes of work against sixty for the nightly. The first attempt,
+20260910.1, failed at 'Build the jar' with 'Could not resolve dependencies' -
+the pinned forks step had been left out, which is the failure build 16302
+already documented, in the very file the other steps were copied from.
+
 It gates by cause, exactly as the nightly does, so a new divergence fails the
 build and a baseline entry that has stopped diverging fails it too. It is
 explicitly NOT a substitute for pipeline 69: edition scale, real module wiring
