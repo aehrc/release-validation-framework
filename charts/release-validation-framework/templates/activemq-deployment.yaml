@@ -37,6 +37,14 @@ spec:
               containerPort: {{ .Values.activemq.service.consolePort }}
           resources:
             {{- toYaml .Values.activemq.resources | nindent 12 }}
+          volumeMounts:
+            - name: activemq-config
+              mountPath: /opt/apache-activemq/conf/activemq.xml
+              subPath: activemq.xml
+      volumes:
+        - name: activemq-config
+          configMap:
+            name: {{ include "release-validation-framework.activemq.fullname" . }}-config
       {{- with .Values.activemq.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

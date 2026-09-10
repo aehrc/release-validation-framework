@@ -1,7 +1,8 @@
-suite: test activemq deployment and service
+suite: test activemq deployment, service and configmap
 templates:
   - activemq-deployment.yaml
   - activemq-service.yaml
+  - activemq-configmap.yaml
 tests:
   - it: should render activemq deployment and service with default values
     set:
@@ -38,6 +39,37 @@ tests:
           path: spec.template.spec.containers[0].resources.limits.memory
           value: 1Gi
         template: activemq-deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].name
+          value: activemq-config
+        template: activemq-deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].mountPath
+          value: /opt/apache-activemq/conf/activemq.xml
+        template: activemq-deployment.yaml
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].subPath
+          value: activemq.xml
+        template: activemq-deployment.yaml
+      - equal:
+          path: spec.template.spec.volumes[0].name
+          value: activemq-config
+        template: activemq-deployment.yaml
+      - equal:
+          path: spec.template.spec.volumes[0].configMap.name
+          value: activemq-config
+        template: activemq-deployment.yaml
+      - isKind:
+          of: ConfigMap
+        template: activemq-configmap.yaml
+      - equal:
+          path: metadata.name
+          value: activemq-config
+        template: activemq-configmap.yaml
+      - matchRegex:
+          path: data["activemq.xml"]
+          pattern: '<queue physicalName="rvf-validation-queue" />'
+        template: activemq-configmap.yaml
       - isKind:
           of: Service
         template: activemq-service.yaml
@@ -64,3 +96,6 @@ tests:
       - hasDocuments:
           count: 0
         template: activemq-service.yaml
+      - hasDocuments:
+          count: 0
+        template: activemq-configmap.yaml

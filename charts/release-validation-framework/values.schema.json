@@ -614,6 +614,13 @@
         },
         "affinity": {
           "type": "object"
+        },
+        "extraDestinations": {
+          "type": "array",
+          "description": "Extra static queue destinations to create on ActiveMQ startup",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [

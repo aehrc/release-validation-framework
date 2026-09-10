@@ -280,6 +280,8 @@ activemq:
   tolerations: []
   # -- Affinity rules for ActiveMQ pods
   affinity: {}
+  # -- Extra static queue destinations to create on ActiveMQ startup
+  extraDestinations: []
 
 # -- KEDA Autoscaling configuration
 keda:
