@@ -321,29 +321,56 @@ def sample_matching(pattern: str) -> str | None:
 
 
 def author_adrs_pattern_gaps(r: Rows, requirements):
-    """One concept per ADRS assertion: a term its trigger pattern matches, and
-    where the assertion also reads GET_CR_ADRS_PT, a preferred ADRS synonym
-    matching whatever it wants to find there.
+    """One concept per ADRS assertion, carrying exactly what makes it fire.
 
-    The shape of the family is "a term says X, so some other term must say Y":
-    a concept carrying only the trigger is exactly the violation.
+    A term satisfying every positive pattern at once (they are conjunctions -
+    "ear" AND "nose" AND "throat" - so one sample per pattern, joined), no
+    pattern the assertion excludes, an ADRS preferred term when it reads one,
+    and an IsA when it requires a hierarchy. Verified against the patterns
+    before emitting: an assertion this cannot satisfy stays silent rather than
+    getting content that misses.
     """
-    made = 0
-    for name, trigger, adrs_pt in requirements:
-        term = sample_matching(trigger)
-        if not term:
+    made, skipped = 0, []
+    for req in requirements:
+        # The 19 "Preferred terms are unique within <hierarchy>" assertions
+        # have no term pattern at all - they group by the preferred term - and
+        # are authored by author_adrs_duplicate_preferred_terms instead.
+        if not req['want'] and not req['pt_want'] and not req['pt_avoid']:
             continue
+        term = None
+        if req['want']:
+            pieces = [sample_matching(p) for p in req['want']]
+            if any(x is None for x in pieces):
+                skipped.append(req['name'])
+                continue
+            term = ' '.join(dict.fromkeys(pieces))
+            if not all(re.search(p, term) for p in req['want']) or \
+                    any(re.search(p, term) for p in req['avoid']):
+                skipped.append(req['name'])
+                continue
         cid = r.next_id(CONCEPT_P, '00')
         r.concept_row(cid, status=PRIMITIVE)
-        r.description_row(cid, f'{term} (observable entity)', typeid=FSN)
-        r.description_row(cid, term)
-        if adrs_pt:
-            pt = sample_matching(adrs_pt)
-            if pt:
-                did = r.description_row(cid, pt)
-                r.language_row(did)
+        if term:
+            r.description_row(cid, f'{term} (observable entity)', typeid=FSN)
+            r.description_row(cid, term)
+        else:
+            # An assertion that only reads the ADRS preferred term still needs a
+            # concept with an FSN for GET_CR_FSN and the active-concept check.
+            r.description_row(cid, 'AMT concept whose ADRS preferred term is the defect (observable entity)', typeid=FSN)
+        pt = None
+        if req['pt_want']:
+            pt = sample_matching(req['pt_want'])
+        elif req['pt_avoid']:
+            # must exist and must NOT match - see the reader's docstring
+            candidate = 'AMT preferred term deliberately unlike the required one'
+            pt = candidate if not re.search(req['pt_avoid'], candidate) else None
+        if pt:
+            did = r.description_row(cid, pt)
+            r.language_row(did)
+        for root in req['under']:
+            r.relationship_row(cid, root)
         made += 1
-    return made
+    return made, skipped
 
 
 def author_refset_concept_descriptions(r: Rows):
@@ -399,6 +426,61 @@ def author_same_refset_parentage(r: Rows):
     r.relationship_row(child, parent, typeid=IS_A)
     return 2
 
+S8_REFSET = '1050951000168102'
+ALWAYS_S8_INGREDIENT = 'ACETYLDIHYDROCODEINE'   # first of the list the family regexes
+ASSOCIATED_WITH = '774160008'                   # S8 members point at their pack/unit with this
+
+
+def author_s8_membership_gaps(r: Rows):
+    """The S8 family, which is nine assertions all of one shape: a controlled
+    drug is in the S8 refset and the thing it points at is not.
+
+    So each pair here is an S8 member of one class refset holding a 774160008 or
+    an IsA to a member of another class refset that is deliberately NOT in S8 -
+    which is the propagation failure the family exists to catch, and a real one:
+    an S8 unit of use whose pack is not scheduled is a dispensing error waiting
+    to happen.
+
+    Two of them read GET_CR_FSN for an always-S8 ingredient name instead, so one
+    member carries ACETYLDIHYDROCODEINE in its FSN and is not in S8 at all.
+    """
+    pairs = [
+        # (S8 member's class refset, target's class refset, relationship type)
+        ('929360031000036100', '929360071000036103', ASSOCIATED_WITH),  # TPUU -> MPUU
+        ('929360031000036100', '929360041000036105', ASSOCIATED_WITH),  # TPUU -> TPP
+        ('929360071000036103', '929360081000036101', ASSOCIATED_WITH),  # MPUU -> MPP
+        ('929360051000036108', '929360041000036105', ASSOCIATED_WITH),  # CTPP -> TPP
+        ('929360031000036100', '929360071000036103', IS_A),             # TPUU isa MPUU
+        ('929360081000036101', '929360051000036108', IS_A),             # MPP isa CTPP
+    ]
+    made = 0
+    for source_refset, target_refset, typeid in pairs:
+        s8_member = r.next_id(CONCEPT_P, '00')
+        r.concept_row(s8_member, status=DEFINED)
+        r.description_row(s8_member, f'AMT scheduled product {made} (branded clinical drug)', typeid=FSN)
+        r.simple.append((r.next_uuid(), CURR, '1', AMT_MODULE, source_refset, s8_member))
+        r.simple.append((r.next_uuid(), CURR, '1', AMT_MODULE, S8_REFSET, s8_member))
+
+        target = r.next_id(CONCEPT_P, '00')
+        r.concept_row(target, status=DEFINED)
+        r.description_row(target, f'AMT unscheduled counterpart {made} (clinical drug)', typeid=FSN)
+        r.simple.append((r.next_uuid(), CURR, '1', AMT_MODULE, target_refset, target))
+        # and deliberately NOT in S8
+
+        r.relationship_row(s8_member, target, typeid=typeid)
+        made += 1
+
+    # The two ingredient-name assertions: an always-S8 substance named in the
+    # FSN of a product that is not in the S8 refset.
+    for refset in ('929360031000036100', '929360051000036108'):
+        cid = r.next_id(CONCEPT_P, '00')
+        r.concept_row(cid, status=DEFINED)
+        r.description_row(cid, f'{ALWAYS_S8_INGREDIENT} 30 mg tablet (branded clinical drug)', typeid=FSN)
+        r.simple.append((r.next_uuid(), CURR, '1', AMT_MODULE, refset, cid))
+        made += 1
+    return made
+
+
 def author_map_refset_files(r: Rows):
     """The two map-refset files the fixture does not have at all.
 
@@ -453,13 +535,20 @@ def author_map_refset_files(r: Rows):
 
 
 def adrs_pattern_requirements():
-    """Reads the ADRS assertions out of the published store: for each, the first
-    positive `REGEXP_MATCHES(term, ...)` and, if it reads the ADRS preferred
-    term, the pattern it wants to find there.
+    """Reads each ADRS assertion's requirement out of the published store.
 
-    Read rather than transcribed. There are 22 of them, the patterns are the
-    requirement, and a pattern I retyped would drift the moment the corpus
-    changed - which it does, since the AMT scripts live in another repository.
+    Four things matter and all four are in the SQL: the term patterns that must
+    match, the ones that must not, whether the assertion reads the ADRS
+    preferred term positively or negatively, and any hierarchy the concept has
+    to be under. Read rather than transcribed - there are 22, the patterns ARE
+    the requirement, and the AMT scripts live in another repository.
+
+    The negative ADRS-preferred-term case is why half of this family stayed
+    silent through two passes. `NOT REGEXP_MATCHES(GET_CR_ADRS_PT(c), 'email')`
+    is not satisfied by a concept with no preferred term: the port returns NULL,
+    the comparison is NULL, and NULL is not true. The concept needs a preferred
+    term that EXISTS and says something else, which is also what the assertion
+    is actually about - a concept that has an ADRS term and got it wrong.
     """
     if not STORE.exists():
         return []
@@ -469,19 +558,21 @@ def adrs_pattern_requirements():
         if not a['file'].startswith('ADRS'):
             continue
         sql = ' '.join(a['statements'])
-        # a positive term match: not preceded by NOT
-        term = None
+        want, avoid = [], []
         for m in re.finditer(r"(NOT\s+)?REGEXP_MATCHES\(\s*term\s*,\s*'((?:[^']|'')+)'", sql):
-            if not m.group(1):
-                term = m.group(2).replace("''", "'")
-                break
-        if not term:
-            continue
-        pt = None
-        m = re.search(r"(NOT\s+)?REGEXP_MATCHES\(\s*GET_CR_ADRS_PT\([^)]*\)\s*,\s*'((?:[^']|'')+)'", sql)
-        if m and not m.group(1):
-            pt = m.group(2).replace("''", "'")
-        out.append((a['file'], term, pt))
+            (avoid if m.group(1) else want).append(m.group(2).replace("''", "'"))
+        pt_want = pt_avoid = None
+        for m in re.finditer(r"(NOT\s+)?REGEXP_MATCHES\(\s*GET_CR_ADRS_PT\([^)]*\)\s*,\s*'((?:[^']|'')+)'", sql):
+            if m.group(1):
+                pt_avoid = m.group(2).replace("''", "'")
+            else:
+                pt_want = m.group(2).replace("''", "'")
+        # a hierarchy the concept must be under, and ones it must not
+        under = [m.group(2) for m in re.finditer(r"(?<!NOT )(IS(?:KINDOF|DESCENDENTOF))_CR\(\s*\w+\s*,\s*(\d+)\)", sql)
+                 if 'NOT ' + m.group(1) not in sql[max(0, m.start() - 4):m.end()]]
+        out.append({'name': a['file'], 'want': want, 'avoid': avoid,
+                    'pt_want': pt_want, 'pt_avoid': pt_avoid,
+                    'under': under[:1]})
     return out
 
 
@@ -547,17 +638,23 @@ def main():
           f"{len(ADRS_HIERARCHIES)} hierarchies")
     print(f"  authored {tags} AMT-module concepts carrying a product-class semantic tag")
     members = author_product_model(r)
-    adrs = author_adrs_pattern_gaps(r, adrs_pattern_requirements())
+    adrs, adrs_skipped = author_adrs_pattern_gaps(r, adrs_pattern_requirements())
     refsets = author_refset_concept_descriptions(r)
     author_refset_disjointness_breach(r)
     author_same_refset_parentage(r)
     maps = author_map_refset_files(r)
+    s8 = author_s8_membership_gaps(r)
     print(f"  authored {members} class-refset members, each non-compliant in the ways "
           f"the corpus checks, plus one dangling attribute target")
+    if adrs_skipped:
+        print(f"  {len(adrs_skipped)} ADRS assertion(s) not satisfiable from their patterns alone:")
+        for name in adrs_skipped:
+            print(f"      {name[:72]}")
     print(f"  authored {adrs} concepts from ADRS trigger patterns, "
           f"{refsets} refset concepts with non-canonical names, a disjointness "
           f"breach and a same-refset parent")
     print(f"  authored {maps} rows in the two map-refset files the fixture lacked")
+    print(f"  authored {s8} S8 cases: a scheduled product whose counterpart is not scheduled")
 
     buckets = {'concept': r.concept, 'desc': r.desc, 'rel': r.rel, 'lang': r.lang,
                'simple': r.simple, 'concrete': r.concrete,
