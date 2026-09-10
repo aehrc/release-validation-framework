@@ -357,7 +357,13 @@ def author_refset_concept_descriptions(r: Rows):
     covers the `GET_CR_ADRS_PT(<refset>) = '<name>'` variants.
     """
     for refset, label, _ in CLASS_REFSETS:
-        r.concept_row(refset, status=PRIMITIVE)
+        # Deliberately NO concept row. Nine assertions of the form
+        # `NOT EXISTS(SELECT * FROM concept_active WHERE id = <refset>)` fire
+        # only when the refset concept is ABSENT, and they are one per refset -
+        # so authoring the concept would satisfy nine to fire two. Descriptions
+        # for a concept that is not in the release is itself a real failure mode
+        # (a partially published refset), and the name family reads
+        # description_active only, so both sides fire on the same content.
         r.description_row(refset, f'{label} reference set (foundation metadata concept)', typeid=FSN)
         did = r.description_row(refset, f'{label} refset under a name the corpus does not allow')
         r.language_row(did)
@@ -444,12 +450,19 @@ FILES = {
         'concrete', ''),
 }
 
-AUTHORED_PREFIXES = (CONCEPT_P, DESC_P, REL_P, LANG_P, '00000000-0000')
-
-
 def is_authored(line: str) -> bool:
-    first = line.split('\t')[0]
-    return first.startswith(AUTHORED_PREFIXES)
+    """Every row this generator writes carries the AMT module, and no row in the
+    international fixture does - so that is the idempotence key.
+
+    It replaced keying on id prefixes, which had a hole: the class refsets' own
+    rows are keyed by REAL SCTIDs, so they matched no prefix, were never removed,
+    and survived a run that had stopped authoring them. The stale concept rows
+    then satisfied the nine "refsetId is an active concept" assertions and the
+    measurement moved by nothing at all. moduleId is column 4 of every RF2
+    component and refset file, which is what makes one rule cover them all.
+    """
+    parts = line.split('\t')
+    return len(parts) > 3 and parts[3] == AMT_MODULE
 
 
 def merge(path: pathlib.Path, header, rows):
