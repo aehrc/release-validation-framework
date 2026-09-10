@@ -56,7 +56,7 @@ the pre-existing Docker failures. Nothing of mine needs changing.
 
 ## 3. Mine, unblocked, in this order
 
-**3.1 Confirm the scheduled nightly runs amtv4 by itself.** Build 16284 proved
+**3.1 Confirm the scheduled nightly runs amtv4 by itself. DONE 2026-09-10, build 16321.** Build 16284 proved
 the configuration (1,482 records, SQL 425, 200 amtv4, 5 real failures), but it
 was queued by hand. One check of the next resource-triggered run closes it.
 *Acceptance:* a scheduled build with `amtv4` in `groupsList` and SQL 425.
@@ -144,7 +144,7 @@ assertions agreed, 44 of them by matching nothing on either engine. Counting
 failures per assertion cannot tell "both engines answered the same" from
 "neither engine was given content to answer".
 
-**3.6a An AMT pack must declare its prerequisite in the corpus.** The AMT
+**3.6a An AMT pack must declare its prerequisite in the corpus. DONE 2026-09-09.** The AMT
 `pre-requisites.sql` builds the 13 `*_active` views its assertions read. It was
 carried in the store for the DuckDB path but never declared in the corpus
 manifest, so the incumbent engine never built them: **192 of 258 assertions came
@@ -157,7 +157,7 @@ the ports stand in for it on the DuckDB side.
 *Acceptance:* the pack build emits the entry, and an A/B of the pack shows no
 `*_active` table errors.
 
-**3.6b Three AMT-run divergences, none yet in a baseline.** From the same A/B
+**3.6b Three AMT-run divergences, none yet in a baseline. RESOLVED 2026-09-10 - see 3.11.** From the same A/B
 (AU edition, amtv4 + component-centric-validation, no dependency release
 supplied; MySQL 4020s vs DuckDB 120s, 33.5x):
 
@@ -261,7 +261,7 @@ does for the international 360, and that has to live beside the scripts in
 `aehrc/rvf`: recording a digest for an assertion whose SQL is not in this
 repository would pin a number nobody here can regenerate. It lands with 1.2.
 
-**3.11 Gate the AMT parity, not only the international.** Asked directly:
+**3.11 Gate the AMT parity, not only the international. DONE 2026-09-10, build 16329.** Asked directly:
 *does this plan include the tests that prove parity for the assertions running
 DuckDB vs MySQL?* Honestly, for the international corpus yes and for the AMT 200
 not yet:
@@ -445,8 +445,8 @@ and it is not ours: MySQL reports -1 on
 `validate_inactivated_component_module` selects `t1.id` from every `%_d` table
 and `identifier_d` has no `id` column. Upstream PR #6 fixes it.
 
-**3.15 The strong per-assertion MySQL oracle is switched off. FOUND
-2026-09-10, needs a decision.** Asked whether the 2023 expectation files execute
+**3.15 The strong per-assertion MySQL oracle is switched off. FIXED
+2026-09-10 - it runs, and 10 of 10 pass.** Asked whether the 2023 expectation files execute
 green. They do not execute at all.
 
 `RVFAssertionsRegressIntegrationTest` is **`@Disabled`**, since **2025-12-23**
@@ -666,7 +666,7 @@ MySQL's PAD SPACE collation is reproduced for GROUP BY but not for term JOINS -
 assertions outright. That belongs in the publisher, with the parse tree.
 
 **3.18 The AMT 200: running on MySQL, and what complete coverage would take.
-2026-09-10.**
+SUPERSEDED by 3.19, 2026-09-10.**
 
 [ci/fixture_ab_amt.sh](../ci/fixture_ab_amt.sh) is the AMT arm of the fixture
 harness - same two engines, same gate, MySQL importing the AMT corpus so the
@@ -828,6 +828,34 @@ The digest is the guard for the international side: it pins what every one of
 the 360 finds, so a fixture edit that silently drops coverage fails the build.
 The AMT side has no in-repo guard because the store is not in the repo - its
 state lives in `ci/known-fixture-divergences-amt.json`.
+
+## 3.20 Parity gated on every push, not only nightly. DONE 2026-09-10.
+
+Until now the two fixture arms ran only when someone ran them by hand. The one
+automated proof of parity was pipeline 69 against a real 892 MB release - sixty
+minutes, on a pool with one online agent, nightly - so a change that broke
+parity on the fixture was caught a day later, behind whatever else held the
+agent, or not at all.
+
+Definition **70, `rvf-duckdb-fixture-ab`**, runs `az/azure-pipeline.fixture-ab.yml`
+on push and on pull request. No release download and no Docker: the fixture is
+in the repository and each arm takes under a minute. Setup is the long pole, so
+the JDK and MySQL steps are now templates - `az/steps-jdk25.yml` and
+`az/steps-mysql-tarball.yml` - that pipeline 69 includes too. That MySQL step
+carries the detail of six failed builds, and a second copy of it would mean
+rediscovering all of it; extraction was checked for content loss, 107 lines
+moved and 0 lost, and both pipelines were compiled server-side through the
+preview API before either was trusted.
+
+It gates by cause, exactly as the nightly does, so a new divergence fails the
+build and a baseline entry that has stopped diverging fails it too. It is
+explicitly NOT a substitute for pipeline 69: edition scale, real module wiring
+and 24 minutes of MySQL are a different question.
+
+The AMT arm skips loudly where the overlay is absent, naming which of the corpus
+and store it could not find. Failing a build for content it was never given
+would be wrong; passing silently would let the arm quietly stop running.
+Publishing the AMT pack (1.2) is what removes that condition.
 
 ## 4. Known, deliberate, not scheduled
 
