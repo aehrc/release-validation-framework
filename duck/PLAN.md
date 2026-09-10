@@ -490,10 +490,31 @@ nobody could tell drift from defect today.
   the automated cross-engine parity test that does not exist today. Cannot be
   verified on this workstation: no Docker, no podman, nothing. The image
   pipeline runs the suite, so iterating there builds and pushes images.
-* **Reuse the A/B stack on the fixture.** `ci/engine_ab_stack.sh` already
-  installs MySQL from a tarball unprivileged - no Docker - and runs both engines.
-  Pointed at a zipped fixture instead of an 892MB release it would take minutes,
-  and it produces the same per-assertion comparison the nightly gate does.
+* **Reuse the A/B stack on the fixture. BUILT 2026-09-10:
+  [ci/fixture_ab.sh](../ci/fixture_ab.sh).** 43 seconds for 159 assertions
+  compared per assertion, on this workstation, no Docker. The DuckDB half is
+  sound. The MySQL half is not yet evidence: 190 SQL assertions, findings in
+  none, against DuckDB's 136 of 189, because neither release reaches MySQL's
+  schemas - every release-type assertion compares a release against its
+  previous, and empty against empty is zero findings for all of them. The log
+  says `Previous release ... not found from Module Storage Coordinator` and
+  creates the schema anyway.
+
+  Ruled out, each checked: extraction (`ReleaseImporter` yields 21/20/20 files,
+  right names), the table shape (generated DDL matches the fixture header column
+  for column), the data (`LOAD DATA LOCAL INFILE` by hand inserts all 19 rows),
+  the server (`local_infile` ON, `secure_file_priv` NULL), and the loader not
+  being reached (115 load statements, 57 + 58, naming the fixture's own files).
+  The CI A/B does not have this problem - 16337 had MySQL finding real failures
+  on a real release - so it is this fixture or this path, not MySQL.
+
+  Both engines agree EXACTLY on the 56 `ARCHIVE_STRUCTURAL` failures, which is
+  worth stating: the fixture is 2013 data and fails today's column patterns
+  identically on both sides.
+
+  *Next, and it is now a 43-second loop:* find where the MySQL leg loses the
+  release. Then the DuckDB digest and a live MySQL run can be compared per
+  assertion in one command, which is the cross-engine test that does not exist.
 
 ## 4. Known, deliberate, not scheduled
 
