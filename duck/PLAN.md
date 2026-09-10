@@ -516,6 +516,79 @@ nobody could tell drift from defect today.
   release. Then the DuckDB digest and a live MySQL run can be compared per
   assertion in one command, which is the cross-engine test that does not exist.
 
+**3.16 The fixtures were corrupt; repairing them found a real DuckDB false
+negative. 2026-09-10.**
+
+**The repair.** 20 malformed rows across both regression fixtures, in three
+classes, each repaired from evidence in the files rather than a guess:
+
+| rows | corruption | repair |
+|---|---|---|
+| 3 | a TAB inside a term, splitting one field into two | join the halves - the tab was inserted after a space in every case, so the term restores exactly |
+| 16 | `caseSignificanceId` absent entirely | fill with `900000000000020002`, the fixture's own dominant value (37 of 57) and the SNOMED convention for the FSNs these are |
+| 1 | a double tab leaving an empty field in an association row | drop the empty field, restoring `targetComponentId` to its column |
+
+Not deliberate, and the proof is that **the tab sits at a different position in
+Delta than in Snapshot for the same description id**. No designed case differs
+per file. The four `caseSignificanceId` rows are also referenced by ZERO
+findings in the 2023 expectations - data that fires nothing tests nothing - and
+the terms end `(procedure` with no bracket in both files, so that part is the
+fixture's own data and was left alone.
+
+Effect: `ci/fixture_ab.sh` on `release-type-validation` went from 5 divergences
+to **0 - 122 of 122 identical**. Seven DuckDB assertions' findings moved DOWN to
+MySQL's numbers, because DuckDB had been reporting findings about the corruption
+itself. All three groups: **210 joined, 208 identical (99.0%)**, 526 tests still
+green.
+
+**The defect it uncovered.** With the noise gone, one real divergence surfaced:
+`component-centric-snapshot-description-unique-term-in-concept`, MySQL 1 and
+DuckDB 0. Concept 703860006 has two ACTIVE descriptions whose terms differ only
+in trailing whitespace - `'Exposure to vibration  '` and
+`'Exposure to vibration '`. MySQL's collation is **PAD SPACE**, so they group
+together and the duplicate is reported; DuckDB compares exactly and reports
+nothing. The assertion says "all active description terms are unique" and the
+port is otherwise faithful - both engines filter `active = 1`, both use
+`count(distinct a.id) > 1` - so this is a string-semantics difference the port
+does not model, not a transpilation slip.
+
+**Exposure: 21 statements in 19 assertions join `term = term`, 8 statements in 8
+`GROUP BY term`, 1 uses `DISTINCT term`.** Only this one fires on this fixture
+because only this concept has a trailing-space duplicate; the other ~20 are
+latent. Same shape as the REGEXP surface - a MySQL string behaviour that must be
+replicated deliberately rather than assumed - and it is recorded as a DuckDB
+false negative in `ci/known-fixture-divergences.json`, listed so the gate stays
+usable and NOT because the answer is acceptable.
+
+*Next:* normalise trailing whitespace where PAD SPACE would, and re-measure the
+19 latent assertions.
+
+**Fixture coverage, measured.** All **360 assertions execute** on it (0 not-run,
+since it supplies a previous release and the dependency is now an empty schema),
+and **227 of 360 (63%) find something**. The 133 that run silently are where the
+fixture has no data, and they cluster:
+
+| topic | assertions | fire | silent |
+|---|---|---|---|
+| MRCM | 61 | 6 | **55** |
+| language | 30 | 17 | 13 |
+| concrete values | 11 | **0** | 11 |
+| description | 28 | 18 | 10 |
+| refset | 29 | 22 | 7 |
+| concept | 22 | 17 | 5 |
+| association | 32 | 28 | 4 |
+| relationship, OWL, complex map, extended map, attribute value, simple map | 105 | 99 | 6 |
+| refsetDescriptor / textDefinition | 2 | **0** | 2 |
+
+So: excellent on the RF2 core - concept, description, relationship, association,
+the maps and OWL all fire - and **blind on MRCM (55 of 61 silent) and on
+concrete values (11 of 11)**. That is the honest limit: this fixture is a
+regression harness for the RF2 core, not for MRCM. The MRCM gap matters most,
+because MRCM is also the memory outlier (13.9GiB, §1.3) and the one area where a
+port defect would go unseen here. Closing it means adding MRCM refset rows that
+actually violate the domain/range/attribute rules - a fixture change with real
+content design in it, not a repair.
+
 ## 4. Known, deliberate, not scheduled
 
 * `minAssertions` 1,400 / `minSqlAssertions` 400 depend on the AMT overlay

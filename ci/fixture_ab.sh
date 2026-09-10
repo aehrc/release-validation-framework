@@ -107,9 +107,12 @@ rm -f "store/binaryArchives/$PREVIOUS.zip"
 
 # 3g per JVM is the documented figure for this stack, and the fixture needs
 # nothing like the 8g default that two JVMs plus MySQL would want.
-# This arm is judged by the causes proven ON THE FIXTURE. The release
-# baselines describe real editions and do not apply to 2013 test data.
-HEAP="${HEAP:-3g}" BASELINES="${BASELINES:-ci/known-fixture-divergences.json}" \
+# Judged by the causes proven ON THE FIXTURE, plus the engine-defect file -
+# ci/known-engine-divergences.json holds MySQL's identifier_d procedure bug,
+# which is a defect in an engine rather than a fact about a release, so it
+# applies to any package with an Identifier file including this one. The AU
+# baseline is deliberately NOT loaded: those causes are about real editions.
+HEAP="${HEAP:-3g}" BASELINES="${BASELINES:-ci/known-engine-divergences.json ci/known-fixture-divergences.json}" \
   exec ci/engine_ab_stack.sh \
   --release "releases/$PROSPECTIVE.zip" \
   --previous "$PREVIOUS.zip" \
