@@ -21,21 +21,18 @@ were measured today.
 | ~~1.5~~ | ~~Storage~~ **DONE by Attila, 2026-09-08** | live cluster | Static PVs on `blob.csi.azure.com`, containers `rvf-jobs`/`rvf-releases` on `nctsdevstorage` in resource group `ncts`, `ReadWriteMany`, `Retain`, every blobfuse cache disabled. PVs live in `aehrc/ncts-argo`; this repo's chart and manifests now match. |
 | ~~1.6~~ | ~~`STORAGE_LOCATION` join key~~ **ANSWERED, 2026-09-09** | indexer DB | The indexer keys `rvf_runs` on `(storage_location, rvf_run_id)` and PARSES the name: `ncts-<version>-<siBuild>-rvf<rvfBuild>` yields `release_run_id=<version>-<siBuild>`. Anything else is indexed with a NULL release_run_id - orphaned from its release. The nightly already emits the right shape. |
 
-### Two runs are queued and will answer themselves
+### Both queued runs have now answered  (2026-09-10)
 
-Both wait on the same thing: the dedicated pool has **one online agent**, and
-tonight's `daily-rvf` (**16317**, started 2026-09-09T18:00Z) holds it.
+Both waited on the same thing - the dedicated pool has **one online agent**, and
+`daily-rvf` **16317** held it - and both have since run:
 
-* **3.1** needs definition 66 to resource-trigger off 16317's `RvfStage` and to
-  show `amtv4` in `groupsList` with SQL 425. Everything checkable without the
-  trigger is checked: no definition-level variable overrides the YAML, the
-  `groups` default leads with `amtv4`, and the trigger is on the stage rather
-  than on overall success.
-* **3.7** needs run **16318** (`engine-ab-20260909.12`) to reach its comparison
-  step. Every step before it is green, including resolving and downloading the
-  newest AU edition, 892MB.
+* **3.1** wanted definition 66 to resource-trigger off 16317's `RvfStage` with
+  `amtv4` leading `groupsList`. Build **16321** did exactly that: `groupsList`
+  led with `amtv4`, SQL 425, 1,482 tests, 21 failures, `reason=resourceTrigger`.
+* **3.7** wanted a comparison step to complete. Build **16329** gated **PASS**:
+  147 of 149 identical (98.7%), 0 unexplained, MySQL 1440s against DuckDB 240s.
 
-Neither needs a decision - just the agent.
+Neither needed a decision, and neither needs one now.
 
 ## 2. Attila's - DONE, 2026-09-09
 
@@ -177,7 +174,7 @@ supplied; MySQL 4020s vs DuckDB 120s, 33.5x):
 or fixed. Note that baseline is keyed to the international nightly, so an
 AU/AMT run needs its own.
 
-**3.7 Schedule the differential arm. WIRED 2026-09-09, one run still queued.**
+**3.7 Schedule the differential arm. DONE 2026-09-10, first green run 16329.**
 `az/azure-pipeline.engine-ab.yml` had **no ADO definition at all** - it had only
 ever been run by hand, locally. Now: definition **69 `rvf-duckdb-engine-ab`**,
 authorised for the `ncts-release` variable group and the dedicated pool, and
@@ -195,11 +192,24 @@ after timestamps, and a fresh datadir with no root password. The table in
 [ci/README-engine-ab.md](../ci/README-engine-ab.md) lists each with its build
 number and its symptom.
 
-Every step now passes up to the comparison itself: JDK, forks, jar, MySQL,
-release fetch (it resolves and downloads the newest AU edition, 892MB, by
-walking the share the nightly reads), and the selftest. The A/B step is queued
-behind tonight's `daily-rvf`, which holds the pool's one online agent.
-*Remaining:* one green run of the comparison step.
+Every step now passes, including the comparison. **Build 16329 (2026-09-10) is
+the first green end-to-end run of definition 69:**
+
+```
+identical failureCount           147  (98.7%)
+divergent                          2
+UNEXPLAINED                        0
+uncovered                          0  (known gaps: 0)
+only in DuckDB                     0
+SPEED   RVF/MySQL 1440s   DuckDB 240s   6.0x
+PASS: every divergence is accounted for, coverage is intact, and 147 of 149
+agreements ran on both engines
+```
+
+Against the newest AU daily build (892MB, `...BETA_AU1000036_20260930T120000Z`)
+with the newest published edition before it (891MB, `...PRODUCTION_..._20260831`)
+as the previous release. The two divergences are the two classified baseline
+entries. **DONE.**
 
 **3.8 Console: show what produced the report. DONE 2026-09-09.** The report card
 carries an `assertions from` row, verified in a browser against two real
@@ -319,6 +329,43 @@ Two ways out, and the choice is a design decision rather than a task:
 *Acceptance:* a decision recorded here. My inclination is the second until
 someone actually needs to re-run an old report, because the first trades a
 load-bearing invariant for a capability nobody has asked for yet.
+
+**3.13 Console: in-flight runs, and why the list was slow. DONE 2026-09-10.**
+Asked: show running and pending executions with when they were submitted and how
+long they have been running; and why does the panel take a few seconds, should it
+be paginated.
+
+The listing already included in-flight runs - a run appears as soon as
+`rvf/state.txt` exists, before any report - but it showed
+`ago(lastModified)`, which is the age of the last state or progress write. A run
+twenty-seven minutes in that logged a phase eight seconds ago read **"just
+now"**. Nothing on disk could do better: `state.txt` is overwritten on every
+transition, so its timestamp is the last change. `writeState` now writes
+`rvf/submitted.txt` once, at QUEUED, and the card shows `10:41 · 27m` with the
+instant on hover. Runs predating the stamp say `last activity 40m ago`, labelled
+as such.
+
+The latency was measured on the API pod, 18 runs:
+
+| what | cost |
+|---|---|
+| the stat walk over the store | 569 ms |
+| reading every report | 1110 ms |
+| one report (1.1 MB) | 32 ms |
+| reading every report **again** | 1106 ms |
+
+Nothing is cached, by design: the storage decision (§1.5) turns every blobfuse
+cache off. So the listing was reading **10.3 MB to display a dozen numbers per
+row**, and at the 200 rows the console asks for it would have been ~18s. Each
+operation on that mount is a round trip at ~16 ms, so the fix was to do fewer of
+them: one `readAttributes` where there were three calls per directory; a few
+hundred byte `rvf/summary.json` beside each report, written by the same parser
+that reads it and deleted when the report is rewritten; and `progress.txt` and
+`submitted.txt` read for in-flight runs only, since nothing else displays them.
+
+The table pages 25 at a time. The in-flight card is deliberately **not** paged -
+a run queued four days ago sorts below sixty finished ones and is exactly the run
+someone is looking for.
 
 ## 4. Known, deliberate, not scheduled
 
