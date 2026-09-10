@@ -332,7 +332,10 @@ function since(iso) {
   const m = Math.floor(s / 60);
   if (m < 60) return `${m}m`;
   const h = Math.floor(m / 60);
-  return `${h}h ${m % 60}m`;
+  if (h < 48) return `${h}h ${m % 60}m`;
+  // A queue that has been stuck for days should say days. "96h 0m" is the
+  // shape of a number nobody reads.
+  return `${Math.floor(h / 24)}d ${h % 24}h`;
 }
 
 /* The wall clock of an instant, for "submitted at". Date, too, when it was not
@@ -432,6 +435,14 @@ function scheduleRunsRefresh() {
   runsTimer = setTimeout(() => loadRuns({ quiet: true }), 10000);
 }
 
+/* A page of rows, not all of them. The server hands back up to 200 runs and a
+ * week of nightlies plus ad-hoc submissions fills that; a table that long
+ * buries the newest run under a scroll bar, which is the one a person came to
+ * see. The in-flight card above is deliberately NOT paged - it is fed by the
+ * whole list, so a queued run cannot hide on page three. */
+const RUNS_PER_PAGE = 25;
+let runsPage = 0;
+
 function drawRuns() {
   const needle = $('#runFilter').value.trim().toLowerCase();
   const onlyFailures = $('#onlyFailures').checked;
@@ -448,14 +459,21 @@ function drawRuns() {
     return;
   }
 
+  // A filter that shortens the list must not leave the view on a page that no
+  // longer exists, showing an empty table over a "page 4 of 2".
+  const pages = Math.ceil(rows.length / RUNS_PER_PAGE);
+  runsPage = Math.min(Math.max(0, runsPage), pages - 1);
+  const from = runsPage * RUNS_PER_PAGE;
+  const page = rows.slice(from, from + RUNS_PER_PAGE);
+
   $('#runList').innerHTML = `
     <table class="runs">
       <thead>
         <tr><th>when</th><th>package</th><th>groups</th><th>result</th><th>run id</th><th></th></tr>
       </thead>
       <tbody>
-        ${rows.map((r, i) => `
-          <tr data-i="${i}"${r.runId ? ' class="openable" tabindex="0" role="button"' : ''}>
+        ${page.map((r, i) => `
+          <tr data-i="${from + i}"${r.runId ? ' class="openable" tabindex="0" role="button"' : ''}>
             <td>${esc(ago(r.lastModified))}</td>
             <td>${esc(r.testFileName || r.storageLocation)}</td>
             <td class="dim">${esc(r.groups || '')}</td>
@@ -465,7 +483,13 @@ function drawRuns() {
             <td>${r.runId ? '<span class="dim">open &rarr;</span>' : ''}</td>
           </tr>`).join('')}
       </tbody>
-    </table>`;
+    </table>
+    ${pages > 1 ? `
+    <div class="pager">
+      <button type="button" class="ghost" id="runsPrev"${runsPage === 0 ? ' disabled' : ''}>&larr; Newer</button>
+      <span class="muted">${from + 1}&ndash;${from + page.length} of ${rows.length}</span>
+      <button type="button" class="ghost" id="runsNext"${runsPage >= pages - 1 ? ' disabled' : ''}>Older &rarr;</button>
+    </div>` : ''}`;
 
   const open = (i) => {
     const r = rows[i];
@@ -477,11 +501,21 @@ function drawRuns() {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(Number(tr.dataset.i)); }
     });
   });
+  const step = (by) => { runsPage += by; drawRuns(); };
+  $('#runsPrev')?.addEventListener('click', () => step(-1));
+  $('#runsNext')?.addEventListener('click', () => step(1));
+}
+
+/* Filtering restarts at the newest page: the row someone is looking for is not
+ * on the page they happened to be on when they started typing. */
+function drawRunsFromTheTop() {
+  runsPage = 0;
+  drawRuns();
 }
 
 $('#refreshRuns').addEventListener('click', loadRuns);
-$('#runFilter').addEventListener('input', drawRuns);
-$('#onlyFailures').addEventListener('change', drawRuns);
+$('#runFilter').addEventListener('input', drawRunsFromTheTop);
+$('#onlyFailures').addEventListener('change', drawRunsFromTheTop);
 
 /* ------------------------------------------------------------- the polling */
 

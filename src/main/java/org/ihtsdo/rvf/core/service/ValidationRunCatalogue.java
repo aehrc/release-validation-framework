@@ -1,6 +1,7 @@
 package org.ihtsdo.rvf.core.service;
 
 import com.google.gson.stream.JsonReader;
+import com.google.gson.Gson;
 import com.google.gson.stream.JsonToken;
 import org.ihtsdo.rvf.core.service.config.ValidationJobResourceConfig;
 import org.slf4j.Logger;
@@ -12,10 +13,17 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.stream.Stream;
 
 /**
@@ -40,6 +48,7 @@ public class ValidationRunCatalogue {
 	private static final String RESULTS = "rvf/results.json";
 	private static final String PROGRESS = "rvf/progress.txt";
 	private static final String SUBMITTED = "rvf/submitted.txt";
+	private static final String SUMMARY = "rvf/summary.json";
 
 	@Autowired
 	private ValidationJobResourceConfig jobResourceConfig;
@@ -85,11 +94,28 @@ public class ValidationRunCatalogue {
 			return List.of();
 		}
 
-		List<Path> runDirs = new ArrayList<>();
+		// Identifying a run and timing it are ONE operation, not two. Every
+		// operation here is a network round trip - the deployed store is
+		// blobfuse with every cache off, measured at ~16ms per call against
+		// nctsdevstorage - and this used to do three per directory: an
+		// isDirectory, an isRegularFile on state.txt, then a getLastModifiedTime
+		// on the same file. Reading the attributes once answers all three, and a
+		// directory with no state.txt is not a run, which is how the uploaded
+		// releases in files_to_validate are excluded.
+		Map<Path, Long> stateModified = new LinkedHashMap<>();
 		try (Stream<Path> entries = Files.list(root)) {
-			entries.filter(Files::isDirectory)
-					.filter(d -> Files.isRegularFile(d.resolve(STATE)))
-					.forEach(runDirs::add);
+			for (Path dir : (Iterable<Path>) entries::iterator) {
+				try {
+					BasicFileAttributes attrs = Files.readAttributes(dir.resolve(STATE), BasicFileAttributes.class);
+					if (attrs.isRegularFile()) {
+						stateModified.put(dir, attrs.lastModifiedTime().toMillis());
+					}
+				} catch (IOException e) {
+					// Not a run directory, or gone since the listing. Either way
+					// there is nothing to show for it.
+					LOGGER.trace("Skipping {}: {}", dir, e.toString());
+				}
+			}
 		} catch (IOException e) {
 			LOGGER.warn("Could not list the job store at {}: {}", root.toAbsolutePath(), e.toString());
 			return List.of();
@@ -99,29 +125,64 @@ public class ValidationRunCatalogue {
 		// directory's timestamp does not move when a run finishes, so ordering on
 		// it would sort by when a run STARTED and bury a run that has just
 		// completed beneath older ones.
-		runDirs.sort(Comparator.comparingLong((Path d) -> lastModified(d.resolve(STATE))).reversed());
+		List<Path> runDirs = new ArrayList<>(stateModified.keySet());
+		runDirs.sort(Comparator.comparingLong((Path d) -> stateModified.getOrDefault(d, 0L)).reversed());
 
 		List<RunSummary> out = new ArrayList<>(Math.min(limit, runDirs.size()));
 		for (Path dir : runDirs) {
 			if (out.size() >= limit) {
 				break;
 			}
-			out.add(summarise(dir));
+			out.add(summarise(dir, stateModified.getOrDefault(dir, 0L)));
 		}
 		return out;
 	}
 
-	private RunSummary summarise(Path dir) {
+	/** A run whose state can no longer change: nothing about it needs re-reading. */
+	private static boolean isTerminal(String state) {
+		return "COMPLETE".equals(state) || "FAILED".equals(state);
+	}
+
+	private RunSummary summarise(Path dir, long stateModified) {
 		String storageLocation = dir.getFileName().toString();
 		String state = readTrimmed(dir.resolve(STATE));
-		// The last line, not the first: RVF appends a line per phase, so the end
-		// of the file is what the run is doing now.
-		String progress = lastLine(dir.resolve(PROGRESS));
-		long modified = Math.max(lastModified(dir.resolve(STATE)), lastModified(dir.resolve(PROGRESS)));
-		// When the run was submitted, written once at QUEUED. Absent for runs
-		// submitted before that existed, and for those the caller has only
-		// lastModified - which is the last state change, not the run's age.
-		String submitted = readTrimmed(dir.resolve(SUBMITTED));
+
+		// progress.txt and submitted.txt are read for runs IN FLIGHT only. The
+		// in-flight card is the only thing that shows either - the run table
+		// below it shows neither - and on a store with no caching each is a
+		// round trip per run whether anything displays it or not.
+		String progress = null;
+		String submitted = null;
+		long modified = stateModified;
+		if (!isTerminal(state)) {
+			// The last line, not the first: RVF appends a line per phase, so the
+			// end of the file is what the run is doing now.
+			progress = lastLine(dir.resolve(PROGRESS));
+			// When the run was submitted, written once at QUEUED. Absent for runs
+			// submitted before that existed, and for those the caller has only
+			// lastModified - which is the last state change, not the run's age.
+			submitted = readTrimmed(dir.resolve(SUBMITTED));
+			modified = Math.max(stateModified, lastModified(dir.resolve(PROGRESS)));
+		}
+
+		// The report's dozen scalars, from the sidecar if it is there. Parsing
+		// the report itself costs a 1.1MB read per run against a mount with
+		// every cache off: 18 runs measured 1,110ms of pure I/O, and it grows
+		// with the store. The sidecar is a few hundred bytes.
+		Path digest = dir.resolve(SUMMARY);
+		try {
+			// Read it rather than asking whether it exists first: absence is an
+			// exception either way, and probing would double the round trips on
+			// the path this exists to make cheap.
+			return readSummary(digest, storageLocation, state, progress, submitted, modified);
+		} catch (NoSuchFileException e) {
+			// Never listed before, or invalidated by a rewritten report.
+			LOGGER.trace("No sidecar for {}", storageLocation);
+		} catch (IOException | RuntimeException e) {
+			// A truncated or half-written sidecar must not hide the report it
+			// was derived from.
+			LOGGER.warn("Ignoring unreadable {}: {}", digest, e.toString());
+		}
 
 		Path results = dir.resolve(RESULTS);
 		if (!Files.isRegularFile(results)) {
@@ -129,10 +190,85 @@ public class ValidationRunCatalogue {
 			return new RunSummary(storageLocation, null, state, progress, null, null, null, null, null, null, null, submitted, modified);
 		}
 		try {
-			return readSummary(results, storageLocation, state, progress, submitted, modified);
+			RunSummary summary = readSummary(results, storageLocation, state, progress, submitted, modified);
+			cache(digest, summary);
+			return summary;
 		} catch (IOException | RuntimeException e) {
 			LOGGER.warn("Could not summarise {}: {}", results, e.toString());
 			return new RunSummary(storageLocation, null, state, progress, null, null, null, null, null, null, null, submitted, modified);
+		}
+	}
+
+	/**
+	 * Writes the sidecar this listing reads next time.
+	 *
+	 * <p>In the REPORT's own shape, so {@link #readSummary} parses both and the
+	 * two cannot drift: one parser, one set of field names. The scalars are
+	 * derived from the report rather than serialised separately for the same
+	 * reason.
+	 *
+	 * <p>Best-effort by design. A read-only store, a full disk or a lost race
+	 * costs the next listing a re-parse and nothing else, so a failure here is
+	 * logged at debug and never propagated - the caller asked for a list of
+	 * runs, not for a cache write.
+	 */
+	private void cache(Path digest, RunSummary s) {
+		Map<String, Object> config = new LinkedHashMap<>();
+		if (s.runId() != null) {
+			config.put("runId", s.runId());
+		}
+		if (s.testFileName() != null) {
+			config.put("testFileName", s.testFileName());
+		}
+		if (s.groups() != null) {
+			// The parser joins this array with ", " and the record holds the
+			// joined string, so a single element round-trips exactly.
+			config.put("groupsList", List.of(s.groups()));
+		}
+		Map<String, Object> result = new LinkedHashMap<>();
+		if (s.totalTestsRun() != null) {
+			result.put("totalTestsRun", s.totalTestsRun());
+		}
+		if (s.totalFailures() != null) {
+			result.put("totalFailures", s.totalFailures());
+		}
+		if (s.totalWarnings() != null) {
+			result.put("totalWarnings", s.totalWarnings());
+		}
+		Map<String, Object> doc = new LinkedHashMap<>();
+		doc.put("validationConfig", config);
+		doc.put("TestResult", result);
+		if (s.startTime() != null) {
+			doc.put("startTime", s.startTime());
+		}
+		if (s.endTime() != null) {
+			doc.put("endTime", s.endTime());
+		}
+
+		// Written beside its target and moved into place: a reader must never
+		// see a half-written sidecar, and a partial one would be indistinguishable
+		// from a report with no numbers in it.
+		Path tmp = null;
+		try {
+			tmp = Files.createTempFile(digest.getParent(), "summary", ".tmp");
+			Files.writeString(tmp, new Gson().toJson(doc), StandardCharsets.UTF_8);
+			try {
+				Files.move(tmp, digest, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+			} catch (AtomicMoveNotSupportedException e) {
+				// SMB and blobfuse mounts do not all offer it.
+				Files.move(tmp, digest, StandardCopyOption.REPLACE_EXISTING);
+			}
+			tmp = null;
+		} catch (IOException | RuntimeException e) {
+			LOGGER.debug("Could not cache {}: {}", digest, e.toString());
+		} finally {
+			if (tmp != null) {
+				try {
+					Files.deleteIfExists(tmp);
+				} catch (IOException ignored) {
+					// Nothing useful to do, and the listing still succeeded.
+				}
+			}
 		}
 	}
 

@@ -191,6 +191,72 @@ class ValidationRunCatalogueTest {
 	}
 
 	@Test
+	void theSecondListingDoesNotReadTheReportAgain() throws IOException {
+		// A report is 1.1MB and the store has no caching, so listing 18 runs
+		// measured 1,110ms of pure I/O against nctsdevstorage. The first listing
+		// writes a sidecar of the dozen numbers a row needs; this proves the
+		// second one uses it, by making the report unreadable in between.
+		writeRun("run_cached", "COMPLETE", report(77L, "packed.zip", 120, 4));
+
+		List<ValidationRunCatalogue.RunSummary> first = catalogue().list(50);
+		assertEquals(Long.valueOf(77L), first.get(0).runId());
+		assertTrue(Files.isRegularFile(store.resolve("run_cached").resolve("rvf").resolve("summary.json")),
+				"the first listing should have cached the numbers");
+
+		Files.writeString(store.resolve("run_cached").resolve("rvf").resolve("results.json"),
+				"{ this is not json");
+
+		List<ValidationRunCatalogue.RunSummary> second = catalogue().list(50);
+		assertEquals(1, second.size());
+		assertEquals(Long.valueOf(77L), second.get(0).runId());
+		assertEquals(Integer.valueOf(120), second.get(0).totalTestsRun());
+		assertEquals(Integer.valueOf(4), second.get(0).totalFailures());
+		assertEquals("packed.zip", second.get(0).testFileName());
+	}
+
+	@Test
+	void anUnreadableSidecarFallsBackToTheReport() throws IOException {
+		// Truncated by a crash mid-write, or written by an older version. The
+		// report is still the source of truth and must win.
+		writeRun("run_bad_cache", "COMPLETE", report(88L, "real.zip", 9, 1));
+		Path rvf = store.resolve("run_bad_cache").resolve("rvf");
+		Files.writeString(rvf.resolve("summary.json"), "{\"validationConfig\": {\"runId\": ");
+
+		List<ValidationRunCatalogue.RunSummary> runs = catalogue().list(50);
+
+		assertEquals(Long.valueOf(88L), runs.get(0).runId());
+		assertEquals(Integer.valueOf(9), runs.get(0).totalTestsRun());
+	}
+
+	@Test
+	void aFinishedRunDoesNotCostAProgressRead() throws IOException {
+		// Only the in-flight card shows progress or submission time; the run
+		// table shows neither. Reading them for every finished run is two
+		// network round trips per row that nothing displays.
+		writeRun("run_done", "COMPLETE", report(5L, "done.zip", 3, 0), "[3] of [3] assertions are completed.");
+		Files.writeString(store.resolve("run_done").resolve("rvf").resolve("submitted.txt"),
+				"2026-09-10T01:00:00Z");
+
+		List<ValidationRunCatalogue.RunSummary> runs = catalogue().list(50);
+
+		assertNull(runs.get(0).progress(), "a finished run's progress is not read");
+		assertNull(runs.get(0).submitted(), "nor its submission time");
+		assertEquals(Long.valueOf(5L), runs.get(0).runId());
+	}
+
+	@Test
+	void aRunInFlightStillCostsThemBecauseTheCardShowsThem() throws IOException {
+		writeRun("run_live", "RUNNING", null, "[7] of [409] assertions are completed.");
+		Files.writeString(store.resolve("run_live").resolve("rvf").resolve("submitted.txt"),
+				"2026-09-10T01:00:00Z");
+
+		List<ValidationRunCatalogue.RunSummary> runs = catalogue().list(50);
+
+		assertEquals("[7] of [409] assertions are completed.", runs.get(0).progress());
+		assertEquals("2026-09-10T01:00:00Z", runs.get(0).submitted());
+	}
+
+	@Test
 	void ignoresDirectoriesThatAreNotRuns() throws IOException {
 		writeRun("real_run", "COMPLETE", report(1L, "x.zip", 1, 0));
 		// This is what an uploaded release looks like in the same store.

@@ -43,6 +43,7 @@ public class ValidationReportService {
 	private String resultsFilePath;
 	private String progressFilePath;
 	private String submittedFilePath;
+	private String summaryFilePath;
 	private String structureTestReportPath;
 	private String failureArchivePath;
 	private Gson prettyGson;
@@ -59,6 +60,7 @@ public class ValidationReportService {
 		resultsFilePath = rvfRoot + "results.json";
 		progressFilePath = rvfRoot + "progress.txt";
 		submittedFilePath = rvfRoot + "submitted.txt";
+		summaryFilePath = rvfRoot + "summary.json";
 		structureTestReportPath = rvfRoot + "structure_validation.txt";
 		failureArchivePath = rvfRoot + "failures.parquet";
 		prettyGson = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
@@ -81,6 +83,16 @@ public class ValidationReportService {
 				//Now copy to our S3 Location
 			} 
 			resourceManager.writeResource(storageLocation + resultsFilePath, new FileInputStream(temp));
+			// The listing keeps a small sidecar of this report's headline numbers,
+			// because reading whole reports to list them costs a 1.1MB network
+			// read per run. Writing the report invalidates it: a stale sidecar
+			// would misreport a run that had been re-run into the same location,
+			// and it is rebuilt on the next listing from the report just written.
+			try {
+				resourceManager.deleteResource(storageLocation + summaryFilePath);
+			} catch (IOException e) {
+				logger.debug("No listing sidecar to invalidate for {}: {}", storageLocation, e.toString());
+			}
 			writeState(state, storageLocation);
 		} catch (NoSuchAlgorithmException | IOException | DecoderException e) {
 			throw new BusinessServiceException("Failed to write results to file.", e);

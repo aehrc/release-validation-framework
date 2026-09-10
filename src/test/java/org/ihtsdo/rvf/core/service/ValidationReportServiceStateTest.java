@@ -2,6 +2,8 @@ package org.ihtsdo.rvf.core.service;
 
 import org.ihtsdo.otf.resourcemanager.ResourceConfiguration;
 import org.ihtsdo.rvf.core.service.config.ValidationJobResourceConfig;
+import org.ihtsdo.rvf.core.service.config.ValidationRunConfig;
+import org.ihtsdo.rvf.core.service.pojo.ValidationStatusReport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -79,6 +81,24 @@ class ValidationReportServiceStateTest {
 		assertEquals("COMPLETE", Files.readString(state("run_b")).trim());
 		assertEquals(first, Files.readString(submitted("run_b")),
 				"submitted.txt must be written once, at QUEUED");
+	}
+
+	@Test
+	void writingAReportInvalidatesTheListingSidecar() throws Exception {
+		// The listing caches a report's headline numbers beside it, because
+		// reading whole reports to list them costs a 1.1MB network read each.
+		// A report rewritten into the same location would leave that cache
+		// describing the previous run, so writing one drops it.
+		Path rvf = store.resolve("run_d").resolve("rvf");
+		Files.createDirectories(rvf);
+		Files.writeString(rvf.resolve("summary.json"), "{\"stale\": true}");
+
+		service.writeResults(new ValidationStatusReport(new ValidationRunConfig()),
+				ValidationReportService.State.COMPLETE, "run_d");
+
+		assertTrue(Files.isRegularFile(rvf.resolve("results.json")), "the report was written");
+		assertFalse(Files.exists(rvf.resolve("summary.json")),
+				"the sidecar describing the previous report must not survive it");
 	}
 
 	@Test
