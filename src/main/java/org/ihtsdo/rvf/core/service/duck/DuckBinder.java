@@ -6,6 +6,8 @@ import org.springframework.util.StringUtils;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.Optional;
 
 /**
@@ -44,7 +46,24 @@ public final class DuckBinder {
 	 */
 	public record Config(long runId, String prospectiveSchema, String previousSchema,
 			String dependencySchema, String qaResultTable, String defaultModuleId,
-			Collection<String> includedModules, String version) {
+			Collection<String> includedModules, String version,
+			/**
+			 * A schema holding the whole RF2 table set with no rows, or null.
+			 *
+			 * <p>Only ever used for a statement that cannot tell the difference -
+			 * see {@link #bind}. Supplied by the caller because creating it is the
+			 * caller's job: {@code DuckDbValidationService} materialises an empty
+			 * directory, which gives every declared table a zero-row placeholder.
+			 */
+			String emptySchema) {
+
+		/** The pre-empty-schema shape, for callers with nothing to offer. */
+		public Config(long runId, String prospectiveSchema, String previousSchema,
+				String dependencySchema, String qaResultTable, String defaultModuleId,
+				Collection<String> includedModules, String version) {
+			this(runId, prospectiveSchema, previousSchema, dependencySchema, qaResultTable,
+					defaultModuleId, includedModules, version, null);
+		}
 
 		/** RVF's own fallbacks, and none of them is a blank. */
 		public Config withRvfDefaults() {
@@ -62,7 +81,8 @@ public final class DuckBinder {
 					// `effectivetime = '<VERSION>'` comparison would then match
 					// nothing, so an assertion asking "is there NO row for this
 					// version" flags every row it looks at.
-					StringUtils.hasLength(version) ? version : "NOT_SUPPLIED");
+					StringUtils.hasLength(version) ? version : "NOT_SUPPLIED",
+					emptySchema);
 		}
 	}
 
@@ -82,12 +102,85 @@ public final class DuckBinder {
 		// unbound means skipped, never failed. Executing anyway is not a stricter
 		// check, it is 43 identical "syntax error at or near <" rows that bury
 		// the real failures.
+		// A statement whose ONLY use of the absent release is an anti-join that
+		// requires NULL is fully answerable without it: the join adds no rows and
+		// the NULL test passes for every row, so an empty release and no release
+		// give the same answer. Skipping it does not decline to answer, it
+		// answers a DIFFERENT, smaller question and reports the count as though
+		// it were the whole one.
+		//
+		// Measured on the bundled corpus, for a release with no dependency -
+		// which is every edition run, and `releaseAsAnEdition=true` is what the
+		// nightly submits: 16 statements across the
+		// release-type-snapshot-*-successive-states assertions are anti-join
+		// filters, and 28 in file-centric-snapshot-inactivated-component-module
+		// use the dependency as the thing being compared against. The first
+		// group loses nothing by running; the second cannot be answered at all
+		// and must still be skipped, which is why this is not simply "bind an
+		// empty schema and run everything" - that is MySQL's behaviour, and it
+		// is how one AU assertion reported 1,405,850 findings against a
+		// dependency that was not there.
 		for (String release : List.of("<PREVIOUS>", "<DEPENDENCY>")) {
-			if (s.contains(release)) {
-				return new Bound(null, release);
+			if (!s.contains(release)) {
+				continue;
 			}
+			String emptySchema = emptySchemaFor(release);
+			if (emptySchema != null && onlyAntiJoined(s, release)) {
+				s = s.replace(release, emptySchema);
+				continue;
+			}
+			return new Bound(null, release);
 		}
 		return new Bound(QA_RESULT.matcher(s).replaceAll(config.qaResultTable()), null);
+	}
+
+	/**
+	 * The empty stand-in for a release this run does not hold, or null.
+	 *
+	 * <p>Null for {@code <PREVIOUS>} deliberately. An absent previous release is
+	 * not the same fact: "this component did not exist before" and "there is no
+	 * before" are different answers, and a first-time release is a real case the
+	 * report already handles by saying not-run. The dependency is different -
+	 * a run with no dependency IS complete content, which is what
+	 * {@code isExtensionValidation()} means when it reads the dependency list.
+	 */
+	private String emptySchemaFor(String release) {
+		return "<DEPENDENCY>".equals(release) ? config.emptySchema() : null;
+	}
+
+	/**
+	 * True when every mention of {@code release} is a LEFT JOIN whose alias is
+	 * then required to be NULL - an anti-join, and a no-op against an empty
+	 * relation.
+	 *
+	 * <p>Deliberately narrow: it recognises ONE shape and refuses everything
+	 * else, including a shape it half-recognises. The corpus is transpiled, so
+	 * the shape is uniform, and being wrong in the permissive direction here
+	 * means running a check against nothing and reporting the result as though
+	 * it meant something.
+	 */
+	private static boolean onlyAntiJoined(String sql, String release) {
+		Matcher joins = Pattern.compile("LEFT\\s+JOIN\\s+" + Pattern.quote(release)
+				+ "\\.\\w+\\s+AS\\s+(\\w+)", Pattern.CASE_INSENSITIVE).matcher(sql);
+		int antiJoined = 0;
+		while (joins.find()) {
+			String alias = joins.group(1);
+			if (!Pattern.compile("\\b" + Pattern.quote(alias) + "\\.\\w+\\s+IS\\s+NULL",
+					Pattern.CASE_INSENSITIVE).matcher(sql).find()) {
+				return false;
+			}
+			antiJoined++;
+		}
+		if (antiJoined == 0) {
+			return false;
+		}
+		// Every occurrence has to be one of the joins just counted, or there is
+		// a use this has not looked at.
+		int mentions = 0;
+		for (int i = sql.indexOf(release); i >= 0; i = sql.indexOf(release, i + 1)) {
+			mentions++;
+		}
+		return mentions == antiJoined;
 	}
 
 	/**

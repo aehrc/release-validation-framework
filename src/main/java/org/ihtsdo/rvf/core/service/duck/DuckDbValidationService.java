@@ -112,6 +112,14 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 	private static final String PROSPECTIVE_SCHEMA = "prospective";
 	private static final String PREVIOUS_SCHEMA = "previous";
 	private static final String DEPENDENCY_SCHEMA = "dependency";
+	/**
+	 * The whole RF2 table set with no rows, for a run that HAS no dependency.
+	 *
+	 * <p>Not a stand-in for a dependency that should have been supplied: see
+	 * {@link DuckBinder#bind} for which statements may use it and why the rest
+	 * are still skipped.
+	 */
+	private static final String EMPTY_SCHEMA = "rvf_empty";
 
 	/**
 	 * Where an extension is merged with its dependency. A fourth schema rather
@@ -512,6 +520,26 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 			if (releases.dependency() != null) {
 				lastItemLoadAttempted = "Dependency Release - " + releases.dependency();
 				materialise(connection, releases.dependency(), DEPENDENCY_SCHEMA, store);
+			} else {
+				// A run with no dependency has no dependency CONTENT - which is
+				// a fact, not a gap: isExtensionValidation() IS "the dependency
+				// list is non-empty", and the nightly submits
+				// releaseAsAnEdition=true. So the whole RF2 table set is created
+				// with no rows, for the statements that cannot tell an empty
+				// dependency from an absent one to run against.
+				//
+				// Which statements those are is DuckBinder's decision, not this
+				// one: an anti-join gets the same answer either way, and the 28
+				// statements that compare AGAINST the dependency are still
+				// skipped. Materialising this does not run anything extra by
+				// itself.
+				lastItemLoadAttempted = "Empty dependency schema";
+				Path none = Files.createTempDirectory("rvf-no-dependency");
+				try {
+					materialise(connection, none, EMPTY_SCHEMA, store);
+				} finally {
+					Files.deleteIfExists(none);
+				}
 			}
 			createResultTable(connection);
 		} catch (Exception e) {
@@ -835,7 +863,10 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 				releases.previous() == null ? null : PREVIOUS_SCHEMA,
 				releases.dependency() == null ? null : DEPENDENCY_SCHEMA,
 				qaResultTable, executionConfig.getDefaultModuleId(),
-				executionConfig.getIncludedModules(), version));
+				executionConfig.getIncludedModules(), version,
+				// Offered only when there is no dependency; with one loaded
+				// there is nothing to stand in for.
+				releases.dependency() == null ? EMPTY_SCHEMA : null));
 		try {
 			session(connection, schema);
 		} catch (SQLException e) {

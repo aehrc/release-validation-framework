@@ -35,6 +35,12 @@ class DuckBinderTest {
 				previous, dependency, "rvf_results.qa_result", null, List.of(), null));
 	}
 
+	/** As above, plus the zero-row schema an edition run can offer. */
+	private static DuckBinder binderWithEmpty(String previous, String dependency) {
+		return new DuckBinder(SENTINELS, new DuckBinder.Config(7L, "prospective",
+				previous, dependency, "rvf_results.qa_result", null, List.of(), null, "empty"));
+	}
+
 	@Test
 	void bindsTheRunsValuesIntoAStatement() {
 		DuckBinder.Bound b = binder("previous", null).bind(
@@ -131,4 +137,81 @@ class DuckBinderTest {
 		assertEquals("insert into rvf_results.qa_result select qa_resultant",
 				binder(null, null).bind("insert into qa_result select qa_resultant", "1").sql());
 	}
+
+	@Test
+	void anAbsentDependencyUsedOnlyAsAnAntiJoinRunsAgainstTheEmptySchema() {
+		// The shape of all 16 release-type-snapshot-*-successive-states
+		// statements. An empty relation and no relation give the SAME answer
+		// here - the join adds nothing and the NULL test passes for every row -
+		// so skipping it does not decline to answer, it answers a smaller
+		// question and reports the count as if it were the whole one.
+		DuckBinder.Bound b = binderWithEmpty("previous", null).bind(
+				"insert into qa_result select d.id from rvfph_prospective_.concept_s as d "
+						+ "left join rvfph_dependency_.concept_s as e on d.id = e.id "
+						+ "where e.id is null", "1");
+		assertFalse(b.isSkipped(), "an anti-join against nothing is answerable");
+		assertEquals("insert into rvf_results.qa_result select d.id from prospective.concept_s as d "
+				+ "left join empty.concept_s as e on d.id = e.id where e.id is null", b.sql());
+	}
+
+	@Test
+	void anAbsentDependencyUsedAsTheComparisonTargetIsStillSkipped() {
+		// The shape of the 28 statements in
+		// file-centric-snapshot-inactivated-component-module. Running this
+		// against an empty schema is how MySQL reported 1,405,850 findings on
+		// an AU release whose dependency was never supplied.
+		DuckBinder.Bound b = binderWithEmpty("previous", null).bind(
+				"insert into qa_result select a.id from rvfph_dependency_.concept_s as a "
+						+ "where a.active = 1", "1");
+		assertTrue(b.isSkipped());
+		assertEquals("<DEPENDENCY>", b.skippedFor());
+	}
+
+	@Test
+	void aHalfAntiJoinedDependencyIsSkippedRatherThanGuessed() {
+		// One anti-join and one plain reference. The plain one needs real rows,
+		// so the statement is not answerable - and a rule that recognised the
+		// join it liked and ignored the rest would run it anyway.
+		DuckBinder.Bound b = binderWithEmpty("previous", null).bind(
+				"insert into qa_result select d.id from rvfph_prospective_.concept_s as d "
+						+ "left join rvfph_dependency_.concept_s as e on d.id = e.id "
+						+ "where e.id is null and d.moduleid in "
+						+ "(select moduleid from rvfph_dependency_.concept_s)", "1");
+		assertTrue(b.isSkipped());
+	}
+
+	@Test
+	void anAntiJoinedDependencyWithoutTheNullTestIsSkipped() {
+		// A LEFT JOIN whose alias is never required to be NULL is an OUTER
+		// LOOKUP, not an anti-join: the statement reads e's columns, and
+		// against an empty schema they would all be NULL - a different answer,
+		// quietly.
+		DuckBinder.Bound b = binderWithEmpty("previous", null).bind(
+				"insert into qa_result select d.id, e.moduleid from rvfph_prospective_.concept_s as d "
+						+ "left join rvfph_dependency_.concept_s as e on d.id = e.id", "1");
+		assertTrue(b.isSkipped());
+	}
+
+	@Test
+	void anAbsentPreviousIsNeverStoodInFor() {
+		// "This did not exist before" and "there is no before" are different
+		// answers, and a first-time release is a real case the report already
+		// handles by saying not-run.
+		DuckBinder.Bound b = binderWithEmpty(null, "dependency").bind(
+				"insert into qa_result select d.id from rvfph_prospective_.concept_s as d "
+						+ "left join rvfph_previous_.concept_s as e on d.id = e.id "
+						+ "where e.id is null", "1");
+		assertTrue(b.isSkipped());
+		assertEquals("<PREVIOUS>", b.skippedFor());
+	}
+
+	@Test
+	void withNoEmptySchemaOfferedTheOldSkipStands() {
+		DuckBinder.Bound b = binder("previous", null).bind(
+				"insert into qa_result select d.id from rvfph_prospective_.concept_s as d "
+						+ "left join rvfph_dependency_.concept_s as e on d.id = e.id "
+						+ "where e.id is null", "1");
+		assertTrue(b.isSkipped());
+	}
+
 }

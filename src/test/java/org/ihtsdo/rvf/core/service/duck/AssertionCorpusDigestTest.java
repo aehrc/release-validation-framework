@@ -147,9 +147,18 @@ class AssertionCorpusDigestTest {
 			// effectiveTime against the release being validated. Hardcoding it
 			// here would make the fixture and the binding disagree the first time
 			// the fixture changed.
+			// An empty dependency schema, which is what a release with no
+			// dependency actually has - and `releaseAsAnEdition=true` is what
+			// the nightly submits. Materialising an empty directory gives every
+			// declared table a zero-row placeholder, so a statement whose only
+			// use of the dependency is an anti-join gets the same answer it
+			// would get from a real empty release instead of being skipped.
+			Path noDependency = Files.createTempDirectory("rvf-empty-dependency");
+			DuckMaterialiser.materialise(con, noDependency, "empty", tableColumns);
+
 			DuckBinder binder = new DuckBinder(store.sentinels(), new DuckBinder.Config(
 					RUN_ID, "prospective", "previous", null, QA_RESULT,
-					null, List.of(), "20130731"));
+					null, List.of(), "20130731", "empty"));
 
 			DuckDbAssertionExecutionService service =
 					new DuckDbAssertionExecutionService(store, binder, con);
