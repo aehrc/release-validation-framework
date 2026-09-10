@@ -665,6 +665,75 @@ MySQL's PAD SPACE collation is reproduced for GROUP BY but not for term JOINS -
 21 statements in 19 assertions - because rewriting those by pattern breaks three
 assertions outright. That belongs in the publisher, with the parse tree.
 
+**3.18 The AMT 200: running on MySQL, and what complete coverage would take.
+2026-09-10.**
+
+[ci/fixture_ab_amt.sh](../ci/fixture_ab_amt.sh) is the AMT arm of the fixture
+harness - same two engines, same gate, MySQL importing the AMT corpus so the
+`amtv4` group exists, DuckDB pointed at the merged 560 store. It refuses rather
+than guesses when it cannot find them, because those assertions are not in this
+public repository and must not be.
+
+**MySQL first, and it earned it immediately:**
+
+| | before | after |
+|---|---|---|
+| reported | 239 | 238 |
+| **incomplete** | **184** | **1** |
+| fire | 32 | 37 |
+| ran, found nothing | 23 | 200 |
+
+**One row was costing 183 assertions.** `pre-requisites.sql` builds
+`concept_active` with a UNIQUE index on id; the fixture's concept snapshot holds
+`700132006` twice, byte for byte; so the prerequisite died with
+`Duplicate entry '700132006' for key 'concept_active.concept_active_id_ix'` and
+every `*_active` table was missing - 55 assertions wanting
+`relationship_active`, 43 `description_active`, 26 `simplerefset_active`.
+
+That duplicate is NOT a mistake:
+`component-centric-snapshot-concept-unique-id` exists to find it and does. So
+the international fixture keeps it and the AMT arm packs a release with
+byte-identical snapshot duplicates dropped.
+
+*Upstream defect worth raising:* **the AMT prerequisite cannot process a release
+containing the very defect the corpus has an assertion to detect.** On a real
+release with a duplicate concept, AMT validation loses 184 assertions to
+"incomplete" rather than saying why. `pre-requisites.sql` should build that table
+with a deduplicating select, or without the unique index.
+
+**What complete coverage needs, now specified rather than guessed.** 200 of 238
+run and find nothing, because the fixture has no AMT content. They are:
+
+| family | count | | family | count |
+|---|---|---|---|---|
+| ADRS | 41 | | AMT | 12 |
+| All … | 21 | | S8 Refset | 10 |
+| DNF | 19 | | Full csRefset | 7 |
+| Defines | 14 | | MPUU / TPUU / Trade / Has / Contains | 27 |
+
+They read `relationship_active` (145 references), `concept_active` (138),
+`description_active` (121), `simplerefset_active` (68),
+`relationship_concrete_values_active`, `langrefset_active`,
+`attributevaluemap_f` and `transitiveClosureTable` - so they need a real
+hierarchy, not just rows - and they name **185 distinct SCTIDs**, led by the AMT
+reference sets `929360031000036100`, `929360071000036103`, `929360041000036105`,
+`929360051000036108`, `929360081000036101`, `929360021000036102`,
+`929360061000036106`, the medicinal product attributes `774160008`, `774158006`,
+`774167006`, `411116001`, and the AU metadata `30465011000036106`,
+`1050951000168102`, `999000011000168107`, `999000081000168101`.
+
+*So the remaining work is a medicine-model fixture:* MP/MPUU/MPP/TP/TPUU/TPP/CTPP
+concepts with those seven refsets, the product attributes, AMT-convention
+descriptions and a transitive closure over them. That is content design of the
+same kind as 3.16's MRCM work and several times its size, and it is written down
+rather than half-done.
+
+*And the DuckDB step is blocked on a republish, correctly.* The guard refused the
+run: the store at `/data/work/amt-build/store.json` was published from a corpus
+revision in which **8 of 560 ADRS scripts differ** from the one on disk, 0
+absent. That is exactly what the guard is for - a store executing one corpus's
+SQL while reporting another's text - and it is a republish, not a code change.
+
 ## 4. Known, deliberate, not scheduled
 
 * `minAssertions` 1,400 / `minSqlAssertions` 400 depend on the AMT overlay
