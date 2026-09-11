@@ -1,6 +1,27 @@
 # Upstream PRs: what is ready, and what I got wrong first
 
-Nothing is raised. State as at 2026-09-08.
+**RAISED 2026-09-11 — four of six.** State below is otherwise as at 2026-09-08.
+
+| # | PR | contents |
+|---|---|---|
+| E | [IHTSDO/snomed-release-validation-assertions#8](https://github.com/IHTSDO/snomed-release-validation-assertions/pull/8) | the missing semicolon - confirmed still present on master, and the only one of 453 with that shape |
+| — | [IHTSDO/snomed-release-validation-assertions#7](https://github.com/IHTSDO/snomed-release-validation-assertions/pull/7) | the can-fire linter, the inactivated-component-module procedure fix, and one line of .gitignore |
+| — | [aehrc/rvf#36](https://github.com/aehrc/rvf/pull/36) | 13 AMT assertions that could not fire, the linter, and 3 accounted for by reason |
+| F | [IHTSDO/release-validation-framework#78](https://github.com/IHTSDO/release-validation-framework/pull/78) | GET /assertions owns the list it appends to |
+
+Two of those were not in the original A-F list: they came out of measuring
+per-assertion coverage on 2026-09-10/11. The SI linter PR also had to add
+`!.github/` to `.gitignore`, whose first line is `.*` - that repository cannot
+carry any GitHub Actions workflow until it does.
+
+**A-D are NOT raised.** The recorded recommendation is four PRs rather than two,
+and the local commits bundle A+B and C+D. The seam is not file-disjoint - C and
+D both live in `ValidationService.java` (483 changed lines) and item 3 straddles
+`ReleaseWriter` - so splitting is hunk surgery plus re-verifying each half
+against upstream's suite, four build-and-test cycles rather than a rebase.
+Raising them bundled would contradict the recommendation and make the measured,
+low-risk win wait on the concurrency review, which is the exact failure the
+split exists to avoid.
 
 ## What is already public
 

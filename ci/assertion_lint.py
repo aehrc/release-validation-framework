@@ -244,9 +244,25 @@ def main():
     ap.add_argument('--format', choices=('text', 'github'), default='text',
                     help='github emits ::error annotations')
     ap.add_argument('--ddl', help='create-tables SQL, to check table names for case')
+    ap.add_argument('--allow', help='file of known findings to account for rather than fail on')
     args = ap.parse_args()
 
     stems = table_stems(args.ddl) if args.ddl else RF2_TABLE_STEMS
+
+    # Known findings, accounted for by REASON rather than suppressed by count.
+    # The same shape as this project's engine-divergence baselines: a new finding
+    # fails the build, and an allowed one that has stopped appearing also fails
+    # it, because a baseline entry that no longer applies is a baseline nobody
+    # has read. Format: one `<filename-substring><TAB><reason>` per line, # for
+    # comments.
+    allowed = {}
+    if args.allow:
+        for raw in pathlib.Path(args.allow).read_text().splitlines():
+            if not raw.strip() or raw.lstrip().startswith('#'):
+                continue
+            key, _, reason = raw.partition('\t')
+            allowed[key.strip()] = reason.strip() or '(no reason given)'
+    matched = set()
 
     scanned = 0
     hits = []
@@ -262,21 +278,45 @@ def main():
         for line, reason in case_mismatches(strip_comments(sql), stems):
             hits.append((path, line, reason))
 
+    accounted = []
+    remaining = []
+    for path, line, reason in hits:
+        key = next((k for k in allowed if k in str(path)), None)
+        if key:
+            matched.add(key)
+            accounted.append((path, line, reason, allowed[key]))
+        else:
+            remaining.append((path, line, reason))
+    hits = remaining
+
+    for path, line, reason, why in accounted:
+        print(f'accounted: {path}:{line}: {reason}\n           because: {why}')
+
+    stale = sorted(set(allowed) - matched)
+    for key in stale:
+        msg = (f'{key} is allowed but produced no finding - either it was fixed,'
+               f' in which case remove the entry, or the check stopped seeing it')
+        if args.format == 'github':
+            print(f'::error title=Stale allowance::{msg}')
+        else:
+            print(f'STALE ALLOWANCE: {msg}')
+
     for path, line, reason in hits:
         if args.format == 'github':
             print(f'::error file={path},line={line},title=Assertion cannot fire::{reason}')
         else:
             print(f'{path}:{line}: {reason}')
 
-    print(f'\n{scanned} assertion file(s) scanned, {len(hits)} that cannot fire',
-          file=sys.stderr)
+    print(f'\n{scanned} assertion file(s) scanned, {len(hits)} that cannot fire'
+          f'{f", {len(accounted)} accounted for" if accounted else ""}'
+          f'{f", {len(stale)} STALE allowance(s)" if stale else ""}', file=sys.stderr)
     if hits:
         print('An assertion that cannot report a finding passes for every release'
               ' ever validated. Nothing downstream can notice: it executes, so an'
               ' execution check is satisfied; it finds nothing, which is what a'
               ' clean release looks like; and every engine is silent for the same'
               ' reason, so an engine comparison agrees.', file=sys.stderr)
-    return 1 if hits else 0
+    return 1 if (hits or stale) else 0
 
 
 if __name__ == '__main__':
