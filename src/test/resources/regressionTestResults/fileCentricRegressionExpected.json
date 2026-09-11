@@ -2370,6 +2370,14 @@
       "skipModuleCheck" : false
     }, {
       "conceptId" : "0",
+      "detail" : "ccsrefset ::id= c0000001-0000-0000-0000-0000000003c ::refset id: 900000000000497000 is not in refset descriptor list",
+      "componentId" : null,
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : null,
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "0",
       "detail" : "complexmaprefset ::id= 11f4d944-0b09-58e1-a522-f3560c74f0c1 ::refset id: 447563008 is not in refset descriptor list",
       "componentId" : null,
       "moduleId" : null,
@@ -2392,16 +2400,8 @@
       "fullComponent" : null,
       "tableName" : null,
       "skipModuleCheck" : false
-    }, {
-      "conceptId" : "0",
-      "detail" : "extendedmaprefset ::id= c0000001-0000-0000-0000-0000000001e ::refset id: 447563008 is not in refset descriptor list",
-      "componentId" : null,
-      "moduleId" : null,
-      "fullComponent" : null,
-      "tableName" : null,
-      "skipModuleCheck" : false
     } ],
-    "totalFailed" : 48
+    "totalFailed" : 49
   }, {
     "assertionName" : "All ruleStrengthIds in the MRCM Attribute Domain Refset Snapshot File must refer to valid concepts.",
     "assertionUuid" : "0e8e3549-e704-41a2-a853-fd91a60116ee",
@@ -3609,7 +3609,7 @@
       "tableName" : null,
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 124
+    "totalFailed" : 126
   }, {
     "assertionName" : "There is a 1-to-1 relationship between the id and the immutable values in Inferred Relationship snapshot.",
     "assertionUuid" : "4dbfed80-79b9-11e1-b0c4-0800200c9a66",
