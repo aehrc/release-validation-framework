@@ -17,9 +17,9 @@ were measured today.
 | 1.1 | Raise the upstream PRs | `duck/pr/PLAN.md` | Public PRs under `aehrc`, and the four-way split needs your sign-off. Forks exist; branches are local and unpushed. |
 | 1.2 | Publish the AMT pack | `duck/ASSERTION-PACKS.md` | A branch on the private `aehrc/rvf`. Pack built and verified at `/data/work/amt-pack.json`: 200 assertions, merges to 560, no conflicts. |
 | 1.3 | Lower the worker ceiling | `duck/WORKER-MEMORY.md` | 24Gi -> 16Gi changes KEDA's arithmetic. Experiment written out; findings comparison is the deliverable, not the memory number. |
-| 1.4 | GitHub Support purge | `STATE.md` | Only you can raise it: `5ba5586c` and `f5d1e652` on `aehrc/release-validation-framework`. |
+| ~~1.4~~ | ~~GitHub Support purge~~ **DROPPED 2026-09-11 on your instruction** | `STATE.md` | Not pursuing it. `5ba5586c` and `f5d1e652` stay reachable in the public repo's history and in any fork or clone taken since - so the AMT assertion text they carried is public and stays public. The current tree does not contain it, and `.gitignore` plus `duck/ASSERTION-PACKS.md` keep it out; treat those two commits as disclosed rather than recoverable |
 | 1.5 | Raise the two assertion PRs | `ci/pr/` | A fork of `IHTSDO/snomed-release-validation-assertions` and a branch on the private AMT repo. Both are packaged and measured: the linter, the inactivated-component-module procedure fix, and 13 AMT fixes including the one word that takes the AMT arm to 267/267 |
-| 1.6 | Decide 3.12 | `duck/PLAN.md` 3.12 | Publish the international corpus as a pack, or leave it bundled. My recommendation is recorded: leave it bundled until someone needs to re-run an old report |
+| ~~1.6~~ | ~~Decide 3.12~~ **DECIDED 2026-09-11: bundled, for now** | `duck/PLAN.md` 3.12 | Base stays the corpus in the image; a pack set extends it. Old reports re-run via the old image. Three named triggers reopen it |
 | ~~1.5~~ | ~~Storage~~ **DONE by Attila, 2026-09-08** | live cluster | Static PVs on `blob.csi.azure.com`, containers `rvf-jobs`/`rvf-releases` on `nctsdevstorage` in resource group `ncts`, `ReadWriteMany`, `Retain`, every blobfuse cache disabled. PVs live in `aehrc/ncts-argo`; this repo's chart and manifests now match. |
 | ~~1.6~~ | ~~`STORAGE_LOCATION` join key~~ **ANSWERED, 2026-09-09** | indexer DB | The indexer keys `rvf_runs` on `(storage_location, rvf_run_id)` and PARSES the name: `ncts-<version>-<siBuild>-rvf<rvfBuild>` yields `release_run_id=<version>-<siBuild>`. Anything else is indexed with a NULL release_run_id - orphaned from its release. The nightly already emits the right shape. |
 
@@ -305,7 +305,7 @@ international corpus AND the AMT one and each has its own proven causes; a UUID
 claimed by two baselines is refused rather than letting one arm's tolerance
 decide another's verdict. Run **16329** is the first with all of it in place.
 
-**3.12 The international corpus as a pack, and what a pin cannot reproduce.**
+**3.12 The international corpus as a pack. DECIDED 2026-09-11: bundled, for now.**
 Also asked: *what about the pack for the international tests?* Today it is not a
 pack - it is the store baked into the image, `international@2026.07.27`, and the
 engine always uses it as the merge BASE so a pack set cannot silently drop it.
@@ -328,9 +328,32 @@ Two ways out, and the choice is a design decision rather than a task:
   running the old IMAGE, which the tag already identifies. Nothing to build; the
   cost is that pack pins are only half an answer.
 
-*Acceptance:* a decision recorded here. My inclination is the second until
-someone actually needs to re-run an old report, because the first trades a
-load-bearing invariant for a capability nobody has asked for yet.
+**DECIDED 2026-09-11, by you: leave it bundled FOR NOW.** The second option,
+and the "for now" is part of the decision rather than a hedge.
+
+The invariant stands: the base is always the corpus baked into the image,
+`international@2026.07.27`, a pack set extends it and can never silently replace
+it, and the store-to-corpus guard keeps meaning what it means. Nothing to build.
+
+The cost, so nobody rediscovers it as a surprise: a per-run pack pin reproduces
+the AMT side exactly and the international side only as far as the deployed
+image matches. **Reproducing an old report exactly means running the old IMAGE**,
+which the tag already identifies - the capability exists, it just runs through
+the image tag rather than a pack pin.
+
+*What would reopen this,* so revisiting is a decision and not a rediscovery:
+
+* a specific historical report is needed and its image has aged out of the
+  registry - the retention window is what makes the image route work, and it is
+  finite;
+* the international corpus starts moving often enough that "which corpus did
+  this report use" stops being answerable from the image tag alone;
+* a second international corpus has to run alongside the first, at which point
+  the base being singular is the thing in the way.
+
+None is true today. If one becomes true, the work is publishing this repo's
+store as a pack and letting a pin REPLACE the base by name - about a day, and
+the design is written above.
 
 **3.13 Console: in-flight runs, and why the list was slow. DONE 2026-09-10.**
 Asked: show running and pending executions with when they were submitted and how
