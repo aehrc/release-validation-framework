@@ -9,3 +9,4 @@ id	effectiveTime	active	moduleId	conceptId	languageCode	typeId	term	caseSignific
 3005888018	20140731	1	900000000000207008	702561005	en	900000000000550004	Fracture caused by normal stress upon weakened bone.	900000000000017005
 2988954017	20140131	1	900000000000207008	699683004	en	900000000000550004	Caries in which the lesion has removed so much of the crown that its original site of initiation cannot be determined with any certainty.	900000000000017005
 2983208030	20140131	1	900000000000207008	699220008	en	900000000000550004	A common taste disorder where there is a lingering, often unpleasant taste despite the absence of any stimulus to initiate the distorted taste.	900000000000017005
+997600044017	20130731	0	900000000000207008	997500042003	en	900000000000550004	A text definition that is inactive while its language row is not.	900000000000448009

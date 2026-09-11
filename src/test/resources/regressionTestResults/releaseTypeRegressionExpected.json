@@ -1,7 +1,7 @@
 {
   "assertionType" : "release-type-validation",
   "totalAssertionsRun" : 134,
-  "totalAssertionsFailed" : 126,
+  "totalAssertionsFailed" : 130,
   "results" : [ {
     "assertionName" : "There must be actual changes made to previously published complex map refset components in order for them to appear in the current delta.",
     "assertionUuid" : "80463c76-d84e-4a1a-8abb-c5b4d12b5da4",
@@ -102,8 +102,16 @@
   }, {
     "assertionName" : "Members in the new MRCM Domain Refset Delta file must be different from their previously published version.",
     "assertionUuid" : "8864db45-0f97-4eda-b7ba-414289dd3a99",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "703860006",
+      "detail" : "Mrcm Domain Refset: id=e339cbd9-9c52-57d4-8af4-49828816da32 is in the delta file, but no actual changes made since the previous release.",
+      "componentId" : "e339cbd9-9c52-57d4-8af4-49828816da32",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmdomainrefset_d",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "Inactive components in the Stated Relationship Snapshot file must have been active in the previous version.",
     "assertionUuid" : "89ceaf00-79b9-11e1-b0c4-0800200c9a66",
@@ -471,8 +479,16 @@
   }, {
     "assertionName" : "Members in the new MRCM Attribute Domain Refset Delta file must be different from their previously published version.",
     "assertionUuid" : "b1ebc4cb-6a86-498f-a3ea-aeef250b9399",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "702769005",
+      "detail" : "Mrcm Attribute Domain Refset: id=9bdbbcf2-710b-5f7d-953b-99462c25e519 is in the delta file, but no actual changes made since the previous release.",
+      "componentId" : "9bdbbcf2-710b-5f7d-953b-99462c25e519",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_d",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "Inactive members in the MRCM Attribute Domain Refset Snapshot file must have been active in the previous version.",
     "assertionUuid" : "b205d819-2ef6-48e3-8fe1-1793e83a7b8a",
@@ -1140,8 +1156,16 @@
   }, {
     "assertionName" : "Members in the new MRCM Attribute Range Refset Delta file must be different from their previously published version.",
     "assertionUuid" : "cec2a50e-c04b-4442-a979-e8ad8f83ff91",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "702769005",
+      "detail" : "Mrcm Attribute Range Refset: id=7a1af510-0bb7-521c-851d-e5533f6e41b9 is in the delta file, but no actual changes made since the previous release.",
+      "componentId" : "7a1af510-0bb7-521c-851d-e5533f6e41b9",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributerangerefset_d",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "Inactive members in the MRCM Attribute Range Refset Snapshot file must have been active in the previous version.",
     "assertionUuid" : "d182e8d4-c8e1-4e5f-ae17-b2f786f55727",
@@ -1158,8 +1182,16 @@
   }, {
     "assertionName" : "Members in the new MRCM Module Scope Refset Delta file must be different from their previously published version.",
     "assertionUuid" : "d7e12c75-9979-4adb-9b5b-3b8a80ab4fbb",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "900000000000207008",
+      "detail" : "Mrcm Module Scope Refset: id=a36f6c67-0c7a-5b55-bf8f-c361ac6256a0 is in the delta file, but no actual changes made since the previous release.",
+      "componentId" : "a36f6c67-0c7a-5b55-bf8f-c361ac6256a0",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmmodulescoperefset_d",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "The current text definition delta file is an accurate derivative of the current full file.",
     "assertionUuid" : "dc71ca52-f58e-45c7-8f31-c747206a391c",
@@ -1872,16 +1904,8 @@
       "fullComponent" : null,
       "tableName" : "rvf_regression_test_prospective.mrcmmodulescoperefset_d",
       "skipModuleCheck" : false
-    }, {
-      "conceptId" : "900000000000207008",
-      "detail" : "MRCM MODULE SCOPE REFSET: id=67c5a646-50df-53ff-b8fa-f9cc1794c82f is in delta file but not in snapshot file.",
-      "componentId" : "67c5a646-50df-53ff-b8fa-f9cc1794c82f",
-      "moduleId" : null,
-      "fullComponent" : null,
-      "tableName" : "rvf_regression_test_prospective.mrcmmodulescoperefset_d",
-      "skipModuleCheck" : false
     } ],
-    "totalFailed" : 2
+    "totalFailed" : 1
   }, {
     "assertionName" : "Components in the new Description Delta file must be different from their previously published version.",
     "assertionUuid" : "0cc708af-6816-4370-91be-dba8da99d227",
@@ -2383,8 +2407,16 @@
       "fullComponent" : null,
       "tableName" : "rvf_regression_test_previous.attributevaluerefset_f",
       "skipModuleCheck" : false
+    }, {
+      "conceptId" : "997500053009",
+      "detail" : "AtributeValue: id=c0000001-0000-0000-0000-00000000039 is in previous full file, but not in current full file.",
+      "componentId" : "c0000001-0000-0000-0000-00000000039",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_previous.attributevaluerefset_f",
+      "skipModuleCheck" : false
     } ],
-    "totalFailed" : 9
+    "totalFailed" : 11
   }, {
     "assertionName" : "The current OWL Expression delta file is an accurate derivative of the current full file.",
     "assertionUuid" : "21acfba1-d637-4913-a54d-987f4ac336d1",
@@ -2674,8 +2706,24 @@
       "fullComponent" : null,
       "tableName" : "rvf_regression_test_prospective.attributevaluerefset_s",
       "skipModuleCheck" : false
+    }, {
+      "conceptId" : "997500053009",
+      "detail" : "AttributeRefsetId=c0000001-0000-0000-0000-00000000039 should not have a new inactive state as it was inactive previously.",
+      "componentId" : "c0000001-0000-0000-0000-00000000039",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.attributevaluerefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "997500053009",
+      "detail" : "AttributeRefsetId=c0000001-0000-0000-0000-0000000003a should not have a new inactive state as it was inactive previously.",
+      "componentId" : "c0000001-0000-0000-0000-0000000003a",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.attributevaluerefset_s",
+      "skipModuleCheck" : false
     } ],
-    "totalFailed" : 1
+    "totalFailed" : 3
   }, {
     "assertionName" : "Inactive components in the Description Snapshot file must have been active in the previous version.",
     "assertionUuid" : "2b193a88-8dab-4d19-b995-b556ed59398d",
@@ -3274,16 +3322,8 @@
       "fullComponent" : null,
       "tableName" : "rvf_regression_test_prospective.mrcmattributerangerefset_d",
       "skipModuleCheck" : false
-    }, {
-      "conceptId" : "702769005",
-      "detail" : "MRCM ATTRIBUTE RANGE REFSET: id=06eda4a3-a003-59f5-9321-d4c0e88f24a5 is in delta file but not in snapshot file.",
-      "componentId" : "06eda4a3-a003-59f5-9321-d4c0e88f24a5",
-      "moduleId" : null,
-      "fullComponent" : null,
-      "tableName" : "rvf_regression_test_prospective.mrcmattributerangerefset_d",
-      "skipModuleCheck" : false
     } ],
-    "totalFailed" : 2
+    "totalFailed" : 1
   }, {
     "assertionName" : "The current full extended map file consists of the previously published full file and the current delta file.",
     "assertionUuid" : "5c37bee7-62ad-41f9-93e3-12eb4803e612",
@@ -3960,16 +4000,8 @@
       "fullComponent" : null,
       "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_d",
       "skipModuleCheck" : false
-    }, {
-      "conceptId" : "702769005",
-      "detail" : "MRCM ATTRIBUTE DOMAIN REFSET: id=f7f898cd-429f-5271-ac2b-858af7ad7b6b is in delta file but not in snapshot file.",
-      "componentId" : "f7f898cd-429f-5271-ac2b-858af7ad7b6b",
-      "moduleId" : null,
-      "fullComponent" : null,
-      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_d",
-      "skipModuleCheck" : false
     } ],
-    "totalFailed" : 2
+    "totalFailed" : 1
   }, {
     "assertionName" : "The new Concrete Value Relationship Snapshot file must be derived from the new Full file.",
     "assertionUuid" : "61e574b6-e38b-4561-9240-5169ab9d88db",
@@ -4412,16 +4444,8 @@
       "fullComponent" : null,
       "tableName" : "rvf_regression_test_prospective.mrcmdomainrefset_d",
       "skipModuleCheck" : false
-    }, {
-      "conceptId" : "703860006",
-      "detail" : "MRCM DOMAIN REFSET: id=70f6f81c-56b7-5236-91b5-5b32d993ae7d is in delta file but not in snapshot file.",
-      "componentId" : "70f6f81c-56b7-5236-91b5-5b32d993ae7d",
-      "moduleId" : null,
-      "fullComponent" : null,
-      "tableName" : "rvf_regression_test_prospective.mrcmdomainrefset_d",
-      "skipModuleCheck" : false
     } ],
-    "totalFailed" : 2
+    "totalFailed" : 1
   }, {
     "assertionName" : "The new Inferred Relationship Snapshot file must be derived from the new Full file.",
     "assertionUuid" : "79582950-bf7a-4f63-92cf-7809a29b5dc3",

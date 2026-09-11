@@ -122,6 +122,29 @@ def rows_mrcm_attribute_domain():
     return valid, flawed
 
 
+
+def mrcm_attribute_domain_extra():
+    """Two content defects the MRCM attribute-domain refset assertions want.
+
+    `domainid-exists-in-domain-refset` joins the attribute domain's domainId to
+    the domain refset's members, and `valid-attributeingroupcardinality`
+    requires an ungrouped attribute to have in-group cardinality exactly 0..0.
+    Neither had anything to find while every authored row was internally
+    consistent.
+    """
+    return [
+        # NOT the same absent id the domain refset uses. ABSENT is already a
+        # referencedComponentId there - deliberately, for the "refers to a valid
+        # concept" family - so a domainId of ABSENT is found in the domain refset
+        # and this assertion stays silent. One absent id cannot serve both.
+        (member_id('attrdom-domain-absent'), CURR, '1', CORE_MODULE, ATTRIBUTE_DOMAIN_REFSET,
+         ACTIVE_E, '999999999998', '1', '0..*', '0..1', MANDATORY, ALL_CONTENT),
+        (member_id('attrdom-ungrouped-cardinality'), CURR, '1', CORE_MODULE,
+         ATTRIBUTE_DOMAIN_REFSET, ACTIVE_D, ROOT_CONCEPT, '0', '0..1', '0..1',
+         OPTIONAL, PRECOORDINATED),
+    ]
+
+
 def rows_mrcm_attribute_range():
     """... referencedComponentId rangeConstraint attributeRule ruleStrengthId
     contentTypeId"""
@@ -318,6 +341,8 @@ def main():
         # which is why twelve of them stayed silent after the first MRCM pass.
         undeclared = undeclared_module_row(stem)
         flawed = flawed + undeclared
+        if stem == 'der2_cissccRefset_MRCMAttributeDomain':
+            flawed = flawed + mrcm_attribute_domain_extra()
         prev_full_only, inactive_both, prev_delta = [], [], []
         if not concrete and valid:
             # Distinct member ids, present in ONE file only. A first attempt
@@ -345,10 +370,14 @@ def main():
             # snapshot". Two states that never alternated.
             inactive_both = [stamp(valid[0], '-never-active', active='0')]
 
-            # ...-delta-previous-snapshot-validation wants a delta row that does
-            # not match the previous snapshot it claims to restate, so this one
-            # is stamped for the previous release and appears nowhere else.
-            prev_delta = [stamp(valid[0], '-delta-not-in-previous', effective=PREV)]
+            # ...-delta-previous-snapshot-validation is `WHERE NOT b.id IS
+            # NULL` - it fires when a delta row IS a verbatim repeat of a row
+            # already in the previous snapshot, which is the opposite of what a
+            # first reading assumed. A delta should carry new states only, so
+            # restating an old one is the defect. An exact copy of valid[0],
+            # which the previous snapshot holds unchanged, is therefore the
+            # content: same id, same effectiveTime, same everything.
+            prev_delta = [valid[0]]
         prev_inactive_row = [(r[0], PREV) + tuple(r[2:]) for r in inactive_both]
         for release, kinds in ((PREV, {'Snapshot': valid + prev_extra + prev_inactive_row,
                                        'Full': valid + prev_extra + prev_full_only,

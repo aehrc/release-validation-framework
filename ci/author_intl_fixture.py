@@ -32,7 +32,12 @@ MODEL_MODULE = '900000000000012004'
 MDRS_REFSET = '900000000000534007'
 FSN = '900000000000003001'
 SYNONYM = '900000000000013009'
-PRIMITIVE = '900000000000900001'
+# 900000000000074008 is PRIMITIVE. A previous value of 900000000000900001 is
+# not a definition status at all, and 87 authored concepts carried it - so any
+# assertion checking the definition status was firing on an invalid VALUE rather
+# than on the case it was authored for, and one assertion that wanted a
+# primitive concept with an equivalence axiom could not match at all.
+PRIMITIVE = '900000000000074008'
 CASE_INSENSITIVE = '900000000000448009'
 HISTORICAL_SAME_AS = '900000000000527005'
 
@@ -77,6 +82,9 @@ class Rows:
         self.concept, self.desc, self.mdrs, self.assoc = [], [], [], []
         self.descriptor, self.extmap, self.owl, self.complexmap, self.rel = [], [], [], [], []
         self.desctype, self.simplemap = [], []
+        self.textdef, self.attrvalue, self.attrvalue_prev = [], [], []
+        self.lang = []
+        self.assoc_prev = []
         self._n = 0
 
     def uuid(self):
@@ -274,6 +282,108 @@ def author_duplicate_keys_and_modules(r: Rows):
     return n
 
 
+BE_MODULE = '11000172109'
+BE_DUTCH_REFSET = '21000172104'
+BE_FRENCH_REFSET = '31000172101'
+TEXT_DEFINITION = '900000000000550004'
+OWL_REFSET = '733073007'
+DEFINED = '900000000000073002'
+ATTRIBUTE_VALUE_REFSETS = ('900000000000490003', '900000000000489007')
+
+
+def author_state_and_language_defects(r: Rows):
+    """The last cluster: components whose STATE contradicts something else.
+
+    Each is a pair of rows that disagree - an inactive text definition with a
+    live language row, a primitive concept carrying an equivalence axiom, a
+    Belgian description in one language where two are required, two FSNs
+    differing only in case, a component inactivated while changing module. All
+    of them were silent because the fixture was internally consistent, which is
+    the recurring reason: consistency is exactly what these assertions exist to
+    disprove.
+    """
+    n = 0
+
+    # An INACTIVE text definition with an ACTIVE language refset row: retiring
+    # the definition and leaving its acceptability behind.
+    cid = r.next_id(CONCEPT_P, '00')
+    r.concept.append((cid, CURR, '1', CORE_MODULE, PRIMITIVE))
+    r.desc.append((r.next_id(DESC_P, '01'), CURR, '1', CORE_MODULE, cid, 'en', FSN,
+                   'Concept with a retired text definition (finding)', CASE_INSENSITIVE))
+    dead_def = r.next_id(DESC_P, '01')
+    r.textdef.append((dead_def, CURR, '0', CORE_MODULE, cid, 'en', TEXT_DEFINITION,
+                      'A text definition that is inactive while its language row is not.',
+                      CASE_INSENSITIVE))
+    r.lang.append((r.uuid(), CURR, '1', CORE_MODULE, '900000000000509007', dead_def,
+                   '900000000000548007'))
+    n += 1
+
+    # A PRIMITIVE concept carrying an EquivalentClasses axiom. An equivalence is
+    # a full definition, so the status and the axiom contradict each other.
+    prim = r.next_id(CONCEPT_P, '00')
+    r.concept.append((prim, CURR, '1', CORE_MODULE, PRIMITIVE))
+    r.desc.append((r.next_id(DESC_P, '01'), CURR, '1', CORE_MODULE, prim, 'en', FSN,
+                   'Primitive concept with an equivalence axiom (finding)', CASE_INSENSITIVE))
+    r.owl.append((r.uuid(), CURR, '1', CORE_MODULE, OWL_REFSET, prim,
+                  f'EquivalentClasses(:{prim} :138875005)'))
+    n += 1
+
+    # A Belgian synonym in Dutch with a preferred Dutch language row and no
+    # French counterpart, where the edition requires both.
+    be = r.next_id(CONCEPT_P, '00')
+    r.concept.append((be, CURR, '1', BE_MODULE, PRIMITIVE))
+    nl = r.next_id(DESC_P, '01')
+    r.desc.append((nl, CURR, '1', BE_MODULE, be, 'nl', SYNONYM,
+                   'Belgisch begrip preferent in twee dialecten', CASE_INSENSITIVE))
+    # TWO preferred rows for ONE description, in both BE dialect refsets. The
+    # assertion is `GROUP BY a.id, a.languagecode, a.conceptid HAVING COUNT(a.id)
+    # > 1` - it groups by the DESCRIPTION id, so what it detects is one
+    # description marked preferred in both the Dutch and the French dialect, not
+    # a concept missing a translation. The name reads the other way round.
+    for refset in (BE_DUTCH_REFSET, BE_FRENCH_REFSET):
+        r.lang.append((r.uuid(), CURR, '1', BE_MODULE, refset, nl, '900000000000548007'))
+    n += 1
+
+    # Two FSNs for one concept differing only in case - unique to a
+    # case-sensitive comparison and a duplicate to a case-insensitive one, which
+    # is what the assertion checks.
+    # Two DIFFERENT concepts, one term modulo case. The assertion joins the
+    # delta to a grouped snapshot and requires the match to be against another
+    # ACTIVE CONCEPT - two FSNs on one concept is a different defect and this
+    # check does not see it.
+    dup = None
+    for term in ('Case insensitive duplicate name (finding)',
+                 'CASE INSENSITIVE DUPLICATE NAME (finding)'):
+        cid = r.next_id(CONCEPT_P, '00')
+        dup = dup or cid
+        r.concept.append((cid, CURR, '1', CORE_MODULE, PRIMITIVE))
+        r.desc.append((r.next_id(DESC_P, '01'), CURR, '1', CORE_MODULE, cid, 'en', FSN,
+                       term, CASE_INSENSITIVE))
+    n += 1
+
+    # An attribute-value member inactive in BOTH releases, in the two refsets
+    # the illegal-change assertion names - an inactivation reason edited after
+    # the fact.
+    for refset in ATTRIBUTE_VALUE_REFSETS:
+        # ONE id across both releases: the assertion joins prospective to
+        # previous on a.id = b.id and wants both inactive with the value
+        # changed, so two different ids would join to nothing.
+        member = r.uuid()
+        r.attrvalue.append((member, CURR, '0', CORE_MODULE, refset, dup,
+                            '900000000000492006'))
+        r.attrvalue_prev.append((member, PREV, '0', CORE_MODULE, refset, dup,
+                                 '900000000000487009'))
+    n += 1
+
+    # An association member inactivated while changing module, at an
+    # effectiveTime no earlier than the row it replaces.
+    moved = r.uuid()
+    r.assoc.append((moved, CURR, '0', MODEL_MODULE, HISTORICAL_SAME_AS, dup, KNOWN_CONCEPT))
+    r.assoc_prev.append((moved, PREV, '1', CORE_MODULE, HISTORICAL_SAME_AS, dup, KNOWN_CONCEPT))
+    n += 1
+    return n
+
+
 FILES = {
     'sct2_Concept': (['id', 'effectiveTime', 'active', 'moduleId', 'definitionStatusId'],
                      'concept', '', '_'),
@@ -306,6 +416,18 @@ FILES = {
     'der2_sRefset_SimpleMap': (
         ['id', 'effectiveTime', 'active', 'moduleId', 'refsetId', 'referencedComponentId',
          'mapTarget'], 'simplemap', '', ''),
+    # Appended to, not owned: ci/author_amt_fixture.py writes ADRS rows into
+    # this same file, and each generator strips only its own ids - which is why
+    # the id prefixes have to stay distinct between the two.
+    'der2_cRefset_Language': (
+        ['id', 'effectiveTime', 'active', 'moduleId', 'refsetId', 'referencedComponentId',
+         'acceptabilityId'], 'lang', '-en', ''),
+    'sct2_TextDefinition': (
+        ['id', 'effectiveTime', 'active', 'moduleId', 'conceptId', 'languageCode',
+         'typeId', 'term', 'caseSignificanceId'], 'textdef', '-en', '_'),
+    'der2_cRefset_AttributeValue': (
+        ['id', 'effectiveTime', 'active', 'moduleId', 'refsetId', 'referencedComponentId',
+         'valueId'], 'attrvalue', '', ''),
     'sct2_Relationship': (
         ['id', 'effectiveTime', 'active', 'moduleId', 'sourceId', 'destinationId',
          'relationshipGroup', 'typeId', 'characteristicTypeId', 'modifierId'], 'rel', '', '_'),
@@ -338,18 +460,24 @@ def main():
     print(f"  authored {author_association_defects(r)} association defects")
     print(f"  authored {author_map_and_axiom_defects(r)} map, axiom and character defects")
     print(f"  authored {author_duplicate_keys_and_modules(r)} duplicate-key and wrong-module defects")
+    print(f"  authored {author_state_and_language_defects(r)} state and language contradictions")
 
     buckets = {'concept': r.concept, 'desc': r.desc, 'mdrs': r.mdrs, 'assoc': r.assoc,
                'descriptor': r.descriptor, 'extmap': r.extmap, 'owl': r.owl,
                'complexmap': r.complexmap, 'rel': r.rel,
-               'desctype': r.desctype, 'simplemap': r.simplemap}
+               'desctype': r.desctype, 'simplemap': r.simplemap,
+               'textdef': r.textdef, 'attrvalue': r.attrvalue, 'lang': r.lang}
+    # Rows that belong to the PREVIOUS release, because the assertion compares
+    # the two. Without these the release-comparison checks have one side only
+    # and read as clean.
+    previous = {'attrvalue': r.attrvalue_prev, 'assoc': r.assoc_prev}
     total = 0
     for stem, (header, bucket, lang_suffix, sep) in FILES.items():
         rows = buckets[bucket]
         for release in (PREV, CURR):
             base = ROOT / f'SnomedCT_RegressionTest_{release}' / 'RF2Release'
             for kind in ('Snapshot', 'Full', 'Delta'):
-                emit = rows if release == CURR else []
+                emit = rows if release == CURR else previous.get(bucket, [])
                 path = base / kind / f'{stem}{sep}{kind}{lang_suffix}_INT_{release}.txt'
                 if not path.exists():
                     continue

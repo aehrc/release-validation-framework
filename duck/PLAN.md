@@ -742,8 +742,8 @@ runs, finding proves it detects.
 
 | | executes on both | finds something | A/B |
 |---|---|---|---|
-| international 360 | 360 | **328 (91%)** | 219/220 identical, 0 unexplained |
-| amtv4 200 | 200 | **183 (92%)** - 183 of the 185 that can fire | 259/260 identical, 0 unexplained |
+| international 360 | 360 | **338 (94%)** | 219/220 identical, 0 unexplained |
+| amtv4 200 | 200 | **182 (91%)** - 182 of the 185 that can fire | 263/264 identical, 0 unexplained |
 
 Where it started: international 227, amtv4 **16**, and the amtv4 arm did not run
 on DuckDB at all - the store-to-corpus guard refused it, correctly, and a
@@ -758,10 +758,24 @@ another repository and a retyped constant drifts the moment they change.
 
 ### A denominator that means something
 
-**16 of the 360 international assertions cannot produce a finding by design.**
+**17 of the 360 international assertions cannot produce a finding by design.**
 Every `-proc.sql` and `res-table-*` defines a procedure or builds a resource
-table for other assertions to read. Against the 344 that can report, coverage is
-**328, or 95%**.
+table for other assertions to read, and so does `cleanExpressionFunction.sql`.
+Against the 343 that can report, coverage is **338, or 98%**.
+
+The six still silent are out of a fixture's reach rather than un-authored:
+
+* three read `rvfph_dependency_` or `res_concepts_edited` -
+  `inactivated-component-module`, `language-valid-moduleid`,
+  `file-centric-delta-language-unique` - so they need an extension validation
+  with a dependency release supplied, not content.
+* `refsets-descriptor-validation` builds four temp tables and an ancestor
+  closure before it compares anything.
+* `mdrs-no-module-dependencies-for-edition` is SATISFIED - the module dependency
+  rows authored for this release are exactly what it asks for.
+* `description-unique-fsn-case-insensitive` joins the delta to a grouped
+  snapshot and wants the case-insensitive match to be against a different active
+  concept; two concepts one term apart did not do it and it is not yet clear why.
 
 **15 of the 200 amtv4 assertions cannot fire at all** - they report
 `assertionsPassed` with a failure count of zero for every release ever

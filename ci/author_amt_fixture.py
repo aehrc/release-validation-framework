@@ -33,7 +33,12 @@ SYNONYM = '900000000000013009'
 FSN = '900000000000003001'
 IS_A = '116680003'
 DEFINED = '900000000000073002'
-PRIMITIVE = '900000000000900001'
+# 900000000000074008 is PRIMITIVE. A previous value of 900000000000900001 is
+# not a definition status at all, and 87 authored concepts carried it - so any
+# assertion checking the definition status was firing on an invalid VALUE rather
+# than on the case it was authored for, and one assertion that wanted a
+# primitive concept with an equivalence axiom could not match at all.
+PRIMITIVE = '900000000000074008'
 CASE_INSENSITIVE = '900000000000448009'
 EN = 'en'
 

@@ -1,12 +1,20 @@
 {
   "assertionType" : "component-centric-validation",
   "totalAssertionsRun" : 96,
-  "totalAssertionsFailed" : 88,
+  "totalAssertionsFailed" : 93,
   "results" : [ {
     "assertionName" : "Active concepts must have correct definition status according to defined axioms.",
     "assertionUuid" : "8090d441-7aeb-4a48-bdc3-2545916aa26d",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "997500046000",
+      "detail" : "Active concept 997500046000 is having incorrect definition status according to defined axioms",
+      "componentId" : "997500046000",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.concept_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "Active Non-human refset members refer to active components.",
     "assertionUuid" : "8479317e-8459-4362-bee8-628b8220f1e4",
@@ -395,8 +403,16 @@
   }, {
     "assertionName" : "Lang refset members are active for inactive text definitions in the language refset snapshot file.",
     "assertionUuid" : "9733ecfe-057d-45e6-a2ca-05f3846e6d43",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "997500042003",
+      "detail" : "MEMBER: id=c0000001-0000-0000-0000-0000000002d: Language refset member is active for an inactive text definition.",
+      "componentId" : "c0000001-0000-0000-0000-0000000002d",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.langrefset_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "Check that the expression constraints, refinements and expression templates in multiple columns in MRCM Attribute Range Refset include only valid SNOMED CT concept identifiers.",
     "assertionUuid" : "9ece50b0-cafc-4e13-a66a-a59d315e9f2c",
@@ -562,7 +578,7 @@
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 96
+    "totalFailed" : 101
   }, {
     "assertionName" : "Active concepts do not have active inactivation indicators.",
     "assertionUuid" : "b72bc5f4-7afb-4a2e-ac3a-e0f4373b03e6",
@@ -612,55 +628,55 @@
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     }, {
-      "conceptId" : "997100001008",
-      "detail" : "CONCEPT: id=997100001008: Concept does not have an associated CTV3 refset member.",
-      "componentId" : "997100001008",
+      "conceptId" : "997100191002",
+      "detail" : "CONCEPT: id=997100191002: Concept does not have an associated CTV3 refset member.",
+      "componentId" : "997100191002",
       "moduleId" : null,
       "fullComponent" : null,
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     }, {
-      "conceptId" : "997100006003",
-      "detail" : "CONCEPT: id=997100006003: Concept does not have an associated CTV3 refset member.",
-      "componentId" : "997100006003",
+      "conceptId" : "997100193004",
+      "detail" : "CONCEPT: id=997100193004: Concept does not have an associated CTV3 refset member.",
+      "componentId" : "997100193004",
       "moduleId" : null,
       "fullComponent" : null,
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     }, {
-      "conceptId" : "997100011001",
-      "detail" : "CONCEPT: id=997100011001: Concept does not have an associated CTV3 refset member.",
-      "componentId" : "997100011001",
+      "conceptId" : "997100195006",
+      "detail" : "CONCEPT: id=997100195006: Concept does not have an associated CTV3 refset member.",
+      "componentId" : "997100195006",
       "moduleId" : null,
       "fullComponent" : null,
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     }, {
-      "conceptId" : "997100016006",
-      "detail" : "CONCEPT: id=997100016006: Concept does not have an associated CTV3 refset member.",
-      "componentId" : "997100016006",
+      "conceptId" : "997100197003",
+      "detail" : "CONCEPT: id=997100197003: Concept does not have an associated CTV3 refset member.",
+      "componentId" : "997100197003",
       "moduleId" : null,
       "fullComponent" : null,
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     }, {
-      "conceptId" : "997100021009",
-      "detail" : "CONCEPT: id=997100021009: Concept does not have an associated CTV3 refset member.",
-      "componentId" : "997100021009",
+      "conceptId" : "997100199000",
+      "detail" : "CONCEPT: id=997100199000: Concept does not have an associated CTV3 refset member.",
+      "componentId" : "997100199000",
       "moduleId" : null,
       "fullComponent" : null,
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     }, {
-      "conceptId" : "997100026004",
-      "detail" : "CONCEPT: id=997100026004: Concept does not have an associated CTV3 refset member.",
-      "componentId" : "997100026004",
+      "conceptId" : "997100201003",
+      "detail" : "CONCEPT: id=997100201003: Concept does not have an associated CTV3 refset member.",
+      "componentId" : "997100201003",
       "moduleId" : null,
       "fullComponent" : null,
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 167
+    "totalFailed" : 84
   }, {
     "assertionName" : "ReferencedComponentId in MRCM ATTRIBUTE DOMAIN SNAPSHOT exists in the ReferencedComponentId values of MRCM ATTRIBUTE RANGE SNAPSHOT.",
     "assertionUuid" : "bd3bb9ec-97ae-4c53-9686-9c8c63b8d67b",
@@ -672,8 +688,16 @@
       "fullComponent" : null,
       "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
       "skipModuleCheck" : false
+    }, {
+      "conceptId" : "700132008",
+      "detail" : "MRCM ATTRIBUTE DOMAIN REFSET: id=1eec8f83-18cc-5d2c-935f-0aa6862aadb8 ReferencedComponentId in MRCM ATTRIBUTE DOMAIN SNAPSHOT does not exist in the ReferencedComponentId values of MRCM ATTRIBUTE RANGE SNAPSHOT",
+      "componentId" : "1eec8f83-18cc-5d2c-935f-0aa6862aadb8",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
     } ],
-    "totalFailed" : 1
+    "totalFailed" : 2
   }, {
     "assertionName" : "CTV3 simple map refset members are always active.",
     "assertionUuid" : "c0869af0-7f25-11e1-b0c4-0800200c9a66",
@@ -975,7 +999,7 @@
       "tableName" : "rvf_regression_test_prospective.associationrefset_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 350
+    "totalFailed" : 355
   }, {
     "assertionName" : "Association reference records are referencing the same concept for both referencedComponentId and targetComponentId.",
     "assertionUuid" : "d2727004-cfed-4798-8710-1a088833e775",
@@ -1146,13 +1170,29 @@
   }, {
     "assertionName" : "DomainId in MRCM ATTRIBUTE DOMAIN SNAPSHOT exists in the ReferencedComponentId values of MRCM DOMAIN SNAPSHOT.",
     "assertionUuid" : "f1fc2c4b-9202-4a0b-9c00-49b6de7a7cc5",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "999999999998",
+      "detail" : "MRCM ATTRIBUTE DOMAIN REFSET: id=1eec8f83-18cc-5d2c-935f-0aa6862aadb8 DomainId in MRCM ATTRIBUTE DOMAIN SNAPSHOT does not exist in the ReferencedComponentId values of MRCM DOMAIN SNAPSHOT",
+      "componentId" : "1eec8f83-18cc-5d2c-935f-0aa6862aadb8",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "The attributeInGroupCardinality value must be '0..0' for ungrouped MRCM attribute domains.",
     "assertionUuid" : "f47d1537-41dc-4cb5-ad0a-ed4caf993801",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "703672002",
+      "detail" : "MRCM ATTRIBUTE DOMAIN REFSET: id=a30ce04c-a873-58b8-9a3e-9d1c698eaf48 AttributeInGroupCardinality value is not 0..0",
+      "componentId" : "a30ce04c-a873-58b8-9a3e-9d1c698eaf48",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.mrcmattributedomainrefset_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 1
   }, {
     "assertionName" : "Active VMP simple refset members refer to active components.",
     "assertionUuid" : "f5092a2b-8874-4290-ae96-a04bf568b1ab",
@@ -1263,7 +1303,7 @@
       "tableName" : "rvf_regression_test_prospective.description_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 207
+    "totalFailed" : 211
   }, {
     "assertionName" : "Active historical association refset members have inactive concepts as reference components.",
     "assertionUuid" : "f7117eb0-7cd6-11e1-b0c4-0800200c9a66",
@@ -1463,7 +1503,7 @@
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 55
+    "totalFailed" : 59
   }, {
     "assertionName" : "All active Refset records are valid.",
     "assertionUuid" : "1a4e40a9-cf14-4703-b206-9f2fbeb56c7f",
@@ -2058,7 +2098,7 @@
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 111
+    "totalFailed" : 116
   }, {
     "assertionName" : "IDs must be unique in the Description Snapshot file.",
     "assertionUuid" : "3be8c763-a5bc-404b-af9f-a2cb681f6f3d",
@@ -2104,8 +2144,24 @@
   }, {
     "assertionName" : "All inactive members within the concept and description inactivation indicator reference set have valid modifications to their inactivation indicator reasons.",
     "assertionUuid" : "495b0552-9c9d-4356-b4cf-efba6bea3a0d",
-    "firstNInstances" : [ ],
-    "totalFailed" : 0
+    "firstNInstances" : [ {
+      "conceptId" : "997500053009",
+      "detail" : "Attribute Value Refset id=c0000001-0000-0000-0000-00000000039 is an inactive Description inactivation indicator refset member, but there is an illegal modification of its inactivation indicator reason.",
+      "componentId" : "c0000001-0000-0000-0000-00000000039",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.attributevaluerefset_s",
+      "skipModuleCheck" : false
+    }, {
+      "conceptId" : "997500053009",
+      "detail" : "Attribute Value Refset id=c0000001-0000-0000-0000-0000000003a is an inactive Concept inactivation indicator refset member, but there is an illegal modification of its inactivation indicator reason.",
+      "componentId" : "c0000001-0000-0000-0000-0000000003a",
+      "moduleId" : null,
+      "fullComponent" : null,
+      "tableName" : "rvf_regression_test_prospective.attributevaluerefset_s",
+      "skipModuleCheck" : false
+    } ],
+    "totalFailed" : 2
   }, {
     "assertionName" : "IDs must be unique in the Text Definition Snapshot file.",
     "assertionUuid" : "4ba823ce-8ae4-4b2e-beb5-e119b822cfe2",
@@ -2216,7 +2272,7 @@
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 175
+    "totalFailed" : 179
   }, {
     "assertionName" : "MrcmRuleRefsetId in MRCM MODULE SCOPE SNAPSHOT exists in the RefsetId values of MRCM DOMAIN SNAPSHOT or MRCM ATTRIBUTE DOMAIN SNAPSHOT or MRCM ATTRIBUTE RANGE SNAPSHOT.",
     "assertionUuid" : "57ae69cd-26f0-4001-ba2f-ae56129e2e28",
@@ -2575,55 +2631,55 @@
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     }, {
-      "conceptId" : "997100001008",
-      "detail" : "CONCEPT: id=997100001008: Concept does not have an associated SNOMED RT refset member.",
-      "componentId" : "997100001008",
+      "conceptId" : "997100191002",
+      "detail" : "CONCEPT: id=997100191002: Concept does not have an associated SNOMED RT refset member.",
+      "componentId" : "997100191002",
       "moduleId" : null,
       "fullComponent" : null,
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     }, {
-      "conceptId" : "997100006003",
-      "detail" : "CONCEPT: id=997100006003: Concept does not have an associated SNOMED RT refset member.",
-      "componentId" : "997100006003",
+      "conceptId" : "997100193004",
+      "detail" : "CONCEPT: id=997100193004: Concept does not have an associated SNOMED RT refset member.",
+      "componentId" : "997100193004",
       "moduleId" : null,
       "fullComponent" : null,
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     }, {
-      "conceptId" : "997100011001",
-      "detail" : "CONCEPT: id=997100011001: Concept does not have an associated SNOMED RT refset member.",
-      "componentId" : "997100011001",
+      "conceptId" : "997100195006",
+      "detail" : "CONCEPT: id=997100195006: Concept does not have an associated SNOMED RT refset member.",
+      "componentId" : "997100195006",
       "moduleId" : null,
       "fullComponent" : null,
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     }, {
-      "conceptId" : "997100016006",
-      "detail" : "CONCEPT: id=997100016006: Concept does not have an associated SNOMED RT refset member.",
-      "componentId" : "997100016006",
+      "conceptId" : "997100197003",
+      "detail" : "CONCEPT: id=997100197003: Concept does not have an associated SNOMED RT refset member.",
+      "componentId" : "997100197003",
       "moduleId" : null,
       "fullComponent" : null,
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     }, {
-      "conceptId" : "997100021009",
-      "detail" : "CONCEPT: id=997100021009: Concept does not have an associated SNOMED RT refset member.",
-      "componentId" : "997100021009",
+      "conceptId" : "997100199000",
+      "detail" : "CONCEPT: id=997100199000: Concept does not have an associated SNOMED RT refset member.",
+      "componentId" : "997100199000",
       "moduleId" : null,
       "fullComponent" : null,
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     }, {
-      "conceptId" : "997100026004",
-      "detail" : "CONCEPT: id=997100026004: Concept does not have an associated SNOMED RT refset member.",
-      "componentId" : "997100026004",
+      "conceptId" : "997100201003",
+      "detail" : "CONCEPT: id=997100201003: Concept does not have an associated SNOMED RT refset member.",
+      "componentId" : "997100201003",
       "moduleId" : null,
       "fullComponent" : null,
       "tableName" : "rvf_regression_test_prospective.concept_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 167
+    "totalFailed" : 84
   }, {
     "assertionName" : "ReferencedComponentId in MRCM ATTRIBUTE RANGE SNAPSHOT exists in the ReferencedComponentId values of MRCM ATTRIBUTE DOMAIN SNAPSHOT.",
     "assertionUuid" : "73772817-4654-4abf-b801-e849fbae1ba0",
