@@ -1,0 +1,30 @@
+diff --git a/scripts/resource/file-centric-inactivated-component-module-validation-proc.sql b/scripts/resource/file-centric-inactivated-component-module-validation-proc.sql
+index 84597fe..c15295d 100644
+--- a/scripts/resource/file-centric-inactivated-component-module-validation-proc.sql
++++ b/scripts/resource/file-centric-inactivated-component-module-validation-proc.sql
+@@ -21,9 +21,22 @@ declare qualified_table_name char(255);
+ declare component_part char(255);
+ declare component_label char(255);
+ declare table_cursor cursor for
+-select table_name from information_schema.tables
+-where table_schema = substring_index(prospective_dbname, '.', 1)
+-and table_name like '%\_d';
++-- Only delta tables that HAVE an id column. The dynamic SQL below selects
++-- t1.id, and identifier_d has no id: RF2 identifies those rows by
++-- alternateidentifier, and the schema declares (identifierschemeid,
++-- alternateidentifier, effectivetime, active, moduleid, referencedcomponentid).
++-- So this procedure died on "Unknown column 't1.id'" as soon as that table
++-- existed, and the whole assertion reported incomplete rather than reporting a
++-- finding. Tested against information_schema rather than excluded by name, so a
++-- future table that does not follow the id convention is skipped too - which is
++-- exactly how this broke.
++select t.table_name from information_schema.tables t
++where t.table_schema = substring_index(prospective_dbname, '.', 1)
++and t.table_name like '%\_d'
++and exists (select 1 from information_schema.columns c
++            where c.table_schema = t.table_schema
++            and c.table_name = t.table_name
++            and c.column_name = 'id');
+ declare continue handler for not found set no_more_rows = 1;
+ 
+ open table_cursor;

@@ -7,16 +7,42 @@ could not - for any release, ever.
 They are packaged for the repositories that OWN the assertions rather than kept
 here, because that is the only place the check runs before a pack is built.
 
-## 1. `IHTSDO/snomed-release-validation-assertions` - a guard, nothing to fix
+## 1. `IHTSDO/snomed-release-validation-assertions` - a guard, and one procedure fix
+
+```
+si-assertions/.github/scripts/assertion_lint.py
+si-assertions/.github/workflows/assertion-lint.yml
+si-assertions/fix-inactivated-component-module-proc.patch
+```
+
+### The procedure fix
+
+`file-centric-inactivated-component-module-validation-proc.sql` cursors over
+every `%_d` table and builds dynamic SQL selecting `t1.id`. **`identifier_d` has
+no `id` column** - RF2 identifies those rows by `alternateidentifier`, and the
+schema declares `(identifierschemeid, alternateidentifier, effectivetime,
+active, moduleid, referencedcomponentid)`. So the procedure dies with "Unknown
+column 't1.id'" and the whole assertion reports incomplete, which reads as a
+fault in the assertion rather than a table it was never meant to visit.
+
+The cursor now requires an `id` column, tested against `information_schema`
+rather than excluding `identifier_d` by name - so a future table that does not
+follow the convention is skipped too, which is exactly how this broke.
+
+**Measured:** with the patch applied, MySQL's incomplete count on the fixture
+goes from 1 to 0 and that assertion produces a real result. It is the only thing
+keeping the international arm at 238 of 239 rather than 239 of 239.
+
+## The linter - all five shapes
 
 ```
 si-assertions/.github/scripts/assertion_lint.py
 si-assertions/.github/workflows/assertion-lint.yml
 ```
 
-**All 453 `.sql` files in that repository are clean**, including the 93 not in
-`manifest.xml`. So this PR adds no fixes - it adds the check that keeps it true,
-on every pull request touching SQL.
+**All 453 `.sql` files in that repository are clean of the can-fire defects**,
+including the 93 not in `manifest.xml` - so the linter half of this PR adds a
+check that keeps it true rather than fixing anything.
 
 Verified before proposing it:
 
@@ -32,6 +58,8 @@ assertions to author content for them turned up two more shapes, both verified
 silent in a real run before being called defects:
 
 | shape | files | fixable mechanically? |
+|---|---|---|
+| `ccsRefset_<FULL>` where the schema says `ccsrefset` | 1 | **yes - one word** |
 |---|---|---|
 | `NOT f(id, R) AND f(id, R)` as adjacent conjuncts | 2 | **no - report** |
 | `where val.typeid = (null)` | 1 | **no - report** |
@@ -129,3 +157,25 @@ committed. In this repository the same property is pinned over the bundled store
 by `AssertionCanFireTest`, which also tests the detector against three healthy
 patterns it must leave alone, because a guard that only ever passes proves
 nothing.
+
+
+## A fifth shape, and the sharpest one: table names compared case-sensitively
+
+`ccsRefset_<FULL>` against a schema that declares `ccsrefset_f`. MySQL compares
+table names case-sensitively wherever `lower_case_table_names = 0`, the default
+on Linux, so the statement dies on a table that does not exist, reports
+failureCount -1, and reads as a release that failed to ship a file. A baseline
+entry in this project said exactly that for weeks, blaming the release.
+
+It survives because it is invisible almost everywhere else: DuckDB resolves
+identifiers case-insensitively, and so does MySQL on macOS and Windows. Only a
+Linux MySQL sees it, and only for the one name in 1,107 assertion files that is
+spelled differently.
+
+**Measured:** one word, `ccsRefset_<FULL>` to `ccsrefset_<FULL>`, and the AMT
+fixture arm goes from 266 of 267 to **267 of 267 identical, 0 divergent**, with
+MySQL's incomplete count 1 to 0.
+
+The linter carries the RF2 table names built in, so this check works in a corpus
+repository that does not contain the schema; `--ddl` overrides for a schema that
+has moved on.

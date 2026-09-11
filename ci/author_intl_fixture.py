@@ -85,6 +85,7 @@ class Rows:
         self.textdef, self.attrvalue, self.attrvalue_prev = [], [], []
         self.lang = []
         self.assoc_prev = []
+        self.ccsrefset = []
         self._n = 0
 
     def uuid(self):
@@ -384,6 +385,33 @@ def author_state_and_language_defects(r: Rows):
     return n
 
 
+def author_ccs_refset(r: Rows):
+    """The ccsRefset file the fixture does not ship, which is the ONLY thing
+    keeping the AMT arm off 264 of 264.
+
+    `Full ccsRefset validation - 01` reads `ccsrefset_f`. MySQL loads only the
+    files a release contains, so with none matching `der2_ccsRefset_` the table
+    is ABSENT rather than empty and the statement dies on it - reported as
+    failureCount -1, an incomplete, which reads as a failure against the
+    assertion rather than against the release. DuckDB's store declares the table
+    and creates it empty, so the statement runs and reports 0.
+
+    That is the whole divergence: not a disagreement about content, but about
+    what a missing file MEANS. Shipping the file removes the disagreement at its
+    cause rather than tolerating it in a baseline - both engines then read a
+    table that exists and agree on what is in it.
+
+    The columns are the nine the store declares: the six every refset has, plus
+    two component ids and a string.
+    """
+    for i, (c1, c2, value) in enumerate((
+            ('703860006', '138875005', 'first'),
+            ('703649004', '138875005', 'second'))):
+        r.ccsrefset.append((r.uuid(), CURR, '1', CORE_MODULE, '900000000000497000',
+                            KNOWN_CONCEPT, c1, c2, value))
+    return len(r.ccsrefset)
+
+
 FILES = {
     'sct2_Concept': (['id', 'effectiveTime', 'active', 'moduleId', 'definitionStatusId'],
                      'concept', '', '_'),
@@ -422,6 +450,11 @@ FILES = {
     'der2_cRefset_Language': (
         ['id', 'effectiveTime', 'active', 'moduleId', 'refsetId', 'referencedComponentId',
          'acceptabilityId'], 'lang', '-en', ''),
+    # Created, not appended: no der2_ccsRefset_ file exists in this fixture, and
+    # its absence is what MySQL errors on.
+    'der2_ccsRefset_Example': (
+        ['id', 'effectiveTime', 'active', 'moduleId', 'refsetId', 'referencedComponentId',
+         'componentId1', 'componentId2', 'value'], 'ccsrefset', '', ''),
     'sct2_TextDefinition': (
         ['id', 'effectiveTime', 'active', 'moduleId', 'conceptId', 'languageCode',
          'typeId', 'term', 'caseSignificanceId'], 'textdef', '-en', '_'),
@@ -461,12 +494,14 @@ def main():
     print(f"  authored {author_map_and_axiom_defects(r)} map, axiom and character defects")
     print(f"  authored {author_duplicate_keys_and_modules(r)} duplicate-key and wrong-module defects")
     print(f"  authored {author_state_and_language_defects(r)} state and language contradictions")
+    print(f"  authored {author_ccs_refset(r)} ccsRefset rows - the file the release did not ship")
 
     buckets = {'concept': r.concept, 'desc': r.desc, 'mdrs': r.mdrs, 'assoc': r.assoc,
                'descriptor': r.descriptor, 'extmap': r.extmap, 'owl': r.owl,
                'complexmap': r.complexmap, 'rel': r.rel,
                'desctype': r.desctype, 'simplemap': r.simplemap,
-               'textdef': r.textdef, 'attrvalue': r.attrvalue, 'lang': r.lang}
+               'textdef': r.textdef, 'attrvalue': r.attrvalue, 'lang': r.lang,
+               'ccsrefset': r.ccsrefset}
     # Rows that belong to the PREVIOUS release, because the assertion compares
     # the two. Without these the release-comparison checks have one side only
     # and read as clean.
@@ -479,7 +514,7 @@ def main():
             for kind in ('Snapshot', 'Full', 'Delta'):
                 emit = rows if release == CURR else previous.get(bucket, [])
                 path = base / kind / f'{stem}{sep}{kind}{lang_suffix}_INT_{release}.txt'
-                if not path.exists():
+                if not path.exists() and not (stem == 'der2_ccsRefset_Example' and emit):
                     continue
                 kept, added = merge(path, header, emit)
                 total += added

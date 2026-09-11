@@ -34,6 +34,7 @@ a clean release looks like.
 
     assertion_lint.py <dir-or-file> [...]        # exits 1 if any are found
     assertion_lint.py --format=github <dir>      # ::error annotations for CI
+    assertion_lint.py --ddl create-tables.sql <dir>   # also check table-name case
 
 Exit status is 1 when something is found and 0 otherwise, so it works as a
 build step with no wrapper.
@@ -145,6 +146,89 @@ def findings(sql: str):
     return out
 
 
+# The RF2 table names RVF's schema declares, minus the kind suffix. Built in so
+# the case check works in a corpus repository, which does not contain the DDL -
+# these names are part of the RF2 release format and move about once a year.
+# --ddl overrides, for a schema that has moved on.
+RF2_TABLE_STEMS = frozenset({
+    'associationrefset',
+    'attributevaluemap',
+    'attributevaluerefset',
+    'ccirefset',
+    'ccsrefset',
+    'complexmaprefset',
+    'concept',
+    'crefset',
+    'description',
+    'descriptiontyperefset',
+    'expressionassociationrefset',
+    'extendedassociation',
+    'extendedmaprefset',
+    'identifier',
+    'isimplemaprefset',
+    'langrefset',
+    'mapcorrelationoriginrefset',
+    'moduledependencyrefset',
+    'mrcmattributedomainrefset',
+    'mrcmattributerangerefset',
+    'mrcmdomainrefset',
+    'mrcmmodulescoperefset',
+    'owlexpressionrefset',
+    'refsetdescriptor',
+    'relationship',
+    'relationship_concrete_values',
+    'simplemaprefset',
+    'simplerefset',
+    'stated_relationship',
+    'textdefinition',
+})
+
+
+def table_stems(ddl_path):
+    """The table names the schema declares, minus the RF2 kind suffix.
+
+    Needed because an assertion writes `<PROSPECTIVE>.concept_<SNAPSHOT>` and
+    the DDL declares `concept_s`.
+    """
+    ddl = pathlib.Path(ddl_path).read_text(encoding='utf-8', errors='replace')
+    names = {m.group(1) for m in re.finditer(r'create\s+table\s+([A-Za-z_0-9]+)', ddl, re.I)}
+    return {re.sub(r'_(f|s|d)$', '', n.lower()) for n in names}
+
+
+def case_mismatches(sql, stems):
+    """Table references whose CASE does not match the schema.
+
+    MySQL compares table names case-sensitively wherever
+    `lower_case_table_names = 0`, which is the default on Linux, so
+    `ccsRefset_f` and `ccsrefset_f` are different tables and one of them does
+    not exist. The statement then dies with "Table ... doesn't exist" and the
+    assertion reports incomplete - which reads as a fault in the assertion, or
+    as a release that failed to ship a file, rather than as a typo.
+
+    It survives because it is invisible almost everywhere else: DuckDB resolves
+    identifiers case-insensitively, and so does MySQL on macOS and Windows. Only
+    a Linux MySQL sees it, and only for the one name that is spelled
+    differently.
+
+    Found exactly once in 1,107 assertion files, and it was the sole remaining
+    divergence between the two engines on that corpus.
+    """
+    out = []
+    # The trailing \b goes on the BARE-suffix branch only. A first version put
+    # it after the whole alternation, and `>` followed by `)` is two non-word
+    # characters with no boundary between them - so the placeholder form never
+    # matched and the check silently found nothing at all.
+    for m in re.finditer(
+            r'\b([A-Za-z][A-Za-z_0-9]*)(?:_<(?:FULL|SNAPSHOT|DELTA)>|_[fsd]\b)', sql):
+        ref = m.group(1)
+        if ref.lower() in stems and ref != ref.lower():
+            line = sql.count('\n', 0, m.start()) + 1
+            out.append((line, f'{ref} is spelled differently from the schema, which declares'
+                              f' {ref.lower()} - MySQL compares table names case-sensitively on'
+                              f' Linux, so this statement dies on a table that does not exist'))
+    return out
+
+
 def sql_files(targets):
     for t in targets:
         p = pathlib.Path(t)
@@ -159,7 +243,10 @@ def main():
     ap.add_argument('targets', nargs='+', help='directories or .sql files')
     ap.add_argument('--format', choices=('text', 'github'), default='text',
                     help='github emits ::error annotations')
+    ap.add_argument('--ddl', help='create-tables SQL, to check table names for case')
     args = ap.parse_args()
+
+    stems = table_stems(args.ddl) if args.ddl else RF2_TABLE_STEMS
 
     scanned = 0
     hits = []
@@ -171,6 +258,8 @@ def main():
             print(f'{path}: unreadable: {e}', file=sys.stderr)
             continue
         for line, reason in findings(sql):
+            hits.append((path, line, reason))
+        for line, reason in case_mismatches(strip_comments(sql), stems):
             hits.append((path, line, reason))
 
     for path, line, reason in hits:

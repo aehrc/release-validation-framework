@@ -152,7 +152,7 @@ diff -r corpus-amtv4/scripts/amtv4/DNF Trade Product Unit of Use 304250110000361
  
 diff -r corpus-amtv4/scripts/amtv4/Full ccsRefset validation - 01 rf2 cr ccsRefset full has been populated.sql corpus-amt-fixed/scripts/amtv4/Full ccsRefset validation - 01 rf2 cr ccsRefset full has been populated.sql
 --- corpus-amtv4/scripts/amtv4/Full ccsRefset validation - 01 rf2 cr ccsRefset full has been populated.sql	2026-08-30 20:13:33.767892177 +1000
-+++ corpus-amt-fixed/scripts/amtv4/Full ccsRefset validation - 01 rf2 cr ccsRefset full has been populated.sql	2026-09-10 23:53:17.421919573 +1000
++++ corpus-amt-fixed/scripts/amtv4/Full ccsRefset validation - 01 rf2 cr ccsRefset full has been populated.sql	2026-09-11 10:42:56.212599419 +1000
 @@ -8,7 +8,7 @@
  call TableIsPopulated('rf2_cr_ccsRefset_full');
  
@@ -167,7 +167,7 @@ diff -r corpus-amtv4/scripts/amtv4/Full ccsRefset validation - 01 rf2 cr ccsRefs
  	null,
  	null
 -from (select '0' from dual where not exists( select count(1) from <PROSPECTIVE>.ccsRefset_<FULL>)) as query;
-+from (select '0' from dual where not exists( select 1 from <PROSPECTIVE>.ccsRefset_<FULL>)) as query;
++from (select '0' from dual where not exists( select 1 from <PROSPECTIVE>.ccsrefset_<FULL>)) as query;
  
 diff -r corpus-amtv4/scripts/amtv4/Full csRefset validation - 01 rf2 cr csRefset full has been populated.sql corpus-amt-fixed/scripts/amtv4/Full csRefset validation - 01 rf2 cr csRefset full has been populated.sql
 --- corpus-amtv4/scripts/amtv4/Full csRefset validation - 01 rf2 cr csRefset full has been populated.sql	2026-08-30 20:13:33.767892177 +1000
