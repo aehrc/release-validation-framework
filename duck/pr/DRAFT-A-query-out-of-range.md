@@ -54,8 +54,16 @@ It is also why the fast path is taken **only when the query carries exactly one
 such clause**. The pattern that finds `(* NOT ...)` is greedy and matches once,
 so with two clauses the text substitution rewrites both while only one field's
 complement is parked. Multi-clause queries keep taking the range chain, which
-substitutes the same text for both and stays correct. `IntegrationTest`
-covers it.
+substitutes the same text for both and stays correct.
+
+That guard costs nothing in practice. Every out-of-range expression the MRCM
+refsets of the 20260801 International release produce — 147 of them — carries
+exactly one such clause, because the rule is built as
+`domainConstraint + attributeId + " != " + rangeConstraint`, and the excluded
+set is one clause however many concepts are OR'd inside it. A second clause
+needs a domain constraint that itself contains `!=`; none of the 19 active
+domains has one. `IntegrationTest` covers both the correctness and the routing:
+the single-clause case must build a term set, the multi-clause case must not.
 
 The alternative is changing the converter's return type from `String` to a
 query object. That touches every caller and all 83 converter tests.
