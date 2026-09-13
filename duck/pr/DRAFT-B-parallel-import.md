@@ -2,7 +2,7 @@
 
 **Title:** `Build index documents in parallel, writing them in iteration order`
 
-**Base:** `develop` · **Branch:** `pr/b-parallel-import` · **+180/-29, 3 files** · upstream suite **123 pass, 0 fail**
+**Base:** `develop` · **Branch:** `pr/b-parallel-import` · **+266/-29, 4 files** · upstream suite **126 pass, 0 fail**
 
 Independent of the out-of-range PR. Touches no query path.
 
@@ -35,10 +35,12 @@ thread-safe, and it was the one real hazard in parallelising this. The
 cardinality fields now compare effective times as `yyyyMMdd` strings, where
 lexicographic and chronological order coincide.
 
-That changes behaviour on input the old code rejected. A blank or malformed
-concept `effectiveTime` previously threw `ParseException` and aborted the import;
-it is now indexed as-is. For valid published RF2 there is no difference. Say if
-you would rather it kept failing fast and I will add the guard.
+An effective time that is not `yyyyMMdd` is still rejected, and still aborts
+the import. The old code rejected it as a side effect of `SimpleDateFormat`
+failing to parse; this checks the shape explicitly, which is what the string
+comparison depends on anyway. There is no findings channel in an index builder,
+so the alternative would be indexing a silently wrong effective time that
+nothing downstream ever checks. `EffectiveTimeValidationTest` pins it.
 
 **`ReleaseWriter.addConcept` no longer declares `throws ParseException`.**
 Nothing on the build path can throw it once the date parsing is gone, so the

@@ -2,7 +2,7 @@
 
 **Title:** `Run the attribute checks in parallel`
 
-**Base:** PR C · **Branch:** `pr/d-parallel-checks` · **+362/-144, 2 files** · upstream suite **24 pass, 0 fail**
+**Base:** PR C · **Branch:** `pr/d-parallel-checks` · **+289/-141, 2 files** · upstream suite **24 pass, 0 fail**
 
 Stacked on PR C — one commit on top of it.
 
@@ -50,8 +50,7 @@ reports were never affected — they come from value-hashed sets.
 One store is built per run and shared by the worker threads; the query service
 over it is read-only and safe to share.
 
-## Also here
+## Not here
 
-`mrcm.validator.index.directory` puts the Lucene index on disk instead of in
-RAM. This is a memory-management feature rather than parallelism and could be
-split out if you would rather review it separately.
+The configurable on-disk index that was originally bundled with this is a
+separate PR stacked on top. It is memory management, not parallelism.
