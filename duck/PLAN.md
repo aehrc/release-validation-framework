@@ -18,8 +18,8 @@ were measured today.
 | 1.2 | Publish the AMT pack | `duck/ASSERTION-PACKS.md` | A branch on the private `aehrc/rvf`. Pack built and verified at `/data/work/amt-pack.json`: 200 assertions, merges to 560, no conflicts. |
 | 1.3 | Lower the worker ceiling | `duck/WORKER-MEMORY.md` | 24Gi -> 16Gi changes KEDA's arithmetic. Experiment written out; findings comparison is the deliverable, not the memory number. |
 | ~~1.4~~ | ~~GitHub Support purge~~ **DROPPED 2026-09-11 on your instruction** | `STATE.md` | Not pursuing it. `5ba5586c` and `f5d1e652` stay reachable in the public repo's history and in any fork or clone taken since - so the AMT assertion text they carried is public and stays public. The current tree does not contain it, and `.gitignore` plus `duck/ASSERTION-PACKS.md` keep it out; treat those two commits as disclosed rather than recoverable |
-| ~~1.5~~ | ~~Raise the two assertion PRs~~ **RAISED 2026-09-11: SI #7, SI #8, aehrc/rvf #36, IHTSDO/rvf #78** | `ci/pr/`, `duck/pr/` | A fork of `IHTSDO/snomed-release-validation-assertions` and a branch on the private AMT repo. Both are packaged and measured: the linter, the inactivated-component-module procedure fix, and 13 AMT fixes including the one word that takes the AMT arm to 267/267 |
-| ~~1.6~~ | ~~Decide 3.12~~ **DECIDED 2026-09-11: bundled, for now** | `duck/PLAN.md` 3.12 | Base stays the corpus in the image; a pack set extends it. Old reports re-run via the old image. Three named triggers reopen it |
+| ~~1.7~~ | ~~Raise the assertion PRs~~ **RAISED 2026-09-11: SI #7, SI #8, aehrc/rvf #36, IHTSDO/rvf #78** | `ci/pr/`, `duck/pr/` | A fork of `IHTSDO/snomed-release-validation-assertions` and a branch on the private AMT repo. Both are packaged and measured: the linter, the inactivated-component-module procedure fix, and 13 AMT fixes including the one word that takes the AMT arm to 267/267 |
+| ~~1.8~~ | ~~Decide 3.12~~ **DECIDED 2026-09-11: bundled, for now** | `duck/PLAN.md` 3.12 | Base stays the corpus in the image; a pack set extends it. Old reports re-run via the old image. Three named triggers reopen it |
 | ~~1.5~~ | ~~Storage~~ **DONE by Attila, 2026-09-08** | live cluster | Static PVs on `blob.csi.azure.com`, containers `rvf-jobs`/`rvf-releases` on `nctsdevstorage` in resource group `ncts`, `ReadWriteMany`, `Retain`, every blobfuse cache disabled. PVs live in `aehrc/ncts-argo`; this repo's chart and manifests now match. |
 | ~~1.6~~ | ~~`STORAGE_LOCATION` join key~~ **ANSWERED, 2026-09-09** | indexer DB | The indexer keys `rvf_runs` on `(storage_location, rvf_run_id)` and PARSES the name: `ncts-<version>-<siBuild>-rvf<rvfBuild>` yields `release_run_id=<version>-<siBuild>`. Anything else is indexed with a NULL release_run_id - orphaned from its release. The nightly already emits the right shape. |
 
@@ -541,7 +541,7 @@ nobody could tell drift from defect today.
   release. Then the DuckDB digest and a live MySQL run can be compared per
   assertion in one command, which is the cross-engine test that does not exist.
 
-**3.16 The fixtures were corrupt; repairing them found a real DuckDB false
+**3.16 DONE 2026-09-10. The fixtures were corrupt; repairing them found a real DuckDB false
 negative. 2026-09-10.**
 
 **The repair.** 20 malformed rows across both regression fixtures, in three
@@ -931,6 +931,45 @@ and store it could not find. Failing a build for content it was never given
 would be wrong; passing silently would let the arm quietly stop running.
 Publishing the AMT pack (1.2) is what removes that condition.
 
+## 3.21 findAll's contract belongs to the implementation. DECIDED 2026-09-13.
+
+`IHTSDO/release-validation-framework#78` was raised and then **closed on your
+objection**, which was right: it asked every caller in that repository to pay for
+a problem only our implementation has. `AssertionServiceImpl.findAll()` already
+returns a fresh list from a Spring Data query, so a defensive copy on top of it
+is a second allocation per request with no benefit to anyone on MySQL.
+
+The defect was one level up. Two implementations of one interface differed in
+**mutability**: one handed back a fresh list, the other the corpus itself as
+`List.copyOf`. No caller can see which it has until one of them throws - and the
+interface exists so it does not have to. The implementation with the unusual
+internals pays.
+
+* `DuckAssertionSource.findAll()` returns `new ArrayList<>(assertions)`.
+* The shared `Assertion` objects carry **concurrent** group sets, so upstream's
+  unconditional `addGroup` is safe and idempotent against them. One set per
+  assertion at LOAD, not per request - the half a list copy does not fix.
+* `AssertionController` and `MysqlFailuresExtractor` are upstream's code
+  verbatim again, which also shrinks the catch-up diff by two files.
+
+*The general rule, because it will come up again:* when a fork's implementation
+breaks a caller that is correct against the reference implementation, fix the
+implementation, not the caller. Upstream pays nothing and the fork's diff shrinks.
+
+## 3.22 The nightly does not record which image produced the report. OPEN.
+
+Definition 66 validates a real release against the deployed service and publishes
+the report, and definition 65 pushes an immutable tag naming the build and commit
+- but nothing joins the two. A report says what was found and not what found it.
+
+Confirming the deployed tag today needed kubectl or ArgoCD access, neither of
+which the build agent has. The fix is small: have the nightly ask the service for
+its version with the token it already holds, and print it beside the storage
+location. Until then "the deployment is running HEAD" is an inference from the
+push, not an observation.
+
+*Acceptance:* a nightly log line naming the image tag that served the run.
+
 ## 4. Known, deliberate, not scheduled
 
 * `minAssertions` 1,400 / `minSqlAssertions` 400 depend on the AMT overlay
@@ -941,9 +980,19 @@ Publishing the AMT pack (1.2) is what removes that condition.
 * `DuckDbEngineContextTest` fails 7/7 without Docker, as do four other
   Testcontainers suites. Pre-existing and unrelated to any of the above.
 
-## 5. Two traps to re-read before touching the cluster
+## 5. Traps to re-read before touching the cluster
 
 * The pod's `find` reports **0** `.sql` files in a directory holding 654. Use
   `python3`, which the image has. I believed it twice in one day.
 * `mvn` against the IHTSDO clones stalls ~30 minutes resolving snapshots from
   their Nexus. Offline (`-o`) the same install takes 2.8 seconds.
+
+* **`checkout-resources.sh` resets the nested `snomed-release-validation-assertions`
+  checkout.** Maven re-runs it at `generate-test-resources`, so any local branch
+  or remote you added in that directory disappears mid-session - it took two PR
+  branches and a `fork` remote on 2026-09-11. Nothing was lost because both were
+  already pushed. Push early, or work on a copy outside the tree.
+* **`gh pr edit` exits 0 while doing nothing** on this machine: it fails inside a
+  projects-classic GraphQL call that the CLI still makes. It reported success and
+  left the body unchanged. Use `gh api -X PATCH repos/<o>/<r>/pulls/<n>` and
+  re-read the body afterwards.
