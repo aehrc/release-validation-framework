@@ -61,6 +61,10 @@ class AssertionCanFireTest {
 
 	private static final Pattern FROM = Pattern.compile("\\bFROM\\b", Pattern.CASE_INSENSITIVE);
 
+	/** Anything that can reduce a {@code FROM}-less SELECT to zero rows. */
+	private static final Pattern FILTER =
+			Pattern.compile("\\bWHERE\\b|\\bHAVING\\b", Pattern.CASE_INSENSITIVE);
+
 	private static final Pattern AGGREGATE =
 			Pattern.compile("\\b(COUNT|SUM|MAX|MIN|AVG)\\s*\\(", Pattern.CASE_INSENSITIVE);
 
@@ -159,7 +163,10 @@ class AssertionCanFireTest {
 	void theDetectorCatchesBothShapes() {
 		String fromLess = "INSERT INTO qa_result (details) SELECT 'x' FROM (SELECT 1 FROM dual"
 				+ " WHERE NOT EXISTS(SELECT GET_CR_ADRS_PT(1) = 'a name')) AS query";
-		assertTrue(whyItCannotFire(fromLess) != null && whyItCannotFire(fromLess).contains("FROM-less"),
+		// Asserts that it IS reported, not how it is worded. The first version of
+		// this matched the literal "FROM-less" and failed the moment the message
+		// was improved - pinning prose rather than behaviour.
+		assertTrue(whyItCannotFire(fromLess) != null,
 				"a NOT EXISTS over a FROM-less SELECT has to be reported");
 
 		String ungrouped = "INSERT INTO qa_result (details) SELECT 'x' FROM (SELECT '0' FROM dual"
@@ -173,6 +180,26 @@ class AssertionCanFireTest {
 	 * And the shapes it must leave alone, or it fails every honest assertion in
 	 * the corpus. All three are patterns the bundled 360 actually use.
 	 */
+	/**
+	 * A {@code FROM}-less SELECT that CAN return no rows.
+	 *
+	 * <p>Raised as a question about the rule - if the expression is substituted
+	 * in, could it not carry its own FROM? It cannot here: every placeholder in
+	 * that corpus is a scalar (a run id, a uuid, a schema NAME, a module id, a
+	 * version, an id list), and all nine real findings are literal function calls
+	 * with no placeholder inside at all. But the question found a genuine hole a
+	 * step further on: a WHERE needs no FROM, and `SELECT 1 WHERE 1=0` yields
+	 * nothing, so NOT EXISTS over it is perfectly satisfiable. Verified in MySQL.
+	 */
+	@Test
+	void aFromLessSelectWithAWhereIsSatisfiable() {
+		String satisfiable = "INSERT INTO qa_result SELECT 1 FROM dual"
+				+ " WHERE NOT EXISTS(SELECT 1 WHERE 1=0)";
+		assertTrue(whyItCannotFire(satisfiable) == null,
+				"a WHERE can reduce a FROM-less SELECT to zero rows, so this one"
+						+ " can fire and must not be reported");
+	}
+
 	@Test
 	void theDetectorPassesHealthySql() {
 		String correlated = "INSERT INTO qa_result SELECT a.id FROM prospective.concept_s a"
@@ -212,7 +239,15 @@ class AssertionCanFireTest {
 				continue;
 			}
 			if (!FROM.matcher(inner).find()) {
-				return "NOT EXISTS over a FROM-less SELECT, which always returns one row";
+				// Only when nothing can filter it away. `SELECT 1 WHERE 1=0` has no
+				// FROM and returns nothing, so a NOT EXISTS over it is satisfiable.
+				if (FILTER.matcher(inner).find()) {
+					continue;
+				}
+				return "NOT EXISTS over a SELECT with no FROM and no WHERE, which returns"
+						+ " exactly one row. A function call there does not change it:"
+						+ " EXISTS counts rows yielded, not what the function reads or"
+						+ " returns";
 			}
 			String projection = FROM.split(inner, 2)[0];
 			if (AGGREGATE.matcher(projection).find() && !GROUPED.matcher(inner).find()) {

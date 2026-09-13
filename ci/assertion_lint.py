@@ -48,6 +48,8 @@ NOT_EXISTS_SELECT = re.compile(r'NOT\s+EXISTS\s*\(\s*SELECT\b', re.I)
 FROM = re.compile(r'\bFROM\b', re.I)
 AGGREGATE = re.compile(r'\b(COUNT|SUM|MAX|MIN|AVG)\s*\(', re.I)
 GROUPED = re.compile(r'\bGROUP\s+BY\b|\bHAVING\b', re.I)
+# Anything that can reduce a FROM-less SELECT to zero rows.
+FILTER = re.compile(r'\bWHERE\b|\bHAVING\b', re.I)
 # `x = (null)` and friends. In SQL a comparison to NULL is NULL, never true, so
 # a WHERE built on one selects nothing and a conjunct built on one makes the
 # whole conjunction unsatisfiable.
@@ -100,8 +102,19 @@ def findings(sql: str):
             continue
         line = clean.count('\n', 0, m.start()) + 1
         if not FROM.search(inner):
-            out.append((line, 'NOT EXISTS over a SELECT with no FROM: it always'
-                              ' returns one row, so this can never be true'))
+            # A FROM-less SELECT returns one row ONLY if nothing can filter it
+            # away. `SELECT 1 WHERE 1=0` has no FROM and returns nothing, so a
+            # NOT EXISTS over it is perfectly satisfiable - flagging that would
+            # be crying wolf, which is how a linter gets switched off.
+            if FILTER.search(inner):
+                continue
+            out.append((line, 'NOT EXISTS over a SELECT with no FROM and no WHERE:'
+                              ' it returns exactly one row, so this can never be'
+                              ' true. A function call here does not change that -'
+                              ' EXISTS counts the rows the subquery yields, not'
+                              ' what the function reads or returns, so a function'
+                              ' that queries an empty table or returns NULL still'
+                              ' yields one row'))
             continue
         projection = FROM.split(inner, 1)[0]
         if AGGREGATE.search(projection) and not GROUPED.search(inner):
