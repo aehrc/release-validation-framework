@@ -2,10 +2,10 @@
 
 **Title:** `Answer the lateralizable domain with one ancestor query`
 
-**Base:** `develop` · **Branch:** `pr/c-lateralizable` · **+26/-6, 1 file** · upstream suite **24 pass, 0 fail**
+**Base:** `develop` · **Branch:** `pr/c-lateralizable` · **+20/-6, 1 file** · upstream suite **24 pass, 0 fail**
 
-**Depends on PR A** in `snomed-query-service` for `conceptsWithAnyAncestor`.
-Upstream CI will not compile this until that is in a snapshot.
+**Depends on the `conceptsWithAnyAncestor` PR** in `snomed-query-service`.
+Upstream CI cannot compile this until that is in a snapshot.
 
 ---
 
@@ -14,15 +14,19 @@ member of the lateralizable refset. It does that with an ECL query per
 candidate — `">" + conceptId` — so every query string is distinct, nothing
 caches, and each pays a fresh ECL parse.
 
+Measured on an 853 MB AU edition, 4,561 candidate concepts, single run:
+
 | | before | after |
 |---|---|---|
 | ECL queries | 4,561 | 2 |
-| time | 145.7s | 0.2s |
+| wall clock | 145.7s | 0.198s |
 | violated set | — | identical |
 
 "Has an ancestor among the members" is one term-set query over the ancestor
-field, which is already indexed per concept. It is asked once for every
-candidate at once.
+field, which is already indexed per concept, so it is asked once for every
+candidate at once. `conceptsWithAnyAncestor` returns proper descendants, so the
+members themselves are unioned back in — the old code skipped members by an
+explicit `continue`.
 
 Checked under forced violations as well as on clean input: dropping member
 `423857001` yields 21 violations both ways.
@@ -31,10 +35,10 @@ Checked under forced violations as well as on clean input: dropping member
 
 `<< ^723264001` — which the existing comment contemplates — does not work here.
 The descendant operator is dropped over a member-of expression in this service,
-so that form silently returns the members alone and invents 4,560 failures. The
-code carries that note where the expression is built.
+so that form silently returns the members alone and fails every descendant of
+one. The code carries that note where the set is built.
 
 ## Scope
 
-This is the query-semantics change only. The parallelism and the configurable
-index directory that were originally bundled with it are PR D.
+Query semantics only. The parallelism that was originally bundled with this is
+a separate PR stacked on top.
