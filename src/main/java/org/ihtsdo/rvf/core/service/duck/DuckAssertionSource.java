@@ -12,6 +12,7 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
@@ -86,7 +87,23 @@ public final class DuckAssertionSource {
 		// The @Transient groups field is what MysqlFailuresExtractor reads to
 		// decide whether a failure is whitelist-eligible, so it is populated
 		// here for the same reason the MySQL path populates it from the DB.
-		assertions.forEach(a -> a.setGroups(groups.getOrDefault(a.getUuid().toString(), Set.of())));
+		// A CONCURRENT set, not an immutable one, and not a plain HashSet.
+		//
+		// These Assertion objects are shared between requests, and callers that
+		// join groups - AssertionController.getAssertionsAndJoinGroups upstream -
+		// call addGroup on them. Against an immutable set that throws; against a
+		// plain HashSet two concurrent requests race for no gain, since the group
+		// is already present and the add is a no-op.
+		//
+		// A concurrent set makes the caller's add safe AND idempotent, so the
+		// shared corpus needs nothing from the caller. Cost is one set per
+		// assertion at LOAD, not per request.
+		assertions.forEach(a -> {
+			Set<String> resolved = groups.getOrDefault(a.getUuid().toString(), Set.of());
+			Set<String> live = ConcurrentHashMap.newKeySet(Math.max(1, resolved.size()));
+			live.addAll(resolved);
+			a.setGroups(live);
+		});
 		return new DuckAssertionSource(assertions, groups);
 	}
 
@@ -173,7 +190,20 @@ public final class DuckAssertionSource {
 	 * that hides it.
 	 */
 	public List<Assertion> findAll() {
-		return assertions;
+		// A MUTABLE COPY, because that is what the other implementation of this
+		// interface returns and callers are entitled to assume it.
+		//
+		// AssertionServiceImpl.findAll() delegates to a Spring Data repository,
+		// so it hands back a fresh list every call and its callers append to it.
+		// Returning the corpus itself - even as an unmodifiable view - makes the
+		// two implementations differ in a way no caller can see until one of them
+		// throws, which is the actual defect. Handing back a copy costs this
+		// implementation one list of a few hundred references per call and costs
+		// the other implementation, and every caller, nothing at all.
+		//
+		// The objects in it are still shared; that is deliberate and safe,
+		// because their group sets are concurrent - see from().
+		return new ArrayList<>(assertions);
 	}
 
 	/** The assertion with this uuid, or null - as {@code findAssertionByUUID} does. */

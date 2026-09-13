@@ -309,11 +309,10 @@ public class AssertionController {
 	 * means never.
 	 */
 	private List<Assertion> getAssertionsAndJoinGroups() {
-		List<Assertion> assertions = new ArrayList<>(assertionService.findAll());
+		List<Assertion> assertions = assertionService.findAll();
 		List<AssertionGroup> assertionGroups = assertionService.getAllAssertionGroups();
 		assertionGroups.forEach(assertionGroup -> assertionGroup.getAssertions().forEach(a -> assertions.forEach(b -> {
-			if (a.getUuid().toString().equals(b.getUuid().toString())
-					&& (b.getGroups() == null || !b.getGroups().contains(assertionGroup.getName()))) {
+			if (a.getUuid().toString().equals(b.getUuid().toString())) {
 				b.addGroup(assertionGroup.getName());
 			}
 		})));

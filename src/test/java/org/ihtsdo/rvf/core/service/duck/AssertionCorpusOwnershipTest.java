@@ -82,21 +82,48 @@ class AssertionCorpusOwnershipTest {
 	}
 
 	@Test
-	void findAllDoesNotHandOutTheCorpusItself(@TempDir Path dir) throws Exception {
-		// The guard that makes the reported bug loud instead of silent. A caller
-		// that treats the result as its own now fails where it stands, rather
-		// than corrupting a corpus that is read again minutes later by a
-		// validation.
+	void findAllHandsBackAMutableCopy(@TempDir Path dir) throws Exception {
+		// The contract the OTHER implementation of this interface defines.
+		// AssertionServiceImpl.findAll() delegates to a Spring Data repository,
+		// so it returns a fresh list every call and its callers append to it.
+		//
+		// An earlier version of this returned an unmodifiable view instead, on
+		// the reasoning that a caller treating the result as its own should fail
+		// loudly. It does fail loudly - as an HTTP 500, in production, from a
+		// caller that is correct against the only other implementation. Two
+		// implementations of one interface differing in mutability IS the defect;
+		// the one with the unusual internals should pay to hide them, and the
+		// price is a list of a few hundred references per call, here and nowhere
+		// else.
 		DuckAssertionSource source = sourceIn(dir);
 		List<Assertion> assertions = source.findAll();
 		assertEquals(2, assertions.size());
 
 		Assertion intruder = new Assertion();
 		intruder.setUuid(UUID.randomUUID());
-		assertThrows(UnsupportedOperationException.class, () -> assertions.add(intruder));
-		assertThrows(UnsupportedOperationException.class,
-				() -> assertions.addAll(List.of(intruder)));
+		assertions.add(intruder);
+		assertEquals(3, assertions.size(), "the caller owns what it was given");
 		assertEquals(2, source.findAll().size(), "and the corpus is unchanged");
+	}
+
+	@Test
+	void joiningGroupsOnSharedAssertionsIsSafeAndIdempotent(@TempDir Path dir) throws Exception {
+		// The other half, and the reason the list copy alone is not enough: the
+		// OBJECTS are shared, and upstream's join calls addGroup on them
+		// unconditionally. Against an immutable group set that throws; against a
+		// plain HashSet two concurrent requests race for no gain. The corpus
+		// hands out concurrent sets, so the caller needs to know nothing.
+		DuckAssertionSource source = sourceIn(dir);
+		Assertion assertion = source.findAll().get(0);
+		int before = assertion.getGroups().size();
+
+		assertion.addGroup("component-centric-validation");   // already present
+		assertion.addGroup("a-group-it-did-not-have");
+
+		assertEquals(before + 1, assertion.getGroups().size(),
+				"re-adding an existing group changes nothing, and a new one is accepted");
+		assertTrue(source.findAll().get(0).getGroups().contains("a-group-it-did-not-have"),
+				"the objects are shared, which is what makes the set's thread safety matter");
 	}
 
 	@Test

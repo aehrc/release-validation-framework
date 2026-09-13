@@ -10,6 +10,7 @@ import org.ihtsdo.rvf.rest.helper.AssertionLookup;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -35,13 +36,19 @@ import static org.mockito.Mockito.when;
  * answers 500. Anyone opening the assertions page with Drools rules included
  * gets an error, and the cause is three frames deeper than the request.
  *
- * <p>Note which way round the failure is, because it decides the fix: the
- * corpus being immutable is CORRECT and is what turned a silent corruption into
- * a loud error. Had {@code findAll()} handed out a mutable internal list, the
- * rules would have been appended to the live corpus, every subsequent
- * validation would have enumerated them, and the engine - which has no
- * statements for a Drools rule - would have reported each as "store and
- * assertion corpus are out of step". So the endpoint is what changes.
+ * <p><b>Which side changes, and why it is not the endpoint.</b> The first fix
+ * here copied the list in the controller. That was wrong: it taxes every caller
+ * of the MySQL implementation - which already returns a fresh list per query -
+ * for a problem only the other implementation has. Two implementations of one
+ * interface differing in mutability IS the defect, and the one with the unusual
+ * internals should pay to hide them.
+ *
+ * <p>So {@code DuckAssertionSource.findAll()} hands back a mutable copy, the
+ * controller is upstream's code unchanged, and the corpus is still never
+ * appended to - which is what these tests check. The objects in that list are
+ * still shared, deliberately, and their group sets are concurrent so the
+ * endpoint's unconditional {@code addGroup} is safe and idempotent against
+ * them.
  */
 class AssertionControllerOwnershipTest {
 
@@ -60,7 +67,11 @@ class AssertionControllerOwnershipTest {
 	/** A corpus held the way the DuckDB engine holds it: immutable. */
 	private static AssertionService duckLikeCorpus(List<Assertion> corpus) {
 		AssertionService service = mock(AssertionService.class);
-		when(service.findAll()).thenReturn(List.copyOf(corpus));
+		// A MUTABLE COPY, because that is the contract every AssertionService owes
+		// its callers - see the class comment. Stubbing an immutable list here
+		// would be modelling an implementation that breaks the contract, and then
+		// asserting the CALLER works around it.
+		when(service.findAll()).thenAnswer(invocation -> new ArrayList<>(corpus));
 		AssertionGroup group = new AssertionGroup();
 		group.setName("component-centric-validation");
 		group.setAssertions(Set.copyOf(corpus));
