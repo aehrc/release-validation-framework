@@ -50,7 +50,7 @@ separate PR stacked on top. It is memory management, not parallelism.
 
 ## Dependencies
 
-**Depends on:** [Answer the lateralizable domain with one ancestor query](https://github.com/dionmcm/release-mrcm-validator/pull/1), and transitively [the out-of-range PR](https://github.com/dionmcm/snomed-query-service/pull/1) in `snomed-query-service`.
+**Depends on:** [Answer the lateralizable domain with one ancestor query](https://github.com/dionmcm/release-mrcm-validator/pull/1), and transitively [the out-of-range PR](https://github.com/IHTSDO/snomed-query-service/pull/10) in `snomed-query-service`.
 
 **Depended on by:** [Allow the MRCM index to be built on disk](https://github.com/dionmcm/release-mrcm-validator/pull/3).
 

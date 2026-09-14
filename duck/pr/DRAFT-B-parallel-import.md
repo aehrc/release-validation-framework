@@ -70,4 +70,4 @@ narrows a public signature.
 
 ## Dependencies
 
-Independent of [the out-of-range PR](https://github.com/dionmcm/snomed-query-service/pull/1) and [the member-of PR](https://github.com/dionmcm/snomed-query-service/pull/3); touches no query path.
+Independent of [the out-of-range PR](https://github.com/IHTSDO/snomed-query-service/pull/10) and [the member-of PR](https://github.com/IHTSDO/snomed-query-service/pull/12); touches no query path.

@@ -36,7 +36,7 @@ reported as violating the MRCM.
 That is a pre-existing defect in the query service. This PR does not fix it and
 does not depend on it being fixed — it asks for the two sets directly instead.
 It is fixed separately by
-[Apply the constraint operator to the members of a member-of expression](https://github.com/dionmcm/snomed-query-service/pull/3).
+[Apply the constraint operator to the members of a member-of expression](https://github.com/IHTSDO/snomed-query-service/pull/12).
 Even once that has landed, the form used here stays, because resolving
 `<< ^723264001` performs the same member lookup and the same term-set query
 internally, so there is nothing to gain by switching.
@@ -48,10 +48,10 @@ a separate PR stacked on top.
 
 ## Dependencies
 
-**Depends on:** [Answer an out-of-range ECL clause with one TermInSetQuery](https://github.com/dionmcm/snomed-query-service/pull/1) (`snomed-query-service`), for `conceptsWithAnyAncestor(Collection<Long>)`. **CI here will not compile until that is released in a snapshot** - that is expected, not a broken branch.
+**Depends on:** [Answer an out-of-range ECL clause with one TermInSetQuery](https://github.com/IHTSDO/snomed-query-service/pull/10) (`snomed-query-service`), for `conceptsWithAnyAncestor(Collection<Long>)`. **CI here will not compile until that is released in a snapshot** - that is expected, not a broken branch.
 
 **Depended on by:** [Run the attribute checks in parallel](https://github.com/dionmcm/release-mrcm-validator/pull/2), and [Allow the MRCM index to be built on disk](https://github.com/dionmcm/release-mrcm-validator/pull/3) behind it.
 
-**Related:** [Apply the constraint operator to the members of a member-of expression](https://github.com/dionmcm/snomed-query-service/pull/3) fixes the `<< ^X` behaviour this file's comment describes.
+**Related:** [Apply the constraint operator to the members of a member-of expression](https://github.com/IHTSDO/snomed-query-service/pull/12) fixes the `<< ^X` behaviour this file's comment describes.
 
 **Merge order:** first in this repository, after the query-service PR.

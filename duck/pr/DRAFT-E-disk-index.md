@@ -38,7 +38,7 @@ A bad root path fails with a message naming the property, not a bare
 
 ## Dependencies
 
-**Depends on:** [Run the attribute checks in parallel](https://github.com/dionmcm/release-mrcm-validator/pull/2), and transitively [the lateralizable PR](https://github.com/dionmcm/release-mrcm-validator/pull/1) and [the out-of-range PR](https://github.com/dionmcm/snomed-query-service/pull/1).
+**Depends on:** [Run the attribute checks in parallel](https://github.com/dionmcm/release-mrcm-validator/pull/2), and transitively [the lateralizable PR](https://github.com/dionmcm/release-mrcm-validator/pull/1) and [the out-of-range PR](https://github.com/IHTSDO/snomed-query-service/pull/10).
 
 **Depended on by:** nothing.
 
