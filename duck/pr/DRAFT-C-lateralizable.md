@@ -20,15 +20,26 @@ candidate at once. `conceptsWithAnyAncestor` returns proper descendants, so the
 members themselves are unioned back in — the old code skipped members by an
 explicit `continue`.
 
-Checked under forced violations as well as on clean input: dropping member
-`423857001` yields 21 violations both ways.
+Checked against deliberately failing data as well as clean data: with member
+`423857001` dropped so that violations must be reported, both the old and the
+new code find the same 21.
 
-## One thing that looks equivalent and is not
+## Why not `<< ^723264001`
 
-`<< ^723264001` — which the existing comment contemplates — does not work here.
-The descendant operator is dropped over a member-of expression in this service,
-so that form silently returns the members alone and fails every descendant of
-one. The code carries that note where the set is built.
+The existing comment contemplates that expression, and it is the obvious way to
+write this. It does not work, for a reason outside this change:
+`snomed-query-service` discards the descendant operator when it is applied to a
+member-of expression, so `<< ^723264001` returns only the members of the refset
+and none of their descendants. Every descendant of a member would then be
+reported as violating the MRCM.
+
+That is a pre-existing defect in the query service. This PR does not fix it and
+does not depend on it being fixed — it asks for the two sets directly instead.
+It is fixed separately by
+[Apply the constraint operator to the members of a member-of expression](https://github.com/dionmcm/snomed-query-service/pull/3).
+Even once that has landed, the form used here stays, because resolving
+`<< ^723264001` performs the same member lookup and the same term-set query
+internally, so there is nothing to gain by switching.
 
 ## Scope
 
