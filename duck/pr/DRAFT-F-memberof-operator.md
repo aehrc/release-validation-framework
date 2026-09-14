@@ -41,9 +41,11 @@ expected.
 
 The members are not known at conversion time, so the operator becomes an
 internal function the query service resolves against the index — the mechanism
-already used for `ANCESTOR_OF` and friends. Descendants resolve as one
-`TermInSetQuery` over the ancestor field rather than a search per member,
-because a refset can have thousands.
+already used for `ANCESTOR_OF` and friends. Both directions resolve with a single `TermInSetQuery` rather than a search per
+member, because a refset can have tens of thousands and each search here is
+sized to the whole index. Descendants are the concepts holding a member in their
+ancestor field; ancestors are read from the members' own stored ancestor values,
+fetched in one query.
 
 ## Other changes this required
 

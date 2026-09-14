@@ -52,12 +52,16 @@ thread-safe, and it was the one real hazard in parallelising this. The
 cardinality fields now compare effective times as `yyyyMMdd` strings, where
 lexicographic and chronological order coincide.
 
-An effective time that is not `yyyyMMdd` is still rejected, and still aborts
-the import. The old code rejected it as a side effect of `SimpleDateFormat`
-failing to parse; this checks the shape explicitly, which is what the string
-comparison depends on anyway. There is no findings channel in an index builder,
-so the alternative would be indexing a silently wrong effective time that
-nothing downstream ever checks. `EffectiveTimeValidationTest` pins it.
+An effective time that is not `yyyyMMdd` now fails the import. This is
+**stricter** than the parsing it replaces, deliberately: that parser was
+lenient, and read `2015-07-31` as 7 December 2014, indexing `20141207` without
+complaint. It also normalised `20230230` to `20230302`.
+
+An index is not a place to quietly correct a release — nothing downstream can
+tell that an effective time was invented during indexing — so an unparseable
+value is now a failed import, reported as `ReleaseImportException` like any
+other import failure. No valid RF2 value that the old code accepted is newly
+rejected. `EffectiveTimeValidationTest` covers it.
 
 **`ReleaseWriter.addConcept` no longer declares `throws ParseException`.**
 Nothing on the build path can throw it once the date parsing is gone, so the
