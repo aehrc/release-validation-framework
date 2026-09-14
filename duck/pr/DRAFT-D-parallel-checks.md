@@ -6,13 +6,16 @@
 
 Stacked on PR C — one commit on top of it.
 
+
 ## Dependencies
 
-**Depends on:** the lateralizable PR in this repository, and transitively on the out-of-range PR in `snomed-query-service`.
-**Depended on by:** the disk-index PR.
+**Depends on:** [Answer the lateralizable domain with one ancestor query](https://github.com/dionmcm/release-mrcm-validator/pull/1), and transitively [the out-of-range PR](https://github.com/dionmcm/snomed-query-service/pull/1) in `snomed-query-service`.
+
+**Depended on by:** [Allow the MRCM index to be built on disk](https://github.com/dionmcm/release-mrcm-validator/pull/3).
+
 **Merge order:** second in this repository.
 
-This PR is stacked: its base is the lateralizable branch, so the diff shown is only this change. Retargeting the base to `develop` before that one merges would make it display both.
+Stacked: the base of this PR is the lateralizable branch, so the diff shown is only this change. Retargeting the base to `develop` before that one merges would make it display both.
 
 ---
 

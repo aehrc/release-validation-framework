@@ -6,9 +6,13 @@
 
 Independent of the out-of-range PR. Touches no query path.
 
+
 ## Dependencies
 
-**Depends on:** nothing. Independent of the other `snomed-query-service` PRs; touches no query path.
+**Depends on:** nothing. Independent of [the out-of-range PR](https://github.com/dionmcm/snomed-query-service/pull/1) and [the member-of PR](https://github.com/dionmcm/snomed-query-service/pull/3); touches no query path.
+
+**Depended on by:** nothing.
+
 **Merge order:** any time.
 
 ---

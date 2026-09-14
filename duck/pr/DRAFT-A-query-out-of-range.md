@@ -4,10 +4,13 @@
 
 **Base:** `develop` · **Branch:** `pr/a-query-semantics` · **+490/-16, 8 files** · upstream suite **127 pass, 0 fail**
 
+
 ## Dependencies
 
 **Depends on:** nothing.
-**Depended on by:** `release-mrcm-validator` lateralizable PR, which uses `conceptsWithAnyAncestor` and cannot compile until this is in a snapshot.
+
+**Depended on by:** [Answer the lateralizable domain with one ancestor query](https://github.com/dionmcm/release-mrcm-validator/pull/1) (`release-mrcm-validator`), which uses `conceptsWithAnyAncestor` and cannot compile until this is in a snapshot.
+
 **Merge order:** first of the set.
 
 ---
