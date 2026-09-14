@@ -11,9 +11,11 @@ Excluding three concepts produces the four ranges around them:
     {* TO 129264002} OR {129264002 TO 360314001}
       OR {360314001 TO 405813007} OR {405813007 TO * }
 
-Each of those is a `TermRangeQuery`, and the classic query parser compiles an
-automaton for every one. A real attribute range excludes thousands of concepts,
-so one check builds thousands of automata — and 134 checks built four million.
+Each of those is a `TermRangeQuery`. To match one, the classic query parser
+builds a state machine that walks the characters of every term in the field
+and decides which fall inside the range. A real attribute range excludes
+thousands of concepts, so one check builds thousands of these — and the 134
+checks built four million.
 
 Measured on an 853 MB AU edition driven through `release-mrcm-validator`'s 134
 attribute ranges, single run, 8-core box:
@@ -21,17 +23,18 @@ attribute ranges, single run, 8-core box:
 | | before | after |
 |---|---|---|
 | `TermRangeQuery` instances constructed | 4,004,000 | 0 |
-| peak retained by their automaton transition tables | 10.94 GB | — |
+| peak heap held by their state-machine tables | 10.94 GB | — |
 | wall clock, 134 ranges, serial | 724.0s | 170.6s |
 | results | — | identical on all 134 |
 
-The heap figure is the cost that matters: `int[][]` inside Lucene's `Automaton`,
-live only while the chain is being built.
+The heap figure is the cost that matters. Each state machine holds its
+transition table as `int[][]` — Lucene's `Automaton` — and they are all live at
+once while the chain is being built.
 
 This asks the index which values the field actually holds, subtracts the
 excluded ones, and puts the remainder in a single `TermInSetQuery`. A term that
 is not in the index cannot match anything, so listing the ones that are selects
-the same documents — one query, no automata.
+the same documents — one query, and no state machines at all.
 
 ## Supporting changes
 
