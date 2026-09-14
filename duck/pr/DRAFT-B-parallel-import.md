@@ -8,18 +8,39 @@ Construction is the expensive half — cardinality grouping per relationship,
 This builds documents across cores in batches of 4,096 and writes them in the
 original iteration order.
 
-## Why the write order is load-bearing
+## Measured on the 20260801 International release
 
-Write order fixes docids, and Lucene returns equal-scoring hits in docid order.
-Writing concurrently would leave every result *set* identical and still reorder
-it, so a validation report that samples failing concepts would name a different
-sample between runs of the same release. Batching bounds the pending documents,
-which matters because this runs while the whole concept map is still on the
-heap.
+| | total | building | writing |
+|---|---|---|---|
+| serial, as today | 46.0s | 14.8s | 11.3s |
+| this change | **33.2s** | 2.5s | 11.9s |
+| if the write were concurrent too | 25.1s | 3.3s | 5.2s |
 
-`IndexWriteOrderTest` pins it: the same taxonomy indexed with a batch size of 4
-and with one batch must produce the same docid order. It fails if the ordered
-write is ever replaced by a concurrent one.
+Document construction drops 14.8s to 2.5s. The write stays serial, and that is
+a deliberate cost of about 8s an index — the third row is what dropping the
+ordering would buy.
+
+## Why the write stays ordered
+
+Write order fixes the docids, and Lucene returns equal-scoring hits in docid
+order. Writing concurrently leaves every result *set* identical and reorders it,
+and that order is then thread scheduling rather than anything repeatable.
+
+That matters because consumers truncate. RVF reports the first N failing
+concepts of an assertion, so an unordered write changes *which* failures a user
+sees between two runs of the same release, with no change in the content and
+nothing in the report to indicate it. Reproducible reports are worth more here
+than 8s an index.
+
+The alternative is to let the index be unordered and have each consumer sort
+before truncating. That is arguably where the guarantee belongs, but it is a
+change in every consumer rather than in this library, and it cannot be verified
+from here. Happy to go that way instead if you would rather this library made no
+ordering promise.
+
+`IndexWriteOrderTest` pins the current promise: the same taxonomy indexed with a
+batch size of 4 and as a single batch must produce the same docid order. It
+fails if the ordered write is ever replaced by a concurrent one.
 
 ## Behaviour changes
 
