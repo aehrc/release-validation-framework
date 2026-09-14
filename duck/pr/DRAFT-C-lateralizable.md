@@ -7,6 +7,12 @@
 **Depends on the `conceptsWithAnyAncestor` PR** in `snomed-query-service`.
 Upstream CI cannot compile this until that is in a snapshot.
 
+## Dependencies
+
+**Depends on:** the out-of-range PR in `snomed-query-service`, for `conceptsWithAnyAncestor(Collection<Long>)`. **CI here will not compile until that is released in a snapshot** - that is expected, not a broken branch.
+**Depended on by:** the parallel-checks PR, and the disk-index PR behind it.
+**Merge order:** first in this repository, after the query-service PR.
+
 ---
 
 The Laterality check asks, per candidate concept, whether any ancestor is a

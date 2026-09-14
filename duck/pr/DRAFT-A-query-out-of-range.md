@@ -4,6 +4,12 @@
 
 **Base:** `develop` · **Branch:** `pr/a-query-semantics` · **+490/-16, 8 files** · upstream suite **127 pass, 0 fail**
 
+## Dependencies
+
+**Depends on:** nothing.
+**Depended on by:** `release-mrcm-validator` lateralizable PR, which uses `conceptsWithAnyAncestor` and cannot compile until this is in a snapshot.
+**Merge order:** first of the set.
+
 ---
 
 An `attributeName != value` clause in an MRCM attribute range is currently

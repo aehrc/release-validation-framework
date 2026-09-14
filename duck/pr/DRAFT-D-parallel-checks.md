@@ -6,6 +6,14 @@
 
 Stacked on PR C — one commit on top of it.
 
+## Dependencies
+
+**Depends on:** the lateralizable PR in this repository, and transitively on the out-of-range PR in `snomed-query-service`.
+**Depended on by:** the disk-index PR.
+**Merge order:** second in this repository.
+
+This PR is stacked: its base is the lateralizable branch, so the diff shown is only this change. Retargeting the base to `develop` before that one merges would make it display both.
+
 ---
 
 The attribute cardinality, group-cardinality and range checks run serially and

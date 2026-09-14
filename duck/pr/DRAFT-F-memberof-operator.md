@@ -6,6 +6,12 @@
 
 Independent of the other query-service PRs. Fixes a correctness bug, not performance.
 
+## Dependencies
+
+**Depends on:** nothing. Independent of the other `snomed-query-service` PRs.
+**Related:** the lateralizable PR in `release-mrcm-validator` carries a comment explaining why it does not use `<< ^X`. This is the fix for that. Neither needs the other to land.
+**Merge order:** any time, but ideally not after the lateralizable PR, so that comment is checkable.
+
 ---
 
 A constraint operator on a member-of expression was discarded. Every one of

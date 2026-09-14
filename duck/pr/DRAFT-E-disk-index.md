@@ -6,6 +6,14 @@
 
 Last of the three; nothing depends on it.
 
+## Dependencies
+
+**Depends on:** the parallel-checks PR, and transitively the two below it.
+**Depended on by:** nothing.
+**Merge order:** last. Rejecting it costs nothing in the others.
+
+Stacked on the parallel-checks branch; the diff shown is only this change.
+
 ---
 
 The MRCM Lucene index is always built in RAM. The build peaks near 7.8 GB on an

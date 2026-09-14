@@ -6,6 +6,11 @@
 
 Independent of the out-of-range PR. Touches no query path.
 
+## Dependencies
+
+**Depends on:** nothing. Independent of the other `snomed-query-service` PRs; touches no query path.
+**Merge order:** any time.
+
 ---
 
 Index construction builds one Lucene `Document` per concept on a single thread.
