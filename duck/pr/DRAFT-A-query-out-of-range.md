@@ -49,40 +49,35 @@ the same documents — one query, and no state machines at all.
   field is absent `readConceptIds` falls back to the stored field per hit, at
   the old cost. No reindex required.
 
-## The ThreadLocal handoff
+## How the clause reaches the parser
 
 `ExpressionConstraintToLuceneConverter` returns query *text*, so it cannot build
 a `TermInSetQuery` — that is an object, and there is no way to write one down as
 a string.
 
-So it writes a placeholder word, `__notinset__`, into the query text, and leaves
-the actual list of terms in a `ThreadLocal` field. When `SnomedQueryService`
-parses the text and reaches that word, it takes the list back out and builds the
-query object there.
+The excluded ids are already in that text, so the clause is replaced by a token
+that names them, `260686004:__notin__129264002_360314001`. When the parser
+reaches it, `getFieldQuery` is handed both the field and the token, and builds
+the complement from the index there. Nothing is held on the side between
+building the text and parsing it, and a query may carry as many of these clauses
+as it likes — each is resolved against its own field.
 
-That is hidden state, and it is the part of this PR I would push back on. It is
-contained: the placeholder cannot be introduced through user-supplied ECL, the
-field is overwritten before the placeholder is ever written, and it is cleared
-in a `finally` around the parse so a parse failure cannot leave the terms behind.
+`IntegrationTest` pins that this path is actually taken, for every clause of a
+multi-clause query. A correctness result proves nothing if the query quietly
+fell back to the range chain. `sqs.notin.rangeform` forces the old rendering, so
+both forms can be compared against one index in one process.
 
-It is also why the fast path is taken **only when the query carries exactly one
-`!=` clause**. The pattern that finds those clauses is greedy and matches once,
-so with two clauses the text substitution replaces both while only one field's
-term list has been left behind — the second placeholder would find nothing.
-Multi-clause queries keep taking the range chain, which substitutes the same
-text for both and stays correct.
+## A pre-existing bug this exposed
 
-That guard costs nothing in practice. Every out-of-range expression the MRCM
-refsets of the 20260801 International release produce — 147 of them — carries
-exactly one such clause, because the rule is built as
-`domainConstraint + attributeId + " != " + rangeConstraint`, and the excluded
-set is one clause however many concepts are OR'd inside it. A second clause
-needs a domain constraint that itself contains `!=`; none of the 19 active
-domains has one. `IntegrationTest` covers both the correctness and the routing:
-the single-clause case must build a term set, the multi-clause case must not.
+Locating the clause by regex does not work. The pattern is greedy and anchored
+at the end, so on a query with two `!=` clauses it spans from one clause into
+the other, harvests the second clause's **field id** as though it were an
+excluded concept, and collapses both clauses into one — silently answering a
+different question.
 
-The alternative is changing the converter's return type from `String` to a
-query object. That touches every caller and all 83 converter tests.
+Clauses are now located by scanning for the balanced closing bracket and
+rewritten right to left. Two `!=` clauses on different fields now give the same
+answer as each clause does alone; before this they did not.
 
 ## Dependencies
 
