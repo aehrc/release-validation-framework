@@ -1,19 +1,5 @@
 # PR A — snomed-query-service
-
 **Title:** `Answer an out-of-range ECL clause with one TermInSetQuery`
-
-**Base:** `develop` · **Branch:** `pr/a-query-semantics` · **+490/-16, 8 files** · upstream suite **127 pass, 0 fail**
-
-
-## Dependencies
-
-**Depends on:** nothing.
-
-**Depended on by:** [Answer the lateralizable domain with one ancestor query](https://github.com/dionmcm/release-mrcm-validator/pull/1) (`release-mrcm-validator`), which uses `conceptsWithAnyAncestor` and cannot compile until this is in a snapshot.
-
-**Merge order:** first of the set.
-
----
 
 An `attributeName != value` clause in an MRCM attribute range is currently
 rendered as the complement of the excluded set: one exclusive `TermRangeQuery`
@@ -76,3 +62,9 @@ the single-clause case must build a term set, the multi-clause case must not.
 
 The alternative is changing the converter's return type from `String` to a
 query object. That touches every caller and all 83 converter tests.
+
+## Dependencies
+
+**Depended on by:** [Answer the lateralizable domain with one ancestor query](https://github.com/dionmcm/release-mrcm-validator/pull/1) (`release-mrcm-validator`), which uses `conceptsWithAnyAncestor` and cannot compile until this is in a snapshot.
+
+**Merge order:** first of the set.

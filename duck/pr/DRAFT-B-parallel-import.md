@@ -1,21 +1,5 @@
 # PR B — snomed-query-service
-
 **Title:** `Build index documents in parallel, writing them in iteration order`
-
-**Base:** `develop` · **Branch:** `pr/b-parallel-import` · **+266/-29, 4 files** · upstream suite **126 pass, 0 fail**
-
-Independent of the out-of-range PR. Touches no query path.
-
-
-## Dependencies
-
-**Depends on:** nothing. Independent of [the out-of-range PR](https://github.com/dionmcm/snomed-query-service/pull/1) and [the member-of PR](https://github.com/dionmcm/snomed-query-service/pull/3); touches no query path.
-
-**Depended on by:** nothing.
-
-**Merge order:** any time.
-
----
 
 Index construction builds one Lucene `Document` per concept on a single thread.
 Construction is the expensive half — cardinality grouping per relationship,
@@ -55,3 +39,7 @@ nothing downstream ever checks. `EffectiveTimeValidationTest` pins it.
 Nothing on the build path can throw it once the date parsing is gone, so the
 dead carrier that propagated it out of the parallel stream is removed too. This
 narrows a public signature.
+
+## Dependencies
+
+Independent of [the out-of-range PR](https://github.com/dionmcm/snomed-query-service/pull/1) and [the member-of PR](https://github.com/dionmcm/snomed-query-service/pull/3); touches no query path.

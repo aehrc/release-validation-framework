@@ -1,24 +1,5 @@
 # PR C — release-mrcm-validator
-
 **Title:** `Answer the lateralizable domain with one ancestor query`
-
-**Base:** `develop` · **Branch:** `pr/c-lateralizable` · **+23/-6, 1 file** · upstream suite **24 pass, 0 fail**
-
-**Depends on the `conceptsWithAnyAncestor` PR** in `snomed-query-service`.
-Upstream CI cannot compile this until that is in a snapshot.
-
-
-## Dependencies
-
-**Depends on:** [Answer an out-of-range ECL clause with one TermInSetQuery](https://github.com/dionmcm/snomed-query-service/pull/1) (`snomed-query-service`), for `conceptsWithAnyAncestor(Collection<Long>)`. **CI here will not compile until that is released in a snapshot** - that is expected, not a broken branch.
-
-**Depended on by:** [Run the attribute checks in parallel](https://github.com/dionmcm/release-mrcm-validator/pull/2), and [Allow the MRCM index to be built on disk](https://github.com/dionmcm/release-mrcm-validator/pull/3) behind it.
-
-**Related:** [Apply the constraint operator to the members of a member-of expression](https://github.com/dionmcm/snomed-query-service/pull/3) fixes the `<< ^X` behaviour this file's comment describes.
-
-**Merge order:** first in this repository, after the query-service PR.
-
----
 
 The Laterality check asks, per candidate concept, whether any ancestor is a
 member of the lateralizable refset. It does that with an ECL query per
@@ -53,3 +34,13 @@ one. The code carries that note where the set is built.
 
 Query semantics only. The parallelism that was originally bundled with this is
 a separate PR stacked on top.
+
+## Dependencies
+
+**Depends on:** [Answer an out-of-range ECL clause with one TermInSetQuery](https://github.com/dionmcm/snomed-query-service/pull/1) (`snomed-query-service`), for `conceptsWithAnyAncestor(Collection<Long>)`. **CI here will not compile until that is released in a snapshot** - that is expected, not a broken branch.
+
+**Depended on by:** [Run the attribute checks in parallel](https://github.com/dionmcm/release-mrcm-validator/pull/2), and [Allow the MRCM index to be built on disk](https://github.com/dionmcm/release-mrcm-validator/pull/3) behind it.
+
+**Related:** [Apply the constraint operator to the members of a member-of expression](https://github.com/dionmcm/snomed-query-service/pull/3) fixes the `<< ^X` behaviour this file's comment describes.
+
+**Merge order:** first in this repository, after the query-service PR.

@@ -1,23 +1,5 @@
 # PR E — release-mrcm-validator
-
 **Title:** `Allow the MRCM index to be built on disk`
-
-**Base:** PR D · **Branch:** `pr/e-disk-index` · **+89/-4, 2 files** · upstream suite **24 pass, 0 fail**
-
-Last of the three; nothing depends on it.
-
-
-## Dependencies
-
-**Depends on:** [Run the attribute checks in parallel](https://github.com/dionmcm/release-mrcm-validator/pull/2), and transitively [the lateralizable PR](https://github.com/dionmcm/release-mrcm-validator/pull/1) and [the out-of-range PR](https://github.com/dionmcm/snomed-query-service/pull/1).
-
-**Depended on by:** nothing.
-
-**Merge order:** last. Rejecting it costs nothing in the others.
-
-Stacked on the parallel-checks branch; the diff shown is only this change.
-
----
 
 The MRCM Lucene index is always built in RAM. The build peaks near 7.8 GB on an
 853 MB edition, and both content forms are indexed in the same run, so the heap
@@ -48,3 +30,13 @@ you would rather not have the thread local.
 
 A bad root path fails with a message naming the property, not a bare
 `NoSuchFileException`. Documented in the README.
+
+## Dependencies
+
+**Depends on:** [Run the attribute checks in parallel](https://github.com/dionmcm/release-mrcm-validator/pull/2), and transitively [the lateralizable PR](https://github.com/dionmcm/release-mrcm-validator/pull/1) and [the out-of-range PR](https://github.com/dionmcm/snomed-query-service/pull/1).
+
+**Depended on by:** nothing.
+
+**Merge order:** last. Rejecting it costs nothing in the others.
+
+Stacked on the parallel-checks branch; the diff shown is only this change.

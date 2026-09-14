@@ -1,21 +1,5 @@
 # PR F — snomed-query-service
-
 **Title:** `Apply the constraint operator to the members of a member-of expression`
-
-**Base:** `develop` · **Branch:** `pr/f-memberof-operator` · **+248/-4, 4 files** · upstream suite **128 pass, 0 fail**
-
-Independent of the other query-service PRs. Fixes a correctness bug, not performance.
-
-
-## Dependencies
-
-**Depends on:** nothing. Independent of [the out-of-range PR](https://github.com/dionmcm/snomed-query-service/pull/1) and [the parallel-import PR](https://github.com/dionmcm/snomed-query-service/pull/2).
-
-**Related:** [Answer the lateralizable domain with one ancestor query](https://github.com/dionmcm/release-mrcm-validator/pull/1) carries a comment explaining why it does not use `<< ^X`. This is the fix for that. Neither needs the other to land.
-
-**Merge order:** any time, but ideally not after that one, so its comment is checkable.
-
----
 
 A constraint operator on a member-of expression was discarded. Every one of
 these converted to the same Lucene query:
@@ -75,3 +59,9 @@ throws `UnsupportedOperationException`.** The member set is not expressible
 there, and the operator was previously being dropped — so this converts a wrong
 answer into a refusal rather than removing a working feature. `attr = ^X`
 without an operator is untouched.
+
+## Dependencies
+
+**Related:** [Answer the lateralizable domain with one ancestor query](https://github.com/dionmcm/release-mrcm-validator/pull/1) carries a comment explaining why it does not use `<< ^X`. This is the fix for that. Neither needs the other to land.
+
+**Merge order:** any time, but ideally not after that one, so its comment is checkable.

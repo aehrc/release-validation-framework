@@ -1,23 +1,5 @@
 # PR D — release-mrcm-validator
-
 **Title:** `Run the attribute checks in parallel`
-
-**Base:** PR C · **Branch:** `pr/d-parallel-checks` · **+289/-141, 2 files** · upstream suite **24 pass, 0 fail**
-
-Stacked on PR C — one commit on top of it.
-
-
-## Dependencies
-
-**Depends on:** [Answer the lateralizable domain with one ancestor query](https://github.com/dionmcm/release-mrcm-validator/pull/1), and transitively [the out-of-range PR](https://github.com/dionmcm/snomed-query-service/pull/1) in `snomed-query-service`.
-
-**Depended on by:** [Allow the MRCM index to be built on disk](https://github.com/dionmcm/release-mrcm-validator/pull/3).
-
-**Merge order:** second in this repository.
-
-Stacked: the base of this PR is the lateralizable branch, so the diff shown is only this change. Retargeting the base to `develop` before that one merges would make it display both.
-
----
 
 The attribute cardinality, group-cardinality and range checks run serially and
 are independent of each other. This runs them across cores.
@@ -65,3 +47,13 @@ over it is read-only and safe to share.
 
 The configurable on-disk index that was originally bundled with this is a
 separate PR stacked on top. It is memory management, not parallelism.
+
+## Dependencies
+
+**Depends on:** [Answer the lateralizable domain with one ancestor query](https://github.com/dionmcm/release-mrcm-validator/pull/1), and transitively [the out-of-range PR](https://github.com/dionmcm/snomed-query-service/pull/1) in `snomed-query-service`.
+
+**Depended on by:** [Allow the MRCM index to be built on disk](https://github.com/dionmcm/release-mrcm-validator/pull/3).
+
+**Merge order:** second in this repository.
+
+Stacked: the base of this PR is the lateralizable branch, so the diff shown is only this change. Retargeting the base to `develop` before that one merges would make it display both.
