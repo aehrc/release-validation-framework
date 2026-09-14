@@ -19,7 +19,7 @@ The operator distributes over the **members**; it does not describe the refset
 concept. `<< ^723264001` means the members of the lateralizable body structure
 refset and everything beneath them.
 
-## Why it matters
+## Effect on validation results
 
 A caller using `<< ^X` to decide which concepts are permitted an attribute gets
 the members alone, so every *descendant* of a member looks not permitted. On an
@@ -37,7 +37,7 @@ a refset whose single member has a child and a grandchild. Reverting just the
 converter line makes it fail with `[362961001]` where all three concepts are
 expected.
 
-## How
+## How the operator is resolved
 
 The members are not known at conversion time, so the operator becomes an
 internal function the query service resolves against the index — the mechanism
@@ -45,7 +45,7 @@ already used for `ANCESTOR_OF` and friends. Descendants resolve as one
 `TermInSetQuery` over the ancestor field rather than a search per member,
 because a refset can have thousands.
 
-## Two things to look at
+## Other changes this required
 
 **The resolver matched functions by bare name.** `luceneQuery.contains(name)`
 means one function whose name is a prefix of another's takes the other's text

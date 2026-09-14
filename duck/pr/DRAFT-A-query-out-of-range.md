@@ -22,7 +22,7 @@ live only while the range chain is built.
 Only terms present in the index can match anything, so naming the field's own
 terms and subtracting the excluded set selects the same documents.
 
-## Two supporting changes
+## Supporting changes
 
 - **`conceptsWithAnyAncestor(ids)`** — one term-set query over the ancestor
   field. Proper ancestors, so the queried ids are not returned; javadoc says so.
@@ -35,7 +35,7 @@ terms and subtracting the excluded set selects the same documents.
   field is absent `readConceptIds` falls back to the stored field per hit, at
   the old cost. No reindex required.
 
-## The part to attack
+## The ThreadLocal handoff
 
 `ExpressionConstraintToLuceneConverter` returns query *text*, so it cannot
 construct a `TermInSetQuery`. It emits a `__notinset__` sentinel and parks the

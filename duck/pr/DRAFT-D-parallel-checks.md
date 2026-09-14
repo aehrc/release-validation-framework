@@ -43,7 +43,7 @@ reports were never affected — they come from value-hashed sets.
 One store is built per run and shared by the worker threads; the query service
 over it is read-only and safe to share.
 
-## Not here
+## Not in this PR
 
 The configurable on-disk index that was originally bundled with this is a
 separate PR stacked on top. It is memory management, not parallelism.

@@ -21,7 +21,7 @@ heap.
 and with one batch must produce the same docid order. It fails if the ordered
 write is ever replaced by a concurrent one.
 
-## Two consequences worth naming
+## Behaviour changes
 
 **`SimpleDateFormat` is gone from the write path.** It was shared, it is not
 thread-safe, and it was the one real hazard in parallelising this. The

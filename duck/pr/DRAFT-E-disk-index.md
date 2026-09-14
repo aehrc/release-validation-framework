@@ -9,7 +9,7 @@ has to hold the whole thing.
 temporary subdirectory is created per run and deleted when the run ends. Unset,
 the index stays in memory exactly as now.
 
-## The lifecycle, which is the only risky part
+## Deleting the index directory
 
 An in-memory index needs no cleanup: drop the reference and the garbage
 collector reclaims it. An on-disk index is a directory, and nothing deletes it
