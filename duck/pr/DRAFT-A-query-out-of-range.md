@@ -51,19 +51,26 @@ the same documents — one query, and no state machines at all.
 
 ## The ThreadLocal handoff
 
-`ExpressionConstraintToLuceneConverter` returns query *text*, so it cannot
-construct a `TermInSetQuery`. It emits a `__notinset__` sentinel and parks the
-terms in a `ThreadLocal` that `SnomedQueryService` drains during parse.
+`ExpressionConstraintToLuceneConverter` returns query *text*, so it cannot build
+a `TermInSetQuery` — that is an object, and there is no way to write one down as
+a string.
 
-That is hidden state. It is contained: the sentinel cannot be injected through
-user ECL, the slot is overwritten before every emit, and it is cleared in a
-`finally` around the parse so a parse failure cannot strand the terms.
+So it writes a placeholder word, `__notinset__`, into the query text, and leaves
+the actual list of terms in a `ThreadLocal` field. When `SnomedQueryService`
+parses the text and reaches that word, it takes the list back out and builds the
+query object there.
+
+That is hidden state, and it is the part of this PR I would push back on. It is
+contained: the placeholder cannot be introduced through user-supplied ECL, the
+field is overwritten before the placeholder is ever written, and it is cleared
+in a `finally` around the parse so a parse failure cannot leave the terms behind.
 
 It is also why the fast path is taken **only when the query carries exactly one
-such clause**. The pattern that finds `(* NOT ...)` is greedy and matches once,
-so with two clauses the text substitution rewrites both while only one field's
-complement is parked. Multi-clause queries keep taking the range chain, which
-substitutes the same text for both and stays correct.
+`!=` clause**. The pattern that finds those clauses is greedy and matches once,
+so with two clauses the text substitution replaces both while only one field's
+term list has been left behind — the second placeholder would find nothing.
+Multi-clause queries keep taking the range chain, which substitutes the same
+text for both and stays correct.
 
 That guard costs nothing in practice. Every out-of-range expression the MRCM
 refsets of the 20260801 International release produce — 147 of them — carries
