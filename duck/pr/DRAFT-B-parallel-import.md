@@ -16,31 +16,34 @@ original iteration order.
 | this change | **33.2s** | 2.5s | 11.9s |
 | if the write were concurrent too | 25.1s | 3.3s | 5.2s |
 
-Document construction drops 14.8s to 2.5s. The write stays serial, and that is
-a deliberate cost of about 8s an index — the third row is what dropping the
-ordering would buy.
+Document construction drops 14.8s to 2.5s. The write stays serial, which costs
+about 8s an index — the third row is what dropping the ordering would buy.
 
-## Why the write stays ordered
+## The ordering is preserved, and we are not sure it should be
 
 Write order fixes the docids, and Lucene returns equal-scoring hits in docid
 order. Writing concurrently leaves every result *set* identical and reorders it,
-and that order is then thread scheduling rather than anything repeatable.
+and that order becomes thread scheduling rather than anything repeatable.
 
-That matters because consumers truncate. RVF reports the first N failing
-concepts of an assertion, so an unordered write changes *which* failures a user
-sees between two runs of the same release, with no change in the content and
-nothing in the report to indicate it. Reproducible reports are worth more here
-than 8s an index.
+That currently matters because consumers truncate. RVF reports the first N
+failing concepts of an assertion, so an unordered write would change *which*
+failures a user sees between two runs of the same release — same content,
+different sample, nothing in the report to say so.
 
-The alternative is to let the index be unordered and have each consumer sort
-before truncating. That is arguably where the guarantee belongs, but it is a
-change in every consumer rather than in this library, and it cannot be verified
-from here. Happy to go that way instead if you would rather this library made no
-ordering promise.
+So this change preserves the existing order, at that 8s. We are not claiming
+that is the right trade. A consumer that sorted before trimming would get
+consistent reporting regardless of what this library does, and that is probably
+where the guarantee belongs — it would be robust against any future change in
+here, and would let the write go parallel as well.
 
-`IndexWriteOrderTest` pins the current promise: the same taxonomy indexed with a
-batch size of 4 and as a single batch must produce the same docid order. It
-fails if the ordered write is ever replaced by a concurrent one.
+We did not do that because it changes behaviour consumers are relying on today,
+and this PR is about index construction. If you would rather this library made
+no ordering promise, say so and we will drop the ordered write and fix the
+consumers instead.
+
+`IndexWriteOrderTest` pins the promise as it stands: the same taxonomy indexed
+with a batch size of 4 and as a single batch must produce the same docid order.
+It fails if the ordered write is ever replaced by a concurrent one.
 
 ## Behaviour changes
 
