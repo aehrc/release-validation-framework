@@ -11,16 +11,21 @@ the index stays in memory exactly as now.
 
 ## The lifecycle, which is the only risky part
 
-A RAM store is garbage; a disk store is a directory that nothing else deletes.
-So the store is now destroyed on the way out of `executeValidation`, on both
-paths:
+An in-memory index needs no cleanup: drop the reference and the garbage
+collector reclaims it. An on-disk index is a directory, and nothing deletes it
+unless this code does. Left behind, each one is gigabytes, once per content
+form per run.
 
-- the import fails — the store is destroyed before the exception propagates,
-  rather than being stranded because it never reached the caller;
+So the store is now destroyed on the way out of `executeValidation`, including
+on the two paths where it would otherwise be stranded:
+
+- the import throws — the store is destroyed before the exception propagates,
+  rather than leaking because it never reached the caller that owns it;
 - `new SnomedQueryService(...)` throws after the store is built — the `finally`
-  re-reads the handoff rather than trusting the assignment that never ran.
+  re-reads the handoff instead of trusting an assignment that never ran.
 
-`RamReleaseStore.destroy()` is a no-op, so the unset case is unaffected.
+`RamReleaseStore.destroy()` is a no-op, so leaving the property unset behaves
+exactly as before.
 
 The store reaches `executeValidation` through a `ThreadLocal` because
 `getSnomedQueryService` is `protected` and overridden in tests; changing its
