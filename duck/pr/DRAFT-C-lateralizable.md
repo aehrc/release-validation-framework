@@ -2,7 +2,7 @@
 
 **Title:** `Answer the lateralizable domain with one ancestor query`
 
-**Base:** `develop` · **Branch:** `pr/c-lateralizable` · **+20/-6, 1 file** · upstream suite **24 pass, 0 fail**
+**Base:** `develop` · **Branch:** `pr/c-lateralizable` · **+23/-6, 1 file** · upstream suite **24 pass, 0 fail**
 
 **Depends on the `conceptsWithAnyAncestor` PR** in `snomed-query-service`.
 Upstream CI cannot compile this until that is in a snapshot.
