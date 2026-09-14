@@ -1,10 +1,19 @@
 # PR A — snomed-query-service
 **Title:** `Answer an out-of-range ECL clause with one TermInSetQuery`
 
-An `attributeName != value` clause in an MRCM attribute range is currently
-rendered as the complement of the excluded set: one exclusive `TermRangeQuery`
-per member, chained. The classic query parser compiles an automaton per range
-clause.
+MRCM attribute range checks ask which concepts hold a value *outside* the
+permitted set, which in ECL is `attributeName != value`. There is no "not one
+of these" query here, so the excluded concepts are turned into the ranges
+between them, and those ranges are chained together.
+
+Excluding three concepts produces the four ranges around them:
+
+    {* TO 129264002} OR {129264002 TO 360314001}
+      OR {360314001 TO 405813007} OR {405813007 TO * }
+
+Each of those is a `TermRangeQuery`, and the classic query parser compiles an
+automaton for every one. A real attribute range excludes thousands of concepts,
+so one check builds thousands of automata — and 134 checks built four million.
 
 Measured on an 853 MB AU edition driven through `release-mrcm-validator`'s 134
 attribute ranges, single run, 8-core box:
@@ -17,10 +26,12 @@ attribute ranges, single run, 8-core box:
 | results | — | identical on all 134 |
 
 The heap figure is the cost that matters: `int[][]` inside Lucene's `Automaton`,
-live only while the range chain is built.
+live only while the chain is being built.
 
-Only terms present in the index can match anything, so naming the field's own
-terms and subtracting the excluded set selects the same documents.
+This asks the index which values the field actually holds, subtracts the
+excluded ones, and puts the remainder in a single `TermInSetQuery`. A term that
+is not in the index cannot match anything, so listing the ones that are selects
+the same documents — one query, no automata.
 
 ## Supporting changes
 
