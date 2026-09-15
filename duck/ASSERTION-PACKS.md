@@ -513,3 +513,49 @@ The gates the workflow should run, in order, once that is settled:
   execute, and the 10 that do not are harness gaps (an incomplete `qa_result`,
   the `ports` macros, and result tables an earlier assertion creates), not store
   defects. It needs finishing before it can gate.
+
+## Merged, 2026-09-15
+
+`aehrc/rvf#37` is in. What landed: the publishing workflow with five gates, the
+three previously-unfireable assertions fixed, two v3 translations retired, 25 new
+v4 box assertions, and fires/does-not-fire cases for 226 of 227 assertions run on
+both engines.
+
+**Production impact, measured before merging rather than after.** As first
+written the new assertions cost **1,647.6s** on MySQL - 27.5 minutes added to the
+AMT phase, for assertions that report nothing. The cause was
+`isActiveMemberOf_cr_refset`: a stored FUNCTION, called once per candidate row
+inside a correlated EXISTS over the closure, which MySQL cannot plan through. The
+same expression costs 3.7s on DuckDB, so the DuckDB timing was no guide
+whatsoever. Rewritten as joins against `simplerefset_active`, which is indexed on
+both columns it needs: **53.5s**, zero stored-function calls left in the set, and
+the four worst went from 355/346/335/317s to 0.4/0.3/0.2/0.1s.
+
+Measured on the AU 20260731 release loaded into MySQL 8 with the real
+pre-requisites applied, whose transitive closure came to 8,873,080 rows -
+identical to DuckDB's, which is a parity check worth having in its own right.
+
+All 26 added or repaired assertions report ZERO findings on that release on both
+engines, so no new nightly failures.
+
+**Three CI faults the first real runs found**, none of which local verification
+could have: the engine repo has no `main` branch and the DDL lives only on
+`catchup-upgraded`; a backslash continuation inside a single-line YAML scalar
+folded to an escaped space and made `pack_cases` print its usage; and the publish
+workflow's A/B still pointed at a unix socket the service container does not
+expose while comparing only one prefix, so the publish gate was weaker than the
+pull-request gate.
+
+**Two allowlists, both self-expiring.** `uncoverable-assertions.tsv` holds the
+one assertion no fixture of this size can satisfy - it asserts a distribution
+statistic as exact equality. `known-engine-divergences.tsv` holds the two
+maximum-length assertions, which differ because MySQL declares
+`description.term` as VARCHAR(333) and cannot hold a value that breaches a 2048
+character limit. Both files fail the build if an entry stops applying, because an
+entry nobody re-reads reads as a checked fact and is an unchecked one.
+
+**Still worth acting on, unrelated to this work:** AU 20260731 carries 4,651
+descriptions longer than 333 characters, the longest 2,027. MySQL truncates them
+on insert under a permissive `sql_mode`, so RVF has been storing 333 characters
+of a 2,027 character description and validating the truncation. The assertion
+that would notice cannot fire there.
