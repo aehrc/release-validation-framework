@@ -470,14 +470,34 @@ A workflow cannot check out a script that is not committed, so this blocked the
 whole task. Committed verbatim as `cca33ac` on `rvf-duck`, with four selftests
 passing (amt_manifest, procedures, materialise, structural).
 
-**Open, and needed before the workflow can be trusted:** how the deployed store
-was actually invoked. Pointed at the corpus at the store's own `corpusRef`
-(`0160dd2`) with `--pack-name international --pack-version 2026.07.27`, the
-publisher emits **560 assertions where the deployed store has 360**, and a
-different digest. So the published store came from a different invocation - a
-group filter, or a narrower `--scripts` root. Until that is pinned down, a
-workflow that rebuilds a pack cannot claim to rebuild the same pack, and the
-digest is what every pin and drift check compares.
+**Answered 2026-09-15: the invocation is reproducible.** The 560-vs-360 gap was
+not the publisher. `/data/work/corpus-scratch` is a working copy with the AMT
+corpus WIRED INTO IT - 371 script entries committed, 571 on disk, `scripts/amtv4/`
+untracked - so building from it publishes both corpora at once. Building from a
+clean export of the same ref reproduces the deployed store exactly:
+
+    publish_store.py \
+      --scripts       <clean checkout of the SI assertions at the pinned ref>/scripts \
+      --prerequisites <dir containing pre-requisites.sql> \
+      --ddl           duck/create-tables-mysql.sql \
+      --manifest-root <that checkout> \
+      --pack-name international --pack-version 2026.07.27
+
+giving `sha256:d6f0a930e8acd55f...` and 360 assertions - byte-identical to the
+deployed store in every field except `corpusRef`, which is empty only because a
+tar export is not a git checkout.
+
+Two things that invocation reveals, both of which the workflow has to respect:
+
+* **`pre-requisites.sql` is not in the SI corpus at all.** It is untracked in
+  every working copy and committed in `aehrc/rvf` under
+  `testscripts/pre_requisites/`. So the INTERNATIONAL pack's prerequisites come
+  from the AMT repository - an unobvious cross-dependency, and the reason a
+  clean SI checkout alone cannot build the store ("no *_active tables found").
+* **The DDL comes from this public repository**, `duck/create-tables-mysql.sql`,
+  which is why the pack must be built against a pinned tag of it rather than a
+  vendored copy: a pack built against different DDL from the engine's is a pack
+  whose `tableColumns` describe tables the engine does not create.
 
 The gates the workflow should run, in order, once that is settled:
 
