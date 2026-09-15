@@ -1351,6 +1351,59 @@
         "ingress"
       ],
       "additionalProperties": false
+    },
+    "assertionPacks": {
+      "type": "array",
+      "description": "Assertion packs pinned by this deployment, merged with the corpus in the image. DuckDB engine only.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Pack name, as it appears in a report's provenance"
+          },
+          "version": {
+            "type": "string",
+            "description": "Pack version, recorded with the findings"
+          },
+          "uri": {
+            "type": "string",
+            "description": "Where to fetch it: an https URL, or file: for a mounted volume"
+          },
+          "sha256": {
+            "type": "string",
+            "description": "Required. The digest the bytes must hash to, bare hex or sha256: prefixed"
+          },
+          "tokenSecret": {
+            "type": "object",
+            "description": "Secret holding a token for a private pack; sent as an Authorization header, never in the URL",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "key": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "key"
+            ],
+            "additionalProperties": false
+          },
+          "tokenScheme": {
+            "type": "string",
+            "description": "Authorization scheme before the token; defaults to Bearer"
+          }
+        },
+        "required": [
+          "name",
+          "version",
+          "uri",
+          "sha256"
+        ],
+        "additionalProperties": false
+      }
     }
   },
   "additionalProperties": false

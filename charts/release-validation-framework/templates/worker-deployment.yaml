@@ -78,6 +78,7 @@ spec:
             - name: RVF_DUCK_MEMORY_LIMIT
               value: {{ . | quote }}
             {{- end }}
+            {{- include "release-validation-framework.assertionPackEnv" . | nindent 12 }}
             {{- with .Values.worker.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

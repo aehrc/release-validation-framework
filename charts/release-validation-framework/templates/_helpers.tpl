@@ -234,3 +234,52 @@ cert-manager Issuer name
 {{- define "release-validation-framework.issuerName" -}}
 {{- .Values.certmanager.issuerName | default (printf "letsencrypt-%s" (include "release-validation-framework.fullname" .)) }}
 {{- end }}
+
+{{/*
+Assertion pack pins.
+
+Renders the token env vars first and RVF_ASSERTION_PACKS after them, because
+the spec references each token with $(NAME) and Kubernetes only expands a
+reference to a variable declared EARLIER in the same container. The token is
+never written into the spec itself: a pack URL and its spec both end up in logs
+and in `kubectl describe`, and a PAT there is a PAT leaked.
+
+Specs are comma separated because Spring splits list properties on commas, and
+the fields inside one spec are semicolon separated because a URL contains
+commas far more often than semicolons.
+*/}}
+{{- define "release-validation-framework.assertionPackEnv" -}}
+{{- range $i, $pack := .Values.assertionPacks }}
+{{- with $pack.tokenSecret }}
+- name: RVF_PACK_TOKEN_{{ $i }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ .name | quote }}
+      key: {{ .key | quote }}
+{{- end }}
+{{- end }}
+{{- if .Values.assertionPacks }}
+- name: RVF_ASSERTION_PACKS
+  value: {{ include "release-validation-framework.assertionPackSpecs" . | quote }}
+{{- end }}
+{{- end }}
+
+{{/*
+One spec per pinned pack. A digest is mandatory here as well as in the engine:
+a pack with no sha256 is refused by AssertionPackFetcher, and failing at helm
+template time says so before a deployment rolls.
+*/}}
+{{- define "release-validation-framework.assertionPackSpecs" -}}
+{{- $specs := list }}
+{{- range $i, $pack := .Values.assertionPacks }}
+{{- if not $pack.sha256 }}
+{{- fail (printf "assertionPacks[%d] (%s) has no sha256: an unpinned pack cannot be reproduced, so a report naming it would mean nothing" $i ($pack.name | default "unnamed")) }}
+{{- end }}
+{{- $spec := printf "name=%s;version=%s;uri=%s;sha256=%s" $pack.name $pack.version $pack.uri $pack.sha256 }}
+{{- if $pack.tokenSecret }}
+{{- $spec = printf "%s;authHeader=%s $(RVF_PACK_TOKEN_%d)" $spec ($pack.tokenScheme | default "Bearer") $i }}
+{{- end }}
+{{- $specs = append $specs $spec }}
+{{- end }}
+{{- join "," $specs }}
+{{- end }}

@@ -53,6 +53,7 @@ spec:
               value: {{ .Values.env.releaseStorageUseCloud | quote }}
             - name: RVF_VALIDATION_JOB_RETENTION_DAYS
               value: {{ .Values.api.retentionDays | quote }}
+            {{- include "release-validation-framework.assertionPackEnv" . | nindent 12 }}
             {{- with .Values.api.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

@@ -39,6 +39,20 @@ import java.util.List;
  * <p>{@code file:} URLs are accepted deliberately: it is how the shared-volume
  * layout works today, how a developer tests a pack before publishing it, and
  * how this class is tested without a network.
+ *
+ * <p>Two details are what a GitHub release asset needs, and both were wrong
+ * until a private pack was actually fetched:
+ *
+ * <ul>
+ * <li><b>{@code Accept: application/octet-stream}.</b> Asked for
+ *     {@code application/json}, the GitHub API returns the asset's METADATA -
+ *     a JSON object describing the file - rather than the file. That fails the
+ *     digest check, so it fails safe, but it never succeeds either.
+ * <li><b>Redirects are followed.</b> The API answers 302 to a
+ *     release-assets host, and {@code HttpClient}'s default is
+ *     {@code Redirect.NEVER}, so the fetch died on "returned HTTP 302". The
+ *     Authorization header is carried across, which that host requires.
+ * </ul>
  */
 public class AssertionPackFetcher {
 
@@ -62,7 +76,10 @@ public class AssertionPackFetcher {
 	private final HttpClient http;
 
 	public AssertionPackFetcher() {
-		this(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(20)).build());
+		this(HttpClient.newBuilder()
+				.connectTimeout(Duration.ofSeconds(20))
+				.followRedirects(HttpClient.Redirect.NORMAL)
+				.build());
 	}
 
 	AssertionPackFetcher(HttpClient http) {
@@ -102,7 +119,7 @@ public class AssertionPackFetcher {
 		}
 		HttpRequest.Builder request = HttpRequest.newBuilder(source.uri())
 				.timeout(Duration.ofMinutes(5))
-				.header("Accept", "application/json");
+				.header("Accept", "application/octet-stream, application/json");
 		if (source.authHeader() != null && !source.authHeader().isBlank()) {
 			request.header("Authorization", source.authHeader());
 		}

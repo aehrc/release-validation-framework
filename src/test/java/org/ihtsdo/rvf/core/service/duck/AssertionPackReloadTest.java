@@ -259,6 +259,36 @@ class AssertionPackReloadTest {
 		assertEquals(1, service.loadedPacks().size());
 	}
 
+	/**
+	 * A GitHub release asset is served by redirect, and the API decides what to
+	 * send from the Accept header. Both defaults were wrong: the client did not
+	 * follow redirects, so the fetch died on "returned HTTP 302", and it asked
+	 * for {@code application/json}, which returns the asset's metadata rather
+	 * than the asset. A private pack could not be fetched at all.
+	 */
+	@Test
+	void aPackBehindARedirectIsFetched(@TempDir Path dir) throws Exception {
+		String pack = store(UUID_PACK, "pack.sql", MACRO);
+		serve(pack);
+		String accepted = "/asset";
+		StringBuilder sawAccept = new StringBuilder();
+		server.createContext(accepted, exchange -> {
+			sawAccept.append(exchange.getRequestHeaders().getFirst("Accept"));
+			exchange.getResponseHeaders().add("Location", uri().toString());
+			exchange.sendResponseHeaders(302, -1);
+			exchange.close();
+		});
+		URI asset = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + accepted);
+
+		DuckAssertionService service = serviceWith(dir,
+				"name=amtv4;version=2026.09.1;uri=" + asset + ";sha256=" + sha256(pack));
+
+		assertEquals(2, service.findAll().size(), "the redirect was followed");
+		assertEquals(1, service.loadedPacks().size());
+		assertTrue(sawAccept.toString().contains("application/octet-stream"),
+				"asked for the asset, not its metadata: " + sawAccept);
+	}
+
 	@Test
 	void aPackThatCannotBeMergedIsRefusedAndNothingChanges(@TempDir Path dir) throws Exception {
 		// Parses, verifies, and redefines the bundled store's macro - the

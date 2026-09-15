@@ -62,6 +62,35 @@ env:
   # -- Whether cloud storage is used for releases
   releaseStorageUseCloud: "false"
 
+# -- Assertion packs this deployment pins, merged with the corpus baked into the
+# image. DuckDB engine only. Empty means the image's corpus is the whole corpus.
+#
+# A pack is executable SQL arriving over a network, so `sha256` is mandatory -
+# the chart fails to render without it, and the engine refuses it as well. There
+# is deliberately no `latest`: a mutable tag makes "which assertions produced
+# this report" unanswerable, which is the cost packs exist to remove.
+#
+# `uri` for a GitHub release asset is the API asset URL, not the browser one:
+#   https://api.github.com/repos/<owner>/<repo>/releases/assets/<id>
+# For a PRIVATE repository, `tokenSecret` names a Secret holding a PAT with
+# `Contents: read`. It becomes an Authorization header; it is never part of the
+# URL, because a URL ends up in logs.
+#
+# Changing a pin does NOT need a pod restart: POST /assertions/packs/refresh
+# re-fetches, verifies each digest, merges, proves the corpus executes, and only
+# then swaps. Any failure leaves the previous corpus serving. GET
+# /assertions/packs reports what is loaded, with digests.
+#
+# assertionPacks:
+#   - name: amtv4
+#     version: "2026.09.1"
+#     uri: "https://api.github.com/repos/aehrc/rvf/releases/assets/565830386"
+#     sha256: "sha256:2b0018641e271d4357f1c8343bb65c78e253912e3d73bac0f171d127d3443bbb"
+#     tokenSecret:
+#       name: rvf-assertion-pack-tokens
+#       key: github-pat
+assertionPacks: []
+
 # -- Persistent Volume Claims configuration
 persistence:
   # -- PVC for shared validation jobs (upload handover and reports)

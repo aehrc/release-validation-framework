@@ -110,3 +110,65 @@ tests:
       - equal:
           path: spec.replicas
           value: 1
+
+  # Assertion pack pins. The ORDER of these two env vars is the whole point:
+  # Kubernetes expands $(NAME) only against a variable declared earlier in the
+  # same container, so a spec rendered before its token would reach the engine
+  # as the literal string "$(RVF_PACK_TOKEN_0)" and the fetch would 401.
+  - it: should render a pinned pack with its token declared first
+    set:
+      fullnameOverride: "rvf"
+      assertionPacks:
+        - name: amtv4
+          version: "2026.09.1"
+          uri: "https://api.github.com/repos/aehrc/rvf/releases/assets/565830386"
+          sha256: "sha256:2b001864"
+          tokenSecret:
+            name: rvf-assertion-pack-tokens
+            key: github-pat
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: RVF_PACK_TOKEN_0
+            valueFrom:
+              secretKeyRef:
+                name: rvf-assertion-pack-tokens
+                key: github-pat
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: RVF_ASSERTION_PACKS
+            value: "name=amtv4;version=2026.09.1;uri=https://api.github.com/repos/aehrc/rvf/releases/assets/565830386;sha256=sha256:2b001864;authHeader=Bearer $(RVF_PACK_TOKEN_0)"
+
+  # A public pack needs no secret, and must not get an empty authHeader - an
+  # Authorization header with nothing after the scheme is a 401, not a no-op.
+  - it: should omit the authorization header for a pack that needs no token
+    set:
+      fullnameOverride: "rvf"
+      assertionPacks:
+        - name: international-extra
+          version: "1.0.0"
+          uri: "file:/app/releases/extra.json"
+          sha256: "sha256:abc123"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: RVF_ASSERTION_PACKS
+            value: "name=international-extra;version=1.0.0;uri=file:/app/releases/extra.json;sha256=sha256:abc123"
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: RVF_PACK_TOKEN_0
+
+  # The default must stay inert: an empty list means the image's corpus is the
+  # whole corpus, which is what every deployment that does not pin a pack wants.
+  - it: should declare no pack environment by default
+    set:
+      fullnameOverride: "rvf"
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: RVF_ASSERTION_PACKS
