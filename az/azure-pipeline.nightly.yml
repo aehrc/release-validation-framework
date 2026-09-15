@@ -190,6 +190,27 @@ parameters:
     displayName: 'Fail if fewer than this many SQL assertions ran (guards a silently absent category)'
     type: number
     default: 400
+  # Packs to pin for this run only, empty for whatever the deployment serves.
+  #
+  # A pinned run builds its corpus from the image's bundled store plus these
+  # packs - NOT from the deployment's pins, which it ignores entirely - so this
+  # substitutes the pack set rather than adding to it. Same verification as a
+  # deployment reload: each digest is checked before the bytes are parsed, the
+  # merge must not conflict, and the merged corpus must execute.
+  #
+  #   name=amtv4;version=2026.09.1;uri=<asset api url>;sha256=<digest>
+  #
+  # Two versions of the same pack cannot be pinned together: they share
+  # assertion uuids, so any assertion that changed between them collides and
+  # the merge is refused with every conflict named.
+  #
+  # The floors below still apply, and should: a pinned pack with FEWER
+  # assertions than the deployment serves is exactly the case a floor exists to
+  # notice.
+  - name: assertionPacks
+    displayName: 'Assertion packs to pin for this run (spec grammar), or empty for the deployed set'
+    type: string
+    default: ''
 
 variables:
   - group: ncts-release
@@ -506,6 +527,28 @@ stages:
                   # run is still green, which is why the step before this one
                   # warns rather than staying quiet about it.
                   echo "no previous release - release-type assertions will not execute"
+                fi
+
+                # A pack pinned for THIS run only. The deployment's own pins are
+                # not touched, and a pinned run does not change what is serving:
+                # the corpus it executes is the image's bundled store plus the
+                # packs named here, built and cached separately.
+                #
+                # So this is how a release is validated against assertions that
+                # are not deployed yet - or re-validated against the ones that
+                # were deployed when an old report was produced, which is the
+                # only way that report can be reproduced once the deployment's
+                # pins have moved on.
+                #
+                # Same spec grammar as the deployment's: semicolons inside one
+                # pack, commas between packs.
+                PINS='${{ parameters.assertionPacks }}'
+                if [ -n "$PINS" ]; then
+                  ARGS+=( -F "assertionPacks=$PINS" )
+                  # The digest, not the version, is what makes this reproducible,
+                  # so log the whole spec - minus anything after authHeader,
+                  # which is a token.
+                  echo "pinned packs: ${PINS%%;authHeader=*}"
                 fi
 
                 HTTP="$(curl -sS -m 300 -o submit.json -w '%{http_code}' "${ARGS[@]}")"
