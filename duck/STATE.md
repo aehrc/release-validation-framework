@@ -215,7 +215,7 @@ your call.
 
 ### 4. Smaller follow-ups
 
-* `minAssertions` is 1000 against a measured 1,482. Re-tighten.
+* `minAssertions` tightened 1,400 -> 1,460 against a measured 1,481/1,482.
 * MRCM memory: peak demand fell 13.92 -> ~9 GiB locally, but the worker reads
   18.92 GiB anon either way because `MaxRAMPercentage=75` of 24Gi gives an
   ~18 GiB heap that G1 fills and keeps. Realising it means lowering the

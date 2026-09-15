@@ -163,10 +163,16 @@ parameters:
   # release the same groups produce 209, because the release-type assertions
   # have nothing to compare against and are simply absent from the report
   # rather than failing.
+  #
+  # 1,400 was the first honest floor; 1,460 is the tightened one. Builds 16247
+  # and 16283 ran 1,482 and 1,481, so the observed spread is ONE assertion, and
+  # 1,400 left 82 of slack - enough to lose the whole Drools phase (78) and
+  # still pass. The remaining 22 covers MRCM refset movement, which is the only
+  # part that legitimately varies.
   - name: minAssertions
     displayName: 'Fail if fewer than this many assertions ran in total (guards a silently skipped phase)'
     type: number
-    default: 1400
+    default: 1460
   # SQL is the deterministic part - group selection times the precompiled store
   # - so this is the floor that catches an assertion CATEGORY going absent,
   # which the total cannot. 400 sits just under the 425 that amtv4 plus the
