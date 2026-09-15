@@ -51,7 +51,7 @@ Then, from a checkout of `aehrc/rvf`:
     /tmp/duckenv/bin/python publish_store.py \
       --scripts        <this repo>/snomed-release-validation-assertions/scripts \
       --prerequisites  <this repo>/duck/prerequisites \
-      --ddl            <this repo>/duck/create-tables-mysql.sql \
+      --ddl            <this repo>/src/main/resources/sql/create-tables-mysql.sql \
       --manifest-root  <this repo>/snomed-release-validation-assertions \
       --no-derive-uuids \
       --out            <this repo>/src/main/resources/duck/store.json
