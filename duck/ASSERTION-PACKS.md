@@ -571,3 +571,81 @@ the description assertion agrees on both engines.
 One genuine divergence remains: a 4097-character text definition cannot exist in
 a `varchar(4096)` column, so that assertion cannot fire on MySQL and does on
 DuckDB. MySQL enforces the same limit earlier, at import.
+
+## Changing the AMT assertions, end to end, 2026-09-16
+
+The routine case: assertions are added, changed or removed, and the server has
+to start running them. Every step below is a command someone runs, not a
+description of intent.
+
+**1. Change the SQL** in `aehrc/rvf` under `testscripts/`. Pushing it runs
+`assertion-tests.yml`, which builds a pack from the corpus and then, on that
+pack: executes every assertion, checks each covered one FIRES on a fixture
+broken exactly one way and is SILENT on the valid fixture, and A/Bs every
+translation against MySQL. Merge on green. Five assertions that could not report
+what they were named for were caught here, and all five were silent on real
+release data - which is how a dead check hides.
+
+**2. Publish.** Dispatch `publish-pack.yml` with the new `packVersion`,
+`requiresInternational` and `engineRef`. It re-runs the same four gates and cuts
+a release carrying the pack and its digest. The digest is reproducible: building
+the pack locally from the same corpus with the same arguments produces the same
+`sha256`, which is what makes the release's identity checkable rather than
+asserted.
+
+**3. Move the pin.** In the deployment's values:
+
+    assertionPacks:
+      - name: amtv4
+        version: "2026.09.2"
+        uri: "https://api.github.com/repos/aehrc/rvf/releases/assets/<id>"
+        sha256: "sha256:<digest from the release>"
+        tokenSecret:
+          name: rvf-assertion-pack-tokens
+          key: github-pat
+
+The asset id comes from `gh api repos/aehrc/rvf/releases/tags/amtv4-<version>
+--jq '.assets[0].url'`. It is the API asset URL, not the browser download URL:
+the browser URL is not fetchable with a token.
+
+**4. Swap it in** with `POST /assertions/packs/refresh`. That re-fetches, checks
+each digest BEFORE parsing, merges with the corpus in the image, proves the
+merged corpus executes, and only then swaps. Any failure - wrong digest, moved
+asset, a pack redefining a base macro - leaves the previous corpus serving and
+says which. No pod restart, and a restart is not a way to skip it: configured
+packs load on first use too.
+
+**5. Confirm** with `GET /assertions/packs`: name, version, digest and assertion
+count per pack. This is the question a report used to be unable to answer.
+
+**6. Validate.** The nightly asks for the `amtv4` group as it already does. With
+227 AMT assertions the SQL total should read 452 rather than 425; the floors move
+only once a run has been observed, because they are measured, not guessed.
+
+To re-run an OLD report, pin per run instead of changing the deployment:
+`POST /run-post -F 'assertionPacks=name=amtv4;version=<old>;uri=...;sha256=...'`.
+Same grammar, same verification, and it does not touch what is serving.
+
+### What this replaces
+
+Today the AMT assertions reach the server as a hand-staged directory on a shared
+volume - `/app/releases/amt-corpus`, with a `store.json` republished from the
+combined corpus and both api and worker pointed at it. That is mutable state
+outside git with no digest, which is why `minSqlAssertions` exists: with the
+overlay gone the report looks entirely healthy at 225 SQL assertions instead
+of 452.
+
+**The pin and the overlay are mutually exclusive, not additive.** The staged
+store already contains the 200 amtv4 assertions, so a pinned `amtv4` on top
+redefines keys the base already holds and `DuckStorePacks.merge` refuses it with
+a 409 listing every conflict. Cutting over means dropping the
+`assertionResourceLocalPath` override and both `RVF_DUCK_STORE` vars in the same
+change that adds the pin, so the image's corpus is the base again.
+
+### Still needed before step 3 can run
+
+A PAT with `Contents: read` on `aehrc/rvf`, in a Secret the chart can name.
+`AssertionPackFetcher` takes the `Authorization` header from configuration and
+never from the URL, so the token has to exist somewhere the pod can read: one
+key under the deployment's existing Vault path, surfaced as
+`rvf-assertion-pack-tokens`.
