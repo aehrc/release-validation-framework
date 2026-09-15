@@ -454,3 +454,42 @@ is one. Runs in this configuration report it as an execution error rather than
 as not-run.
 
 Still to build: publishing the AMT pack from its own repository.
+
+## The publisher was not in git, 2026-09-15
+
+Setting up the publishing workflow found the thing that has to happen first.
+
+`publish_store.py` as run - the one that built the store now deployed, with
+`--pack-name`, `--pack-version`, `--requires` and the `pack` block the engine
+reads - existed ONLY as loose files in `/data/work/duckpub` on one workstation.
+`aehrc/rvf@rvf-duck` carried a version with no pack support and an `rvfsql.py`
+183 lines behind, and `amt_manifest.py`, `amt_wire.py` and
+`amt_manifest_selftest.py` were in no repository at all.
+
+A workflow cannot check out a script that is not committed, so this blocked the
+whole task. Committed verbatim as `cca33ac` on `rvf-duck`, with four selftests
+passing (amt_manifest, procedures, materialise, structural).
+
+**Open, and needed before the workflow can be trusted:** how the deployed store
+was actually invoked. Pointed at the corpus at the store's own `corpusRef`
+(`0160dd2`) with `--pack-name international --pack-version 2026.07.27`, the
+publisher emits **560 assertions where the deployed store has 360**, and a
+different digest. So the published store came from a different invocation - a
+group filter, or a narrower `--scripts` root. Until that is pinned down, a
+workflow that rebuilds a pack cannot claim to rebuild the same pack, and the
+digest is what every pin and drift check compares.
+
+The gates the workflow should run, in order, once that is settled:
+
+* `assertion_lint.py` - every assertion can structurally report a finding
+  (already a workflow in `aehrc/rvf`, and already gating);
+* `publish_store.py` - precompilation failures are non-zero and refuse to write;
+* `verify_store.py` - the serialised store still binds to what `prepare()`
+  produces;
+* an execution pass against an EMPTY release built from the store's own
+  `tableColumns`, which proves each assertion RUNS rather than merely
+  transpiles - the failure that otherwise arrives hours later as an assertion
+  reporting nothing. Written and working against the bundled store: 350 of 360
+  execute, and the 10 that do not are harness gaps (an incomplete `qa_result`,
+  the `ports` macros, and result tables an earlier assertion creates), not store
+  defects. It needs finishing before it can gate.
