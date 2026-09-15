@@ -554,8 +554,20 @@ maximum-length assertions, which differ because MySQL declares
 character limit. Both files fail the build if an entry stops applying, because an
 entry nobody re-reads reads as a checked fact and is an unchecked one.
 
-**Still worth acting on, unrelated to this work:** AU 20260731 carries 4,651
-descriptions longer than 333 characters, the longest 2,027. MySQL truncates them
-on insert under a permissive `sql_mode`, so RVF has been storing 333 characters
-of a 2,027 character description and validating the truncation. The assertion
-that would notice cannot fire there.
+**Correction, later the same day.** The paragraph that stood here claimed RVF
+truncates descriptions in production. It does not, and the diagnosis was
+backwards. The DDL RVF ships is `varchar(4096)` with a 333-BYTE INDEX PREFIX,
+`key idx_term(term(333))`. Our own `duck/create-tables-mysql.sql` transcribed
+that prefix as a 333-character COLUMN when the file was added in `84807523` -
+DuckDB has no index prefixes, so the prefix was dropped and its number landed on
+the column. The A/B built its MySQL from our copy, so it truncated, and the
+divergence was ours.
+
+A second artefact hid behind it: the case mutated the term with `||`, which MySQL
+reads as logical OR once `sql_mode` is cleared, so the term became `'0'` rather
+than 2049 characters. With the column restored and the mutation using `CONCAT`,
+the description assertion agrees on both engines.
+
+One genuine divergence remains: a 4097-character text definition cannot exist in
+a `varchar(4096)` column, so that assertion cannot fire on MySQL and does on
+DuckDB. MySQL enforces the same limit earlier, at import.
