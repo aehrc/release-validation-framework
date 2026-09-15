@@ -107,9 +107,21 @@ Java engine applies `store["ports"]` and nothing else, republishing dropped
 searched lowercase while the corpus writes `SUBSTRING_INDEX`, so it reported
 zero in both stores - a case-sensitive grep is not evidence.
 
-**The deployed image still carries the old store.** The nightly will not gain
-these three assertions until an image is built from `bd61519a` and rolled out;
-`duck/store.json` is baked in at build time.
+**Deployed and verified 2026-09-15.** The cluster runs
+`9.0.1-duckdb-16413-3068249bab96` (build 16413, commit `3068249b`, started
+2026-09-14), and the store inside that image hashes to
+`sha256:d6f0a930...` - byte-identical to HEAD's, 360 assertions. The three
+fixed assertions are live. Nothing in `src/` has changed since that commit, so
+the image is current.
+
+**The trap that made this look broken:** `duck/push-image.sh` targets
+`ontoserver.azurecr.io`, and the cluster pulls from **`nctsacr.azurecr.io`**.
+The `ontoserver` repository's newest tag is build 16197 from 2026-09-05, which
+reads exactly like a pipeline that stopped firing five months of commits ago.
+It is simply a registry nothing deploys from any more. Check the pod, not the
+registry the script defaults to - and a manual push from that script would not
+deploy in any case, because ArgoCD Image Updater sorts on the build-id tag
+`9.0.1-duckdb-<BUILD_ID>` which the script cannot produce.
 
 It also found that `DuckMaterialiser` could not load RVF's own regression
 fixture at all (fixed, `62132059`): `read_csv` refuses a ragged relation where
