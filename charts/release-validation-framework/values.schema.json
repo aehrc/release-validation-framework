@@ -1368,11 +1368,11 @@
           },
           "uri": {
             "type": "string",
-            "description": "Where to fetch it: an https URL, or file: for a mounted volume"
+            "description": "Where to fetch it; omit when a channel resolves it from a version"
           },
           "sha256": {
             "type": "string",
-            "description": "Required. The digest the bytes must hash to, bare hex or sha256: prefixed"
+            "description": "The digest the bytes must hash to; omit only when a configured channel serves this pack, in which case it is resolved from the channel index"
           },
           "tokenSecret": {
             "type": "object",
@@ -1398,9 +1398,7 @@
         },
         "required": [
           "name",
-          "version",
-          "uri",
-          "sha256"
+          "version"
         ],
         "additionalProperties": false
       }
@@ -1475,6 +1473,51 @@
         }
       },
       "additionalProperties": false
+    },
+    "assertionChannels": {
+      "type": "array",
+      "description": "Trusted locations a pack may be named from. Read-only: naming a version does not change what the deployment serves by default.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Channel name, as a caller asks for it"
+          },
+          "index": {
+            "type": "string",
+            "description": "Required. The index listing versions and their byte digests"
+          },
+          "packs": {
+            "type": "string",
+            "description": "Pack names this channel may serve, pipe separated; defaults to the channel name"
+          },
+          "tokenSecret": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "key": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "key"
+            ],
+            "additionalProperties": false
+          },
+          "tokenScheme": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "index"
+        ],
+        "additionalProperties": false
+      }
     }
   },
   "additionalProperties": false

@@ -258,6 +258,19 @@ commas far more often than semicolons.
       key: {{ .key | quote }}
 {{- end }}
 {{- end }}
+{{- range $i, $channel := .Values.assertionChannels }}
+{{- with $channel.tokenSecret }}
+- name: RVF_CHANNEL_TOKEN_{{ $i }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ .name | quote }}
+      key: {{ .key | quote }}
+{{- end }}
+{{- end }}
+{{- if .Values.assertionChannels }}
+- name: RVF_ASSERTION_CHANNELS
+  value: {{ include "release-validation-framework.assertionChannelSpecs" . | quote }}
+{{- end }}
 {{- if .Values.assertionPacks }}
 - name: RVF_ASSERTION_PACKS
   value: {{ include "release-validation-framework.assertionPackSpecs" . | quote }}
@@ -265,21 +278,65 @@ commas far more often than semicolons.
 {{- end }}
 
 {{/*
-One spec per pinned pack. A digest is mandatory here as well as in the engine:
-a pack with no sha256 is refused by AssertionPackFetcher, and failing at helm
-template time says so before a deployment rolls.
+One spec per channel: a trusted location, its index, and the pack names it may
+serve.
+
+`packs` bounds what the channel is allowed to offer. Without it a channel that
+served a different pack under a familiar name would be believed, so the list is
+the trust boundary rather than documentation. It defaults to the channel's own
+name, which is the only sane default and the common case.
+*/}}
+{{- define "release-validation-framework.assertionChannelSpecs" -}}
+{{- $specs := list }}
+{{- range $i, $channel := .Values.assertionChannels }}
+{{- if not $channel.index }}
+{{- fail (printf "assertionChannels[%d] (%s) has no index: without one the server cannot resolve a version to a digest, which is the only reason a channel exists" $i ($channel.name | default "unnamed")) }}
+{{- end }}
+{{- $spec := printf "name=%s;index=%s;packs=%s" $channel.name $channel.index ($channel.packs | default $channel.name) }}
+{{- if $channel.tokenSecret }}
+{{- $spec = printf "%s;authHeader=%s $(RVF_CHANNEL_TOKEN_%d)" $spec ($channel.tokenScheme | default "Bearer") $i }}
+{{- end }}
+{{- $specs = append $specs $spec }}
+{{- end }}
+{{- join "," $specs }}
+{{- end }}
+
+{{/*
+One spec per pinned pack - the corpus a request gets when it names none.
+
+Two forms. A pack carrying `uri` and `sha256` is spelled out in full, which is
+how this worked before channels and still works for a location no channel
+serves. A pack carrying only a version is written as name@version and resolved
+by the server from its channel's index: same pin, same digest check, but the
+digest is discovered rather than transcribed - and transcribing it is what put
+the wrong one of two sha256 values into a production pin.
+
+So sha256 is mandatory UNLESS a configured channel serves that pack. An
+unpinned pack with nowhere to resolve it from is still refused here, at helm
+template time, rather than at fetch time on a rolling deployment.
 */}}
 {{- define "release-validation-framework.assertionPackSpecs" -}}
 {{- $specs := list }}
+{{- $channels := .Values.assertionChannels | default list }}
 {{- range $i, $pack := .Values.assertionPacks }}
-{{- if not $pack.sha256 }}
-{{- fail (printf "assertionPacks[%d] (%s) has no sha256: an unpinned pack cannot be reproduced, so a report naming it would mean nothing" $i ($pack.name | default "unnamed")) }}
+{{- $served := false }}
+{{- range $channel := $channels }}
+{{- if contains $pack.name ($channel.packs | default $channel.name) }}
+{{- $served = true }}
 {{- end }}
+{{- end }}
+{{- if and (not $pack.sha256) (not $served) }}
+{{- fail (printf "assertionPacks[%d] (%s) has no sha256 and no channel serves it: an unpinned pack cannot be reproduced, so a report naming it would mean nothing. Give it a uri and sha256, or configure a channel that carries it and name only the version." $i ($pack.name | default "unnamed")) }}
+{{- end }}
+{{- if $pack.sha256 }}
 {{- $spec := printf "name=%s;version=%s;uri=%s;sha256=%s" $pack.name $pack.version $pack.uri $pack.sha256 }}
 {{- if $pack.tokenSecret }}
 {{- $spec = printf "%s;authHeader=%s $(RVF_PACK_TOKEN_%d)" $spec ($pack.tokenScheme | default "Bearer") $i }}
 {{- end }}
 {{- $specs = append $specs $spec }}
+{{- else }}
+{{- $specs = append $specs (printf "%s@%s" $pack.name $pack.version) }}
+{{- end }}
 {{- end }}
 {{- join "," $specs }}
 {{- end }}

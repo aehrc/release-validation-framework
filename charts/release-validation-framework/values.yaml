@@ -89,6 +89,34 @@ env:
 #     tokenSecret:
 #       name: rvf-assertion-pack-tokens
 #       key: github-pat
+# -- Trusted locations a pack may be named from. DuckDB engine only.
+#
+# A channel publishes an index of what it holds - each version, the url to fetch
+# and the digest those bytes must hash to - so a pin can be written as
+# `amtv4@2026.09.2` and the server resolves the rest. The pin is not weakened:
+# the digest is still checked, it is just discovered instead of copied out of
+# release notes by hand. Release notes carry TWO sha256 values, the pack's own
+# identity and the asset's byte hash, and pinning the wrong one fails a
+# deployment with an error naming neither.
+#
+# `packs` bounds what a channel may serve, and is the trust boundary: a version
+# is refused if its channel was not configured to carry that pack name. Pipe
+# separated for more than one; defaults to the channel's own name.
+#
+# Channels are READ-ONLY. Naming a version does not change what this deployment
+# serves by default - that stays `assertionPacks` below, a values file reviewed
+# like any other change. A channel only makes it possible to ASK for something
+# else, per run.
+#
+# assertionChannels:
+#   - name: amtv4
+#     index: "https://api.github.com/repos/aehrc/rvf/releases/assets/<index asset id>"
+#     packs: amtv4
+#     tokenSecret:
+#       name: rvf-assertion-pack-tokens
+#       key: github-pack-token
+assertionChannels: []
+
 assertionPacks: []
 
 # -- A Secret holding tokens for private assertion packs, synced from the same

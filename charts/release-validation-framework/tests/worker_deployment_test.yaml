@@ -172,3 +172,58 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: RVF_ASSERTION_PACKS
+
+  # A channel lets the pin be a version and nothing else, which is the whole
+  # point: a pipeline variable holds "amtv4@2026.09.3" and no digest is
+  # transcribed anywhere. The channel token must be declared before the specs
+  # that reference it, same as the pack token.
+  - it: should render a channel and a shorthand pin
+    set:
+      fullnameOverride: "rvf"
+      assertionChannels:
+        - name: amtv4
+          index: "https://api.example/index.json"
+          packs: amtv4
+          tokenSecret:
+            name: rvf-assertion-pack-tokens
+            key: github-pack-token
+      assertionPacks:
+        - name: amtv4
+          version: "2026.09.2"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: RVF_ASSERTION_CHANNELS
+            value: "name=amtv4;index=https://api.example/index.json;packs=amtv4;authHeader=Bearer $(RVF_CHANNEL_TOKEN_0)"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: RVF_ASSERTION_PACKS
+            value: "amtv4@2026.09.2"
+
+  # Without a channel there is nowhere to resolve a version from, so an
+  # unpinned pack must fail at template time rather than at fetch time on a
+  # rolling deployment.
+  - it: should refuse a pack with no digest and no channel
+    set:
+      fullnameOverride: "rvf"
+      assertionPacks:
+        - name: amtv4
+          version: "2026.09.2"
+    asserts:
+      - failedTemplate:
+          errorMessage: "assertionPacks[0] (amtv4) has no sha256 and no channel serves it: an unpinned pack cannot be reproduced, so a report naming it would mean nothing. Give it a uri and sha256, or configure a channel that carries it and name only the version."
+
+  # A channel with no index cannot resolve anything, which is the only reason it
+  # would exist. The SCHEMA refuses it, before the template's own check gets the
+  # chance - so this asserts the message that actually reaches the operator
+  # rather than the one I wrote in the helper.
+  - it: should refuse a channel with no index
+    set:
+      fullnameOverride: "rvf"
+      assertionChannels:
+        - name: amtv4
+    asserts:
+      - failedTemplate:
+          errorMessage: "values don't meet the specifications of the schema(s) in the following chart(s):\nrelease-validation-framework:\n- assertionChannels.0: index is required\n"
