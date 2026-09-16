@@ -1,7 +1,7 @@
 {
  "formatVersion": 1,
  "generator": {
-  "sqlglot": "30.15.0",
+  "sqlglot": "30.18.0",
   "python": "3.12.3"
  },
  "sentinels": [
@@ -258,7 +258,7 @@
   "CREATE OR REPLACE MACRO isValidRefsetId_cr(candidate) AS\n  isDescendentOf_cr(candidate, 900000000000455006)",
   "CREATE OR REPLACE MACRO isActiveConcept_cr(candidate) AS\n  (SELECT count(1) FROM (SELECT id AS _cid FROM rvfph_prospective_.concept_active) _c\n    WHERE _c._cid = candidate)",
   "CREATE OR REPLACE MACRO isActiveMemberOf_cr_refset(candidate, targetRefset) AS\n  (SELECT count(1) FROM (SELECT refsetid AS _rsid,\n                                referencedcomponentid AS _rcid\n                           FROM rvfph_prospective_.simplerefset_active) _m\n    WHERE _m._rsid = targetRefset AND _m._rcid = candidate)",
-  "CREATE OR REPLACE MACRO isValidComponentId_cr(candidate) AS\n  CASE\n    WHEN length(candidate) >= 19 THEN false\n    WHEN substr(candidate, length(candidate) - 1, 1) = '0' THEN\n      (SELECT count(1) FROM (SELECT id AS _i FROM rvfph_prospective_.concept_s) _q\n        WHERE _q._i = TRY_CAST(candidate AS BIGINT)) > 0\n    WHEN substr(candidate, length(candidate) - 1, 1) = '1' THEN\n      ((SELECT count(1) FROM (SELECT id AS _i FROM rvfph_prospective_.description_s) _q\n         WHERE _q._i = TRY_CAST(candidate AS BIGINT))\n       + (SELECT count(1) FROM (SELECT id AS _i FROM rvfph_prospective_.textdefinition_s) _q\n           WHERE _q._i = TRY_CAST(candidate AS BIGINT))) > 0\n    WHEN substr(candidate, length(candidate) - 1, 1) = '2' THEN\n      (SELECT count(1) FROM (SELECT id AS _i FROM rvfph_prospective_.relationship_s) _q\n        WHERE _q._i = TRY_CAST(candidate AS BIGINT)) > 0\n    ELSE false\n  END",
+  "CREATE OR REPLACE MACRO isValidComponentId_cr(candidate) AS\n  CASE\n    WHEN length(CAST(candidate AS VARCHAR)) >= 19 THEN false\n    WHEN substr(CAST(candidate AS VARCHAR), length(CAST(candidate AS VARCHAR)) - 1, 1) = '0' THEN\n      (SELECT count(1) FROM (SELECT id AS _i FROM rvfph_prospective_.concept_s) _q\n        WHERE _q._i = TRY_CAST(candidate AS BIGINT)) > 0\n    WHEN substr(CAST(candidate AS VARCHAR), length(CAST(candidate AS VARCHAR)) - 1, 1) = '1' THEN\n      ((SELECT count(1) FROM (SELECT id AS _i FROM rvfph_prospective_.description_s) _q\n         WHERE _q._i = TRY_CAST(candidate AS BIGINT))\n       + (SELECT count(1) FROM (SELECT id AS _i FROM rvfph_prospective_.textdefinition_s) _q\n           WHERE _q._i = TRY_CAST(candidate AS BIGINT))) > 0\n    WHEN substr(CAST(candidate AS VARCHAR), length(CAST(candidate AS VARCHAR)) - 1, 1) = '2' THEN\n      (SELECT count(1) FROM (SELECT id AS _i FROM rvfph_prospective_.relationship_s) _q\n        WHERE _q._i = TRY_CAST(candidate AS BIGINT)) > 0\n    ELSE false\n  END",
   "CREATE OR REPLACE MACRO get_cr_FSN(candidate) AS\n  (SELECT _d._term FROM (SELECT term AS _term, conceptid AS _cid,\n                                typeid AS _typ, languagecode AS _lang\n                           FROM rvfph_prospective_.description_active) _d\n    WHERE _d._cid = candidate AND _d._typ = 900000000000003001\n      AND _d._lang = 'en' LIMIT 1)",
   "CREATE OR REPLACE MACRO get_cr_ADRS_PT(candidate) AS\n  (SELECT _j._term FROM (\n      SELECT da.term AS _term, da.conceptid AS _cid\n        FROM rvfph_prospective_.langrefset_active AS lr\n        JOIN rvfph_prospective_.description_active AS da ON da.id = lr.referencedcomponentid\n       WHERE lr.refsetid = 32570271000036106\n         AND da.typeid = 900000000000013009\n         AND lr.acceptabilityid = 900000000000548007) _j\n    WHERE _j._cid = candidate LIMIT 1)",
   "CREATE OR REPLACE MACRO get_cr_PercentDefined(refset) AS\n  (SELECT count(1) FROM (SELECT id AS _cid, definitionstatusid AS _dsid\n                           FROM rvfph_prospective_.concept_active) _c\n     WHERE _c._dsid = 900000000000073002\n       AND _c._cid IN (SELECT _m._rcid FROM (\n              SELECT referencedcomponentid AS _rcid, refsetid AS _rsid\n                FROM rvfph_prospective_.simplerefset_active) _m WHERE _m._rsid = refset)) * 100.0\n  / NULLIF((SELECT count(1) FROM (SELECT refsetid AS _rsid\n                                    FROM rvfph_prospective_.simplerefset_active) _m\n             WHERE _m._rsid = refset), 0)",
@@ -4350,7 +4350,7 @@
  "pack": {
   "name": "international",
   "version": "2026.07.27",
-  "corpusRef": "0160dd2ee830cf77e10678de753c8fc06de671d6",
+  "corpusRef": "",
   "digest": "sha256:d6f0a930e8acd55f223b32c8ba701e071f98834053139b7d1aea914beb218518",
   "assertions": 360
  }
