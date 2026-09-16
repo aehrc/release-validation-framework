@@ -285,8 +285,13 @@ class AssertionPackReloadTest {
 
 		assertEquals(2, service.findAll().size(), "the redirect was followed");
 		assertEquals(1, service.loadedPacks().size());
-		assertTrue(sawAccept.toString().contains("application/octet-stream"),
-				"asked for the asset, not its metadata: " + sawAccept);
+		// EQUALITY, not contains. "application/octet-stream, application/json"
+		// contains it and is still wrong: the GitHub API picks json from that
+		// list and returns the asset's metadata, which fails the digest check
+		// and, because the metadata carries download_count, hashes differently
+		// every time.
+		assertEquals("application/octet-stream", sawAccept.toString(),
+				"asked for the asset, and nothing else");
 	}
 
 	@Test

@@ -119,7 +119,14 @@ public class AssertionPackFetcher {
 		}
 		HttpRequest.Builder request = HttpRequest.newBuilder(source.uri())
 				.timeout(Duration.ofMinutes(5))
-				.header("Accept", "application/octet-stream, application/json");
+				// ONLY octet-stream. Offered "application/octet-stream,
+				// application/json", the GitHub API picks json and returns the
+				// asset's METADATA - 1.8 KB describing the file - which then
+				// fails the digest check. Worse, that metadata carries
+				// download_count, so it hashes differently on every fetch and
+				// the error looks like a moving target rather than a wrong
+				// Accept header. A file: pack ignores this entirely.
+				.header("Accept", "application/octet-stream");
 		if (source.authHeader() != null && !source.authHeader().isBlank()) {
 			request.header("Authorization", source.authHeader());
 		}
