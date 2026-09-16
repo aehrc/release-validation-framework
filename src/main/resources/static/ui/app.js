@@ -61,6 +61,7 @@ $$('.tab').forEach((tab) => {
     // wants to submit a run.
     if (tab.dataset.panel === 'panel-open' && !loadRuns.done) loadRuns();
     if (tab.dataset.panel === 'panel-releases' && !loadReleases.done) loadReleases();
+    if (tab.dataset.panel === 'panel-packs' && !loadPacks.done) loadPacks();
   });
 });
 
@@ -232,6 +233,11 @@ $('#runForm').addEventListener('submit', async (e) => {
   body.append('standAloneProduct', $('#standAloneProduct').checked);
   body.append('enableDrools', $('#enableDrools').checked);
   body.append('enableMrcmValidation', $('#enableMrcmValidation').checked);
+  // Only when one was chosen. An empty assertionPacks means "whatever this
+  // server loads by default", which is what the field's first option says, and
+  // sending an empty value would be a pin nothing can resolve.
+  const packPin = $('#assertionPack').value;
+  if (packPin) body.append('assertionPacks', packPin);
   body.append('failureExportMax', $('#failureExportMax').value || '10');
 
   const manifest = $('#manifest').files?.[0];
@@ -1032,3 +1038,156 @@ loadRuns({ quiet: true });
 // Last, so a deep link overrides the default panel and the generated run id
 // that the calls above have just put on the form.
 openFromLink();
+
+/* ------------------------------------------------------- assertion packs */
+
+/**
+ * What is loaded, and what could be.
+ *
+ * Two questions, deliberately not one. The loaded set is what this server
+ * validates against when a run asks for nothing; the available versions are
+ * what a run may ask for instead. Nothing on this tab changes the first - the
+ * default is a deployment setting - which is why there is no Activate button
+ * and why the copy says so.
+ */
+async function loadPacks() {
+  loadPacks.done = true;
+  const loaded = $('#loadedPacks');
+  const list = $('#channelList');
+  loaded.innerHTML = '<p class="muted">loading&hellip;</p>';
+  list.innerHTML = '<p class="muted">loading&hellip;</p>';
+
+  let packs;
+  try {
+    packs = await api('/assertions/packs');
+  } catch (e) {
+    loaded.innerHTML = `<p class="muted">Could not read the loaded packs: ${esc(e.message)}</p>`;
+    list.innerHTML = '';
+    return;
+  }
+
+  const rows = (packs.packs || []).map((p) => `<tr>
+      <td><b>${esc(p.name)}</b></td>
+      <td>${esc(p.version)}</td>
+      <td class="num">${p.assertions}</td>
+      <td><code class="digest">${esc(p.digest || '')}</code></td>
+    </tr>`).join('');
+  loaded.innerHTML = `
+    <table class="runs">
+      <thead><tr><th>Pack</th><th>Version</th><th class="num">Assertions</th><th>Digest</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="4" class="muted">the built-in assertions only</td></tr>'}</tbody>
+    </table>
+    <p class="muted">${packs.assertions} assertions in total.${
+      (packs.pendingRefresh)
+        ? ' <b>The deployment configures something different from what is loaded</b>'
+          + ' - POST /assertions/packs/refresh applies it.'
+        : ''}</p>`;
+
+  let channels;
+  try {
+    channels = await api('/assertions/channels');
+  } catch (e) {
+    list.innerHTML = `<p class="muted">Could not read the channels: ${esc(e.message)}</p>`;
+    return;
+  }
+  if (!channels.channels || !channels.channels.length) {
+    list.innerHTML = '<p class="empty">No channels are configured, so a run that '
+      + 'wants a particular version has to give its url and digest in full.</p>';
+    return;
+  }
+
+  const loadedPins = new Set((packs.packs || []).map((p) => `${p.name}@${p.version}`));
+  list.innerHTML = channels.channels.map((ch) => {
+    if (ch.error) {
+      return `<div class="channel"><h3>${esc(ch.name)}</h3>
+        <p class="muted">Could not read this channel's index: ${esc(ch.error)}</p></div>`;
+    }
+    const versions = (ch.versions || []).map((v) => `<tr>
+        <td>${esc(v.version)}${v.draft ? ' <span class="pill off">draft</span>' : ''}${
+          loadedPins.has(v.pin) ? ' <span class="pill ok">loaded</span>' : ''}</td>
+        <td class="num">${v.assertions}</td>
+        <td class="nowrap">${esc((v.published || '').slice(0, 10))}</td>
+        <td>${esc((v.requires || []).join(', '))}</td>
+        <td class="pin-cell">
+          <code>${esc(v.pin)}</code>
+          <button type="button" class="ghost" data-check="${esc(v.pin)}"
+                  data-channel="${esc(ch.name)}" data-version="${esc(v.version)}">Check</button>
+          <button type="button" class="ghost" data-use="${esc(v.pin)}">Use for a run</button>
+        </td>
+      </tr>`).join('');
+    return `<div class="channel">
+      <h3>${esc(ch.name)}</h3>
+      <p class="muted">from ${esc(ch.index)}</p>
+      <table class="runs">
+        <thead><tr><th>Version</th><th class="num">Assertions</th><th>Published</th>
+          <th>Requires</th><th>Pin</th></tr></thead>
+        <tbody>${versions || '<tr><td colspan="5" class="muted">no versions</td></tr>'}</tbody>
+      </table>
+    </div>`;
+  }).join('');
+
+  // Also offer the versions on the run form, so choosing one for a single run
+  // does not mean typing a pin by hand.
+  const select = $('#assertionPack');
+  const chosen = select.value;
+  const options = channels.channels.flatMap((ch) => (ch.versions || [])
+    .map((v) => `<option value="${esc(v.pin)}">${esc(v.pin)}${
+      loadedPins.has(v.pin) ? ' (the default)' : ''}</option>`));
+  select.innerHTML = '<option value="">Whatever this server loads by default</option>'
+    + options.join('');
+  select.value = chosen;
+}
+
+/**
+ * The readable part of a refusal.
+ *
+ * api() throws "409 Conflict - {json}", and the json holds the message and, for
+ * a merge conflict, every clash rather than the first. Pulling those out is
+ * worth the few lines: the conflicts name the packs and the key, which is what
+ * a publisher needs to fix them in one pass.
+ */
+function refusal(raw) {
+  const brace = raw.indexOf('{');
+  if (brace < 0) return raw;
+  try {
+    const body = JSON.parse(raw.slice(brace));
+    const parts = [body.message || body.reason].filter(Boolean);
+    if (body.conflicts?.length) parts.push(body.conflicts.join('; '));
+    return parts.join(' - ') || raw;
+  } catch {
+    return raw;
+  }
+}
+
+$('#refreshPacks').addEventListener('click', loadPacks);
+
+$('#channelList').addEventListener('click', async (e) => {
+  const use = e.target.closest('[data-use]');
+  if (use) {
+    // The select is populated by loadPacks, so the option exists by now.
+    $('#assertionPack').value = use.dataset.use;
+    toast(`${use.dataset.use} will be used for the next run you start.`, true);
+    return;
+  }
+  const check = e.target.closest('[data-check]');
+  if (!check) return;
+
+  const label = check.textContent;
+  check.disabled = true;
+  check.textContent = 'Checking\u2026';
+  try {
+    const path = `/assertions/channels/${encodeURIComponent(check.dataset.channel)}`
+      + `/versions/${encodeURIComponent(check.dataset.version)}/check`;
+    const res = await api(path, { method: 'POST' });
+    toast(`${res.pin} would load: ${res.assertions} assertions. Nothing was changed.`, true);
+  } catch (e2) {
+    // The body carries the reason - a digest that does not match, a merge
+    // conflict listing every clash - and that reason is the whole value of
+    // checking, so it is read out rather than reduced to "failed" or dumped as
+    // raw JSON.
+    toast(`${check.dataset.check} would NOT load. ${refusal(e2.message)}`);
+  } finally {
+    check.disabled = false;
+    check.textContent = label;
+  }
+});

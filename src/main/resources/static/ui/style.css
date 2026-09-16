@@ -399,3 +399,26 @@ a.allfail:hover { text-decoration: underline; }
    assertion - a Drools or MRCM failure on a run from before every test type
    reached the archive. Muted, because it is an explanation and not a warning. */
 .nofail { color: var(--muted, #888); font-style: italic; }
+
+/* ---------------------------------------------------- assertion pack panel */
+
+/* One block per channel. A heading and its table stay together because a
+   version means nothing without knowing which location offered it. */
+.channel + .channel { margin-top: 22px; }
+.channel h3 { margin: 0 0 2px; font-size: 14px; }
+
+/* Digests are long, monospaced and not meant to be read in full - they are
+   meant to be COMPARED, and copied when a deployment needs one. Wrapping keeps
+   the table from scrolling sideways over it. */
+.digest { font-size: 11px; color: var(--ink-2); word-break: break-all; }
+
+/* The pin and its buttons on one line: the pin is the thing to copy, the
+   buttons act on it, and separating them across cells would break that link. */
+.pin-cell { white-space: nowrap; }
+.pin-cell code { margin-right: 8px; }
+.pin-cell button { margin-left: 4px; }
+
+td.num, th.num { text-align: right; }
+
+/* A date that wraps mid-value reads as two dates. */
+.nowrap { white-space: nowrap; }

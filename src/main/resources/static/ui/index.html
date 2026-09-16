@@ -33,6 +33,7 @@
     <button role="tab" class="tab active" data-panel="panel-run" aria-selected="true">Run a validation</button>
     <button role="tab" class="tab" data-panel="panel-open" aria-selected="false">Open a report</button>
     <button role="tab" class="tab" data-panel="panel-releases" aria-selected="false">Kept releases</button>
+    <button role="tab" class="tab" data-panel="panel-packs" aria-selected="false">Assertion packs</button>
     <button role="tab" class="tab" data-panel="panel-about" aria-selected="false">Reference</button>
   </nav>
 </header>
@@ -102,6 +103,13 @@
           <label class="field">
             <span>Failure examples per assertion</span>
             <input type="number" id="failureExportMax" value="10" min="1" max="1000">
+          </label>
+          <label class="field">
+            <span>Assertion pack <em>optional</em></span>
+            <select id="assertionPack">
+              <option value="">Whatever this server loads by default</option>
+            </select>
+            <small>Only this run is affected, and its report records what it used.</small>
           </label>
         </div>
         <div class="row">
@@ -209,6 +217,47 @@
   </div>
 </section>
 
+<!-- -------------------------------------------------------- assertion packs -->
+<section id="panel-packs" class="panel" role="tabpanel">
+  <div class="card">
+    <div class="status-head">
+      <legend style="padding:0">Loaded now</legend>
+      <button type="button" class="ghost" id="refreshPacks">Refresh</button>
+    </div>
+    <p class="hint">
+      What this server validates against when a run does not ask for anything
+      else. Each carries a digest as well as a version, because a version is a
+      label the publisher controls and a digest is not: two reports naming the
+      same version with different digests were produced by different assertions.
+    </p>
+    <div id="loadedPacks"><p class="muted">loading&hellip;</p></div>
+  </div>
+
+  <div class="card">
+    <legend style="padding:0">Available versions</legend>
+    <p class="hint">
+      Versions offered by the locations this server is configured to trust.
+      <b>Check</b> fetches one, verifies its digest, merges it with the built-in
+      assertions and proves the result executes - without loading it, so nothing
+      that is serving changes. <b>Use for a run</b> puts it on the run form for
+      the next validation only.
+    </p>
+    <div id="channelList"><p class="muted">loading&hellip;</p></div>
+  </div>
+
+  <div class="card">
+    <legend style="padding:0">Changing the default</legend>
+    <p class="hint">
+      Not done here, deliberately. What this server loads by default is a
+      deployment setting, so changing it is a reviewed change to the deployment
+      rather than a button here - and once deployed,
+      <code>POST /assertions/packs/refresh</code> picks it up without a restart.
+      A pipeline that wants a particular version per run sets it on the run
+      instead, which is recorded in the report and needs no deployment at all.
+    </p>
+  </div>
+</section>
+
 <!-- ------------------------------------------------------------- reference -->
 <section id="panel-about" class="panel" role="tabpanel">
   <div class="card prose">
@@ -264,6 +313,28 @@
       description.
     </p>
   </div>
+
+    <h2>Assertion packs</h2>
+    <p>
+      The assertions themselves are versioned and published separately from this
+      server, so the set that validated a release can be named and fetched again.
+      The <b>Assertion packs</b> tab shows what is loaded, with a digest for each,
+      and which versions the locations this server trusts are offering.
+    </p>
+    <p>
+      A run may use a version other than the default, and only for itself: choose
+      one under <b>Assertion pack</b> on the run form, or send
+      <code>assertionPacks=amtv4@2026.09.2</code> to <code>/run-post</code>. The
+      choice travels with the job, so the worker executes what was asked for, and
+      the report records the packs and digests it used.
+    </p>
+    <p>
+      Changing what everything gets by default is a deployment change rather than
+      a button here. That keeps one answer to &ldquo;which assertions validate our
+      releases&rdquo; - reviewed, and in version control - while still letting a
+      pipeline try a new version against real content before it becomes the
+      default.
+    </p>
 </section>
 
 <!-- ------------------------------------------------------------ run status -->
