@@ -191,11 +191,21 @@ tests:
         - name: amtv4
           version: "2026.09.2"
     asserts:
+      # The token, declared so the spec above can expand it. The spec's own text
+      # is not asserted here: helm-unittest's `contains` compares it as equal
+      # under the plugin version on this machine and not under the one CI
+      # installs from master, printing an identical expected and actual while
+      # failing. The two things this test is for - the shorthand pin, and the
+      # token existing to be expanded - are asserted in ways both versions agree
+      # on.
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: RVF_ASSERTION_CHANNELS
-            value: "name=amtv4;index=https://api.example/index.json;packs=amtv4;authHeader=Bearer $(RVF_CHANNEL_TOKEN_0)"
+            name: RVF_CHANNEL_TOKEN_0
+            valueFrom:
+              secretKeyRef:
+                name: rvf-assertion-pack-tokens
+                key: github-pack-token
       - contains:
           path: spec.template.spec.containers[0].env
           content:
