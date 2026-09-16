@@ -294,3 +294,81 @@ tests:
           path: spec.authorization.defaultAction
           value: Deny
         template: security-policy.yaml
+
+  # The outage this pins: the pack token was first added as a second key on the
+  # ExternalSecret that owns rvf-oidc, which is the SecurityPolicy's OIDC
+  # clientSecret. A sync is all-or-nothing, the property did not resolve, the
+  # secret did not materialise, the gateway stopped injecting the X-AUTH headers
+  # RVF authenticates on, and every endpoint answered 401 until it was reverted.
+  #
+  # So: pack tokens live in their OWN secret, and rvf-oidc carries exactly the
+  # one key the gateway needs, whatever else is configured.
+  - it: should keep pack tokens out of the gateway's oidc secret
+    set:
+      fullnameOverride: "rvf"
+      externalSecret:
+        enabled: true
+        refreshInterval: "1h"
+        secretStoreRef:
+          name: "vault-backend"
+          kind: "ClusterSecretStore"
+        target:
+          name: "rvf-oidc"
+          creationPolicy: "Owner"
+        data:
+        - secretKey: "client-secret"
+          remoteRef:
+            key: "acl_vlt_od225632/kv/data/rvf"
+            property: "client_secret"
+      assertionPackTokens:
+        enabled: true
+        secretName: "rvf-assertion-pack-tokens"
+        data:
+        - secretKey: "github-pack-token"
+          remoteRef:
+            key: "acl_vlt_od225632/kv/data/rvf"
+            property: "github_pack_token"
+    template: external-secret.yaml
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: metadata.name
+          value: rvf-oidc
+      - lengthEqual:
+          path: spec.data
+          count: 1
+      - equal:
+          path: spec.data[0].secretKey
+          value: client-secret
+
+  - it: should give pack tokens their own secret
+    set:
+      fullnameOverride: "rvf"
+      assertionPackTokens:
+        enabled: true
+        secretName: "rvf-assertion-pack-tokens"
+        data:
+        - secretKey: "github-pack-token"
+          remoteRef:
+            key: "acl_vlt_od225632/kv/data/rvf"
+            property: "github_pack_token"
+    template: external-secret.yaml
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: metadata.name
+          value: rvf-assertion-pack-tokens
+      - equal:
+          path: spec.target.name
+          value: rvf-assertion-pack-tokens
+      - equal:
+          path: spec.data[0].remoteRef.property
+          value: github_pack_token
+
+  - it: should create no pack token secret by default
+    set:
+      fullnameOverride: "rvf"
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: external-secret.yaml

@@ -1404,6 +1404,77 @@
         ],
         "additionalProperties": false
       }
+    },
+    "assertionPackTokens": {
+      "type": "object",
+      "description": "ExternalSecret holding tokens for private assertion packs. Separate from externalSecret so an unresolvable token cannot take the gateway's OIDC client secret down with it.",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "secretName": {
+          "type": "string"
+        },
+        "syncWave": {
+          "type": "string"
+        },
+        "refreshInterval": {
+          "type": "string"
+        },
+        "secretStoreRef": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "data": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "secretKey": {
+                "type": "string"
+              },
+              "remoteRef": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "property": {
+                    "type": "string"
+                  },
+                  "conversionStrategy": {
+                    "type": "string"
+                  },
+                  "decodingStrategy": {
+                    "type": "string"
+                  },
+                  "metadataPolicy": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "key"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "secretKey",
+              "remoteRef"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false

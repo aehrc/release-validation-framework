@@ -91,6 +91,40 @@ env:
 #       key: github-pat
 assertionPacks: []
 
+# -- A Secret holding tokens for private assertion packs, synced from the same
+# secret store as everything else here. Referenced by `tokenSecret` above.
+#
+# SEPARATE from `externalSecret` on purpose. That one owns the SecurityPolicy's
+# OIDC clientSecret, and an ExternalSecret sync is all-or-nothing: adding the
+# pack token there once meant an unresolvable property took the gateway's client
+# secret with it, so the gateway stopped injecting the X-AUTH headers RVF
+# authenticates on and every endpoint answered 401. A pack token that cannot be
+# resolved should cost the pack, and nothing else.
+#
+# assertionPackTokens:
+#   enabled: true
+#   secretName: "rvf-assertion-pack-tokens"
+#   data:
+#   - secretKey: "github-pack-token"
+#     remoteRef:
+#       key: "acl_vlt_od225632/kv/data/rvf"
+#       property: "github_pack_token"
+assertionPackTokens:
+  # -- Whether to create the ExternalSecret for pack tokens
+  enabled: false
+  # -- Name of both the ExternalSecret and the Secret it creates
+  secretName: "rvf-assertion-pack-tokens"
+  # -- Sync wave; defaults to externalSecret.syncWave so tokens land before pods
+  syncWave: ""
+  # -- Refresh interval; defaults to externalSecret.refreshInterval
+  refreshInterval: ""
+  # -- Secret store; each field defaults to the externalSecret equivalent
+  secretStoreRef:
+    name: ""
+    kind: ""
+  # -- One entry per token, in ExternalSecret `data` form
+  data: []
+
 # -- Persistent Volume Claims configuration
 persistence:
   # -- PVC for shared validation jobs (upload handover and reports)
