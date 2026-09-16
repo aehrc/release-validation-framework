@@ -289,9 +289,9 @@ name, which is the only sane default and the common case.
 {{- define "release-validation-framework.assertionChannelSpecs" -}}
 {{- $specs := list }}
 {{- range $i, $channel := .Values.assertionChannels }}
-{{- if not $channel.index }}
-{{- fail (printf "assertionChannels[%d] (%s) has no index: without one the server cannot resolve a version to a digest, which is the only reason a channel exists" $i ($channel.name | default "unnamed")) }}
-{{- end }}
+{{/* No check for a missing index here: values.schema.json declares it
+     required, so helm refuses such values before this renders. A second check
+     would be unreachable, and an unreachable check reads as a live one. */}}
 {{- $spec := printf "name=%s;index=%s;packs=%s" $channel.name $channel.index ($channel.packs | default $channel.name) }}
 {{- if $channel.tokenSecret }}
 {{- $spec = printf "%s;authHeader=%s $(RVF_CHANNEL_TOKEN_%d)" $spec ($channel.tokenScheme | default "Bearer") $i }}

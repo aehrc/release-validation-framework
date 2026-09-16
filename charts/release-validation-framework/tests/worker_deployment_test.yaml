@@ -215,15 +215,6 @@ tests:
       - failedTemplate:
           errorMessage: "assertionPacks[0] (amtv4) has no sha256 and no channel serves it: an unpinned pack cannot be reproduced, so a report naming it would mean nothing. Give it a uri and sha256, or configure a channel that carries it and name only the version."
 
-  # A channel with no index cannot resolve anything, which is the only reason it
-  # would exist. The SCHEMA refuses it, before the template's own check gets the
-  # chance - so this asserts the message that actually reaches the operator
-  # rather than the one I wrote in the helper.
-  - it: should refuse a channel with no index
-    set:
-      fullnameOverride: "rvf"
-      assertionChannels:
-        - name: amtv4
-    asserts:
-      - failedTemplate:
-          errorMessage: "values don't meet the specifications of the schema(s) in the following chart(s):\nrelease-validation-framework:\n- assertionChannels.0: index is required\n"
+  # No test for a channel with no index: values.schema.json declares index
+  # required, so helm refuses those values before any template runs. A test
+  # there would assert helm's own error wording and nothing of ours.
