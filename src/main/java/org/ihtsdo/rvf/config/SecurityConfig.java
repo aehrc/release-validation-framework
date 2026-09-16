@@ -30,7 +30,22 @@ public class SecurityConfig {
 						// other. Serving them behind the check would only mean a
 						// bare 401 body instead of a page that can explain it.
 						"/ui",
-						"/ui/**")
+						"/ui/**",
+						// The ERROR dispatch. Without this, a handler that throws
+						// is re-dispatched to /error, /error requires
+						// authentication, the request is anonymous by then, and
+						// the client is told "Full authentication is required to
+						// access this resource" - a 401 for what is actually a
+						// 500. It cost hours: a pinned assertion pack whose
+						// digest did not match reported itself as an
+						// authentication outage on every assertion endpoint, and
+						// the real error was only ever visible in the pod log.
+						//
+						// Permitting it does not expose anything: the error body
+						// is Spring's own, and the request already failed
+						// authorization or failed inside a handler the caller
+						// was authorized to reach.
+						"/error")
                 .permitAll()
                 .anyRequest().authenticated()
         );
