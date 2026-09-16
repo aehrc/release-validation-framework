@@ -288,7 +288,7 @@ class DuckPerRunPinsTest {
 	private DuckAssertionService service() {
 		return new DuckAssertionService(
 				new DuckStoreLocator(storeFile.toString(), corpus.toString()),
-				corpus.toString(), List.of());
+				corpus.toString(), List.of(), List.of());
 	}
 
 	private static ObjectProvider<DuckAssertionService> provider(DuckAssertionService service) {

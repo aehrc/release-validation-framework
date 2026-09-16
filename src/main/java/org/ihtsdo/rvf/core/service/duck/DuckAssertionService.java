@@ -99,20 +99,40 @@ public class DuckAssertionService implements AssertionService {
 	 */
 	private final List<String> packSpecs;
 
+	/**
+	 * The locations a pack may be named from, rather than spelled out.
+	 *
+	 * <p>Empty means a pin must carry its own uri and sha256, which is how every
+	 * deployment worked first. With a channel configured, {@code amtv4@2026.09.2}
+	 * is enough and the digest is resolved from the channel's index - so a
+	 * pipeline variable can be a version and nothing else, and nobody transcribes
+	 * a hex string.
+	 */
+	private final AssertionPackChannels channels;
+
 	@Autowired
 	public DuckAssertionService(DuckStoreLocator storeLocator,
 			@Value("${rvf.assertion.resource.local.path:}") String corpusRoot,
-			@Value("${rvf.assertion.packs:}") List<String> packSpecs) {
+			@Value("${rvf.assertion.packs:}") List<String> packSpecs,
+			@Value("${rvf.assertion.channels:}") List<String> channelSpecs) {
 		this.storeLocator = storeLocator;
 		this.corpusRoot = corpusRoot;
 		this.packSpecs = packSpecs == null ? List.of() : packSpecs;
+		this.channels = new AssertionPackChannels(
+				AssertionPackChannels.parse(channelSpecs), new AssertionPackFetcher());
 	}
 
 	DuckAssertionService(DuckAssertionSource source) {
 		this.storeLocator = null;
 		this.corpusRoot = null;
 		this.packSpecs = List.of();
+		this.channels = new AssertionPackChannels(List.of(), new AssertionPackFetcher());
 		this.loaded = source;
+	}
+
+	/** The configured channels, for discovery endpoints. */
+	public AssertionPackChannels channels() {
+		return channels;
 	}
 
 	private volatile DuckAssertionSource loaded;
@@ -237,13 +257,16 @@ public class DuckAssertionService implements AssertionService {
 		if (pinSpecs == null || pinSpecs.isEmpty()) {
 			return currentCorpus();
 		}
-		String key = String.join("\n", new java.util.TreeSet<>(pinSpecs));
+		// Resolved BEFORE the cache key, so amtv4@2026.09.2 and the full spec it
+		// expands to are one entry rather than two copies of the same corpus.
+		List<String> specs = channels.resolveAll(pinSpecs);
+		String key = String.join("\n", new java.util.TreeSet<>(specs));
 		Corpus cached = pinnedCorpora.get(key);
 		if (cached != null) {
 			return cached;
 		}
 		List<DuckStorePacks.Pack> pinned = new AssertionPackFetcher()
-				.fetch(sourcesFrom(pinSpecs));
+				.fetch(sourcesFrom(specs));
 		DuckStore base = storeLocator.load();
 		List<DuckStorePacks.Pack> all = new ArrayList<>();
 		all.add(basePack(base));
@@ -278,14 +301,26 @@ public class DuckAssertionService implements AssertionService {
 			loadedByName.put(pack.name(), pack.digest());
 		}
 		List<String> pending = new ArrayList<>();
-		for (AssertionPackFetcher.Source configured : configuredPackSources()) {
-			String have = loadedByName.remove(configured.name());
-			String want = "sha256:" + configured.sha256().replaceFirst("^sha256:", "");
+		List<AssertionPackFetcher.Source> configured;
+		try {
+			configured = configuredPackSources();
+		} catch (IOException e) {
+			// A shorthand default whose channel cannot be read right now. Report
+			// it as the unanswered question it is rather than throwing: this
+			// method exists to describe staleness, and a status endpoint that
+			// fails because a remote index is unreachable tells the caller less
+			// than the reason does.
+			return List.of("cannot tell: the configured default could not be "
+					+ "resolved from its channel - " + e.getMessage());
+		}
+		for (AssertionPackFetcher.Source source : configured) {
+			String have = loadedByName.remove(source.name());
+			String want = "sha256:" + source.sha256().replaceFirst("^sha256:", "");
 			if (have == null) {
-				pending.add(configured.name() + " " + configured.version()
+				pending.add(source.name() + " " + source.version()
 						+ " is configured and not loaded");
 			} else if (!have.equalsIgnoreCase(want)) {
-				pending.add(configured.name() + " is loaded at " + have
+				pending.add(source.name() + " is loaded at " + have
 						+ " and configured as " + want);
 			}
 		}
@@ -538,8 +573,17 @@ public class DuckAssertionService implements AssertionService {
 		return reload(new AssertionPackFetcher().fetch(sources));
 	}
 
-	List<AssertionPackFetcher.Source> configuredPackSources() {
-		return sourcesFrom(packSpecs);
+	/**
+	 * The configured default pins, resolved.
+	 *
+	 * <p>Shorthand works here as well as in a run's own pins: the default is the
+	 * corpus a request gets when it names none, and there is no reason for the
+	 * two to be written differently. A deployment may therefore say
+	 * {@code name=amtv4;version=...;uri=...;sha256=...} or just
+	 * {@code amtv4@2026.09.2}.
+	 */
+	List<AssertionPackFetcher.Source> configuredPackSources() throws IOException {
+		return sourcesFrom(channels.resolveAll(packSpecs));
 	}
 
 	/**

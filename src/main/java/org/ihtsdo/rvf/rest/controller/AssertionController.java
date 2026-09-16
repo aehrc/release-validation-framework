@@ -1,5 +1,6 @@
 package org.ihtsdo.rvf.rest.controller;
 
+import org.ihtsdo.rvf.core.service.duck.AssertionPackChannels;
 import org.ihtsdo.rvf.core.service.duck.DuckAssertionService;
 import org.ihtsdo.rvf.core.service.duck.DuckStorePacks;
 import org.springframework.beans.factory.ObjectProvider;
@@ -217,6 +218,128 @@ public class AssertionController {
 		} catch (IOException e) {
 			return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of(
 					"message", "could not load the configured packs; the corpus is unchanged",
+					"reason", String.valueOf(e.getMessage())));
+		}
+	}
+
+	/**
+	 * The locations a pack may be named from, and what each one offers.
+	 *
+	 * <p>Read-only, and deliberately so. A channel makes a version ASKABLE - by
+	 * a pipeline variable, a UI dropdown or a per-run pin - and changes nothing
+	 * about what this deployment serves by default. That stays
+	 * {@code rvf.assertion.packs}, which is a values file reviewed like any
+	 * other change.
+	 *
+	 * <p>Each version carries the digest its bytes must hash to, so a caller
+	 * selecting one is still pinned; the pin is discovered rather than copied by
+	 * hand out of release notes, which is where it went wrong before.
+	 */
+	@GetMapping(value = "channels")
+	@Operation(summary = "The trusted locations packs may be fetched from, with the versions each offers.",
+			description = "Read-only. Selecting a version does not change what the deployment "
+					+ "serves by default. DuckDB engine only.")
+	public ResponseEntity<Map<String, Object>> channels(
+			@RequestParam(value = "versions", defaultValue = "true") boolean withVersions) {
+		DuckAssertionService duck = duckAssertions.getIfAvailable();
+		if (duck == null) {
+			return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body(Map.of("message",
+					"Assertion packs are only available on the DuckDB execution engine."));
+		}
+		AssertionPackChannels channels = duck.channels();
+		List<Map<String, Object>> described = new ArrayList<>();
+		for (AssertionPackChannels.Channel channel : channels.channels()) {
+			Map<String, Object> entry = new LinkedHashMap<>();
+			entry.put("name", channel.name());
+			entry.put("index", channel.index().toString());
+			entry.put("packs", channel.packs());
+			if (withVersions) {
+				try {
+					List<Map<String, Object>> versions = new ArrayList<>();
+					for (AssertionPackChannels.Version version : channels.versions(channel)) {
+						Map<String, Object> v = new LinkedHashMap<>();
+						v.put("version", version.version());
+						v.put("sha256", version.sha256());
+						v.put("assertions", version.assertions());
+						v.put("requires", version.requires());
+						v.put("published", version.published());
+						v.put("draft", version.draft());
+						// So a caller can paste one value into a pipeline
+						// variable and be done.
+						v.put("pin", channel.packs().get(0) + "@" + version.version());
+						versions.add(v);
+					}
+					entry.put("versions", versions);
+				} catch (IOException e) {
+					// Named, not thrown: one unreachable index should not hide
+					// the channels that answered.
+					entry.put("error", "could not read the index: " + e.getMessage());
+				}
+			}
+			described.add(entry);
+		}
+		return ResponseEntity.ok(Map.of(
+				"channels", described,
+				"loaded", duck.loadedPacks().stream()
+						.map(DuckStorePacks.Pack::label).toList()));
+	}
+
+	/**
+	 * Would this version load, if something asked for it?
+	 *
+	 * <p>Fetches the candidate, verifies its digest, merges it with the bundled
+	 * base and proves the merged corpus executes. Nothing is swapped and no
+	 * state is written.
+	 *
+	 * <p>Worth its own endpoint because every way a pack has failed so far fails
+	 * HERE, cheaply, instead of on a deployment: a digest that was the pack's own
+	 * identity rather than its bytes, an index served as metadata, a transpiler
+	 * version that made every shared macro read as a redefinition. Each of those
+	 * cost hours to diagnose through a rollout; each is one call to this.
+	 */
+	@PostMapping(value = "channels/{channel}/versions/{version}/check")
+	@Operation(summary = "Fetch, verify and merge a version without loading it.",
+			description = "Proves a version would load - digest, merge and execution - and "
+					+ "changes nothing. DuckDB engine only.")
+	public ResponseEntity<Map<String, Object>> checkVersion(
+			@PathVariable("channel") String channelName,
+			@PathVariable("version") String version) {
+		DuckAssertionService duck = duckAssertions.getIfAvailable();
+		if (duck == null) {
+			return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body(Map.of("message",
+					"Assertion packs are only available on the DuckDB execution engine."));
+		}
+		AssertionPackChannels channels = duck.channels();
+		AssertionPackChannels.Channel channel = channels.channel(channelName).orElse(null);
+		if (channel == null) {
+			return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message",
+					"no channel '" + channelName + "' is configured",
+					"channels", channels.channels().stream()
+							.map(AssertionPackChannels.Channel::name).toList()));
+		}
+		String pin = channel.packs().get(0) + "@" + version;
+		try {
+			// The same path a run takes, so a green check means a run of it
+			// resolves identically rather than merely similarly. It is cached
+			// afterwards, which is the point: the first real run pays nothing.
+			DuckAssertionService.Corpus corpus = duck.corpusFor(List.of(pin));
+			return ResponseEntity.ok(Map.of(
+					"pin", pin,
+					"wouldLoad", true,
+					"assertions", corpus.source().findAll().size(),
+					"packs", corpus.packs().stream()
+							.map(DuckStorePacks.Pack::label).toList()));
+		} catch (DuckStorePacks.ConflictException e) {
+			return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+					"pin", pin,
+					"wouldLoad", false,
+					"message", "this version cannot be merged with the bundled base",
+					"conflicts", e.getConflicts()));
+		} catch (IOException | RuntimeException e) {
+			return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of(
+					"pin", pin,
+					"wouldLoad", false,
+					"message", "this version could not be loaded",
 					"reason", String.valueOf(e.getMessage())));
 		}
 	}

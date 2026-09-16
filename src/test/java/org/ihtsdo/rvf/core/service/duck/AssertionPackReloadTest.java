@@ -145,7 +145,29 @@ class AssertionPackReloadTest {
 		DuckStoreLocator locator = new DuckStoreLocator(
 				dir.resolve("store.json").toString(), dir.toString());
 		return new DuckAssertionService(locator, dir.toString(),
-				packSpec == null ? List.of() : List.of(packSpec));
+				packSpec == null ? List.of() : List.of(packSpec), List.of());
+	}
+
+	/** As above, plus channels a pin may be named from. */
+	private DuckAssertionService serviceWith(Path dir, String packSpec, String channelSpec)
+			throws Exception {
+		serviceWith(dir, null);
+		DuckStoreLocator locator = new DuckStoreLocator(
+				dir.resolve("store.json").toString(), dir.toString());
+		return new DuckAssertionService(locator, dir.toString(),
+				packSpec == null ? List.of() : List.of(packSpec),
+				channelSpec == null ? List.of() : List.of(channelSpec));
+	}
+
+	/** An index as a channel publishes one: version, uri and the byte digest. */
+	private String index(String channel, String version, String digest) {
+		return """
+				{"formatVersion": 1,
+				 "channel": "%s",
+				 "versions": [
+				  {"version": "%s", "uri": "%s", "sha256": "%s", "assertions": 1}
+				 ]}
+				""".formatted(channel, version, uri(), digest);
 	}
 
 	private String spec(String digest) {
@@ -385,5 +407,122 @@ class AssertionPackReloadTest {
 
 		service.refreshConfiguredPacks();
 		assertEquals(2, service.findAll().size());
+	}
+
+
+	/**
+	 * A pin may be name@version, and is still pinned by digest.
+	 *
+	 * <p>This is the whole point of a channel: a pipeline variable can be a
+	 * version and nothing else, and the digest - the thing that makes a report
+	 * mean something, and the thing that caught an asset's metadata being served
+	 * in place of the asset - comes from the channel's index rather than from
+	 * somebody copying hex out of release notes.
+	 */
+	@Test
+	void aPinMayNameAVersionAndTheDigestComesFromTheIndex(@TempDir Path dir) throws Exception {
+		String pack = store(UUID_PACK, "pack.sql", MACRO);
+		serve(pack);
+		Path indexFile = dir.resolve("amtv4-index.json");
+		Files.writeString(indexFile, index("amtv4", "2026.09.2", "sha256:" + sha256(pack)));
+		DuckAssertionService service = serviceWith(dir, null,
+				"name=amtv4;index=" + indexFile.toUri() + ";packs=amtv4");
+
+		DuckAssertionService.Corpus corpus = service.corpusFor(List.of("amtv4@2026.09.2"));
+
+		assertEquals(2, corpus.source().findAll().size(), "base plus the named version");
+		assertEquals(1, corpus.packs().size());
+		assertEquals("2026.09.2", corpus.packs().get(0).version());
+		assertTrue(corpus.packs().get(0).digest().startsWith("sha256:"),
+				"still pinned: " + corpus.packs().get(0).digest());
+	}
+
+	/**
+	 * An index whose digest is wrong is refused exactly as a hand-written pin is.
+	 *
+	 * <p>Resolving a digest rather than typing one must not become a way to skip
+	 * checking it. The index says what the bytes should be; the fetcher still
+	 * decides whether they are.
+	 */
+	@Test
+	void anIndexDigestThatDoesNotMatchIsStillRefused(@TempDir Path dir) throws Exception {
+		serve(store(UUID_PACK, "pack.sql", MACRO));
+		Path indexFile = dir.resolve("amtv4-index.json");
+		Files.writeString(indexFile, index("amtv4", "2026.09.2",
+				"sha256:" + sha256(store(UUID_PACK, "something-else.sql", MACRO))));
+		DuckAssertionService service = serviceWith(dir, null,
+				"name=amtv4;index=" + indexFile.toUri() + ";packs=amtv4");
+
+		IOException e = assertThrows(IOException.class,
+				() -> service.corpusFor(List.of("amtv4@2026.09.2")));
+		assertTrue(e.getMessage().contains("pinned"), e.getMessage());
+	}
+
+	/** A version the channel does not offer names what it does offer. */
+	@Test
+	void anUnknownVersionSaysWhichExist(@TempDir Path dir) throws Exception {
+		serve(store(UUID_PACK, "pack.sql", MACRO));
+		Path indexFile = dir.resolve("amtv4-index.json");
+		Files.writeString(indexFile, index("amtv4", "2026.09.2", "sha256:whatever"));
+		DuckAssertionService service = serviceWith(dir, null,
+				"name=amtv4;index=" + indexFile.toUri() + ";packs=amtv4");
+
+		IOException e = assertThrows(IOException.class,
+				() -> service.corpusFor(List.of("amtv4@2026.09.9")));
+		assertTrue(e.getMessage().contains("2026.09.2"),
+				"says what it has: " + e.getMessage());
+	}
+
+	/**
+	 * A pack no channel serves is refused rather than fetched.
+	 *
+	 * <p>The channel list is the trust boundary. Shorthand resolution must not
+	 * become a way to reach a location this deployment was never configured to
+	 * read, so an unlisted pack name fails before any request is made.
+	 */
+	@Test
+	void aPackNoChannelServesIsRefused(@TempDir Path dir) throws Exception {
+		serve(store(UUID_PACK, "pack.sql", MACRO));
+		Path indexFile = dir.resolve("amtv4-index.json");
+		Files.writeString(indexFile, index("amtv4", "2026.09.2", "sha256:whatever"));
+		DuckAssertionService service = serviceWith(dir, null,
+				"name=amtv4;index=" + indexFile.toUri() + ";packs=amtv4");
+
+		IOException e = assertThrows(IOException.class,
+				() -> service.corpusFor(List.of("somebody-elses-pack@1.0.0")));
+		assertTrue(e.getMessage().contains("no configured channel"), e.getMessage());
+	}
+
+	/**
+	 * An index that declares itself to be a different channel is refused.
+	 *
+	 * <p>Cheap, and the one check that distinguishes "this location was
+	 * misconfigured" from "this location is serving somebody else's corpus".
+	 */
+	@Test
+	void anIndexNamingAnotherChannelIsRefused(@TempDir Path dir) throws Exception {
+		serve(store(UUID_PACK, "pack.sql", MACRO));
+		Path indexFile = dir.resolve("amtv4-index.json");
+		Files.writeString(indexFile, index("somebody-else", "2026.09.2", "sha256:x"));
+		DuckAssertionService service = serviceWith(dir, null,
+				"name=amtv4;index=" + indexFile.toUri() + ";packs=amtv4");
+
+		IOException e = assertThrows(IOException.class,
+				() -> service.corpusFor(List.of("amtv4@2026.09.2")));
+		assertTrue(e.getMessage().contains("declares itself"), e.getMessage());
+	}
+
+	/** A full spec still works, with or without channels configured. */
+	@Test
+	void aFullSpecIsLeftAlone(@TempDir Path dir) throws Exception {
+		String pack = store(UUID_PACK, "pack.sql", MACRO);
+		serve(pack);
+		DuckAssertionService service = serviceWith(dir, null,
+				"name=amtv4;index=file:///nonexistent-index.json;packs=amtv4");
+
+		DuckAssertionService.Corpus corpus = service.corpusFor(List.of(spec(sha256(pack))));
+
+		assertEquals(2, corpus.source().findAll().size(),
+				"a pin carrying its own uri and digest never touches the index");
 	}
 }

@@ -114,10 +114,23 @@ public class AssertionPackFetcher {
 	}
 
 	private byte[] read(Source source) throws IOException {
-		if ("file".equals(source.uri().getScheme())) {
-			return Files.readAllBytes(Path.of(source.uri()));
+		return read(source.uri(), source.authHeader());
+	}
+
+	/**
+	 * Bytes from a location, with the same rules a pack is fetched under.
+	 *
+	 * <p>Public because a channel index is fetched the same way and must be: it
+	 * lives in the same place, behind the same credential, and is subject to the
+	 * same Accept and redirect behaviour. An index read by some other code path
+	 * would be the obvious place for those rules to drift apart, and the digests
+	 * it publishes would then describe bytes nobody fetches.
+	 */
+	public byte[] read(URI uri, String authHeader) throws IOException {
+		if ("file".equals(uri.getScheme())) {
+			return Files.readAllBytes(Path.of(uri));
 		}
-		HttpRequest.Builder request = HttpRequest.newBuilder(source.uri())
+		HttpRequest.Builder request = HttpRequest.newBuilder(uri)
 				.timeout(Duration.ofMinutes(5))
 				// ONLY octet-stream. Offered "application/octet-stream,
 				// application/json", the GitHub API picks json and returns the
@@ -125,24 +138,23 @@ public class AssertionPackFetcher {
 				// fails the digest check. Worse, that metadata carries
 				// download_count, so it hashes differently on every fetch and
 				// the error looks like a moving target rather than a wrong
-				// Accept header. A file: pack ignores this entirely.
+				// Accept header. A file: URL ignores this entirely.
 				.header("Accept", "application/octet-stream");
-		if (source.authHeader() != null && !source.authHeader().isBlank()) {
-			request.header("Authorization", source.authHeader());
+		if (authHeader != null && !authHeader.isBlank()) {
+			request.header("Authorization", authHeader);
 		}
 		try {
 			HttpResponse<InputStream> response =
 					http.send(request.build(), HttpResponse.BodyHandlers.ofInputStream());
 			if (response.statusCode() != 200) {
-				throw new IOException("pack " + source.name() + " from " + source.uri()
-						+ " returned HTTP " + response.statusCode());
+				throw new IOException(uri + " returned HTTP " + response.statusCode());
 			}
 			try (InputStream in = response.body()) {
 				return in.readAllBytes();
 			}
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
-			throw new IOException("interrupted fetching pack " + source.name(), e);
+			throw new IOException("interrupted fetching " + uri, e);
 		}
 	}
 
