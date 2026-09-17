@@ -84,6 +84,20 @@ class ValidationRunCatalogueTest {
 				    "totalTestsRun": %d,
 				    "totalFailures": %d,
 				    "totalWarnings": 1,
+				    "assertionPacks": [
+				      {
+				        "name": "international",
+				        "version": "2026.07.27",
+				        "digest": "sha256:abc",
+				        "assertions": 360
+				      },
+				      {
+				        "name": "amtv4",
+				        "version": "2026.09.2",
+				        "digest": "sha256:def",
+				        "assertions": 226
+				      }
+				    ],
 				    "assertionsFailed": [
 				      { "assertionText": "a", "firstNInstances": [ { "id": "1" }, { "id": "2" } ] }
 				    ],
@@ -97,6 +111,11 @@ class ValidationRunCatalogueTest {
 				  "rf2Files": ["a.txt", "b.txt"]
 				}
 				""".formatted(file, runId, failures, runId, run, failures);
+	}
+
+	private static String legacyReport(long runId, String file, int run, int failures) {
+		return storedReport(runId, file, run, failures).replaceFirst(
+				"(?s)\\s*\"assertionPacks\"\\s*:\\s*\\[.*?]\\s*,", "");
 	}
 
 	/** The shape /result/{runId} returns: the same content, wrapped. */
@@ -127,6 +146,10 @@ class ValidationRunCatalogueTest {
 		assertEquals(1, r.totalFailures());
 		assertEquals(1, r.totalWarnings());
 		assertEquals("Aug 30, 2026, 8:28:18 PM", r.startTime());
+		assertEquals(List.of(
+						new ValidationRunCatalogue.AssertionPackSummary("international", "2026.07.27"),
+						new ValidationRunCatalogue.AssertionPackSummary("amtv4", "2026.09.2")),
+				r.assertionPacks());
 	}
 
 	@Test
@@ -143,6 +166,35 @@ class ValidationRunCatalogueTest {
 		assertEquals("wrapped.zip", r.testFileName());
 		assertEquals(7, r.totalTestsRun());
 		assertEquals(2, r.totalFailures());
+	}
+
+	@Test
+	void namesLegacyReportsAsHavingNoRecordedPackProvenance() throws IOException {
+		writeRun("run_legacy", "COMPLETE", legacyReport(43L, "legacy.zip", 7, 0));
+
+		ValidationRunCatalogue.RunSummary r = catalogue().list(50).get(0);
+
+		assertNotNull(r.assertionPacks(), "a completed legacy report is distinct from an in-flight run");
+		assertTrue(r.assertionPacks().isEmpty());
+	}
+
+	@Test
+	void replacesAStaleSidecarThatPredatesPackProvenance() throws IOException {
+		writeRun("run_stale", "COMPLETE", report(44L, "packed.zip", 9, 0));
+		Path summary = store.resolve("run_stale/rvf/summary.json");
+		Files.writeString(summary, """
+				{
+				  "validationConfig": {"runId": 44, "testFileName": "packed.zip"},
+				  "TestResult": {"totalTestsRun": 9, "totalFailures": 0}
+				}
+				""");
+
+		ValidationRunCatalogue.RunSummary r = catalogue().list(50).get(0);
+
+		assertEquals("international", r.assertionPacks().get(0).name());
+		String upgraded = Files.readString(summary);
+		assertTrue(upgraded.contains("\"summaryVersion\":2"), upgraded);
+		assertTrue(upgraded.contains("\"version\":\"2026.09.2\""), upgraded);
 	}
 
 	@Test

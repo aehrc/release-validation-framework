@@ -368,6 +368,22 @@ function statePill(state, failures) {
   return `<span class="pill off">${esc(state || 'unknown')}</span>`;
 }
 
+/* Compact identity for the run list. null means the run has not produced a
+ * report yet; [] means it has a report from before pack provenance existed. */
+function packVersions(packs) {
+  if (packs == null) return '<span class="dim">&mdash;</span>';
+  if (!Array.isArray(packs) || !packs.length) {
+    return '<span class="dim" title="This report predates assertion-pack provenance">'
+      + 'not recorded</span>';
+  }
+  return packs.map((pack) => {
+    const name = esc(pack.name || '(unnamed)');
+    const version = pack.version ? ` <span class="dim">${esc(pack.version)}</span>` : '';
+    return `<div>${name}${version}</div>`;
+  }).join('');
+}
+
+
 async function loadRuns(opts = {}) {
   loadRuns.done = true;
   const box = $('#runList');
@@ -456,7 +472,9 @@ function drawRuns() {
   const rows = allRuns.filter((r) => {
     if (onlyFailures && !(r.totalFailures > 0)) return false;
     if (!needle) return true;
-    return [r.storageLocation, r.testFileName, r.groups, r.runId]
+    const packs = (r.assertionPacks || [])
+      .flatMap((pack) => [pack.name, pack.version]);
+    return [r.storageLocation, r.testFileName, r.groups, r.runId, ...packs]
       .some((v) => String(v ?? '').toLowerCase().includes(needle));
   });
 
@@ -475,7 +493,7 @@ function drawRuns() {
   $('#runList').innerHTML = `
     <table class="runs">
       <thead>
-        <tr><th>when</th><th>package</th><th>groups</th><th>result</th><th>run id</th><th></th></tr>
+        <tr><th>when</th><th>package</th><th>groups</th><th>assertion packs</th><th>result</th><th>run id</th><th></th></tr>
       </thead>
       <tbody>
         ${page.map((r, i) => `
@@ -483,6 +501,7 @@ function drawRuns() {
             <td>${esc(ago(r.lastModified))}</td>
             <td>${esc(r.testFileName || r.storageLocation)}</td>
             <td class="dim">${esc(r.groups || '')}</td>
+            <td>${packVersions(r.assertionPacks)}</td>
             <td>${statePill(r.state, r.totalFailures)}${
               r.totalTestsRun ? ` <span class="dim">${num(r.totalTestsRun)} assertions</span>` : ''}</td>
             <td class="dim">${esc(r.runId ?? '')}</td>

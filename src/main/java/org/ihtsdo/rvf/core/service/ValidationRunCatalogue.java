@@ -49,6 +49,7 @@ public class ValidationRunCatalogue {
 	private static final String PROGRESS = "rvf/progress.txt";
 	private static final String SUBMITTED = "rvf/submitted.txt";
 	private static final String SUMMARY = "rvf/summary.json";
+	private static final int SUMMARY_VERSION = 2;
 
 	@Autowired
 	private ValidationJobResourceConfig jobResourceConfig;
@@ -57,6 +58,9 @@ public class ValidationRunCatalogue {
 	 * One row of the list. Any field except the storage location may be absent:
 	 * a run that is still queued has written its state and nothing else.
 	 */
+	/** Only the identity needed by the run list; full provenance stays in the report. */
+	public record AssertionPackSummary(String name, String version) {}
+
 	public record RunSummary(
 			String storageLocation,
 			Long runId,
@@ -65,6 +69,7 @@ public class ValidationRunCatalogue {
 			String progress,
 			String testFileName,
 			String groups,
+			List<AssertionPackSummary> assertionPacks,
 			Integer totalTestsRun,
 			Integer totalFailures,
 			Integer totalWarnings,
@@ -174,7 +179,15 @@ public class ValidationRunCatalogue {
 			// Read it rather than asking whether it exists first: absence is an
 			// exception either way, and probing would double the round trips on
 			// the path this exists to make cheap.
-			return readSummary(digest, storageLocation, state, progress, submitted, modified);
+			ParsedSummary cached = readSummary(digest, storageLocation, state, progress,
+					submitted, modified);
+			if (cached.version() == SUMMARY_VERSION) {
+				return cached.summary();
+			}
+			// Version 1 predates assertion-pack identity. Re-read the report once,
+			// then replace it with a v2 sidecar; otherwise every existing run would
+			// keep saying nothing even though its report records the answer.
+			LOGGER.trace("Ignoring stale listing sidecar for {}", storageLocation);
 		} catch (NoSuchFileException e) {
 			// Never listed before, or invalidated by a rewritten report.
 			LOGGER.trace("No sidecar for {}", storageLocation);
@@ -187,15 +200,18 @@ public class ValidationRunCatalogue {
 		Path results = dir.resolve(RESULTS);
 		if (!Files.isRegularFile(results)) {
 			// Queued or running: the state is written before the report exists.
-			return new RunSummary(storageLocation, null, state, progress, null, null, null, null, null, null, null, submitted, modified);
+			return new RunSummary(storageLocation, null, state, progress, null, null, null,
+					null, null, null, null, null, submitted, modified);
 		}
 		try {
-			RunSummary summary = readSummary(results, storageLocation, state, progress, submitted, modified);
+			RunSummary summary = readSummary(results, storageLocation, state, progress,
+					submitted, modified).summary();
 			cache(digest, summary);
 			return summary;
 		} catch (IOException | RuntimeException e) {
 			LOGGER.warn("Could not summarise {}: {}", results, e.toString());
-			return new RunSummary(storageLocation, null, state, progress, null, null, null, null, null, null, null, submitted, modified);
+			return new RunSummary(storageLocation, null, state, progress, null, null, null,
+					null, null, null, null, null, submitted, modified);
 		}
 	}
 
@@ -226,6 +242,9 @@ public class ValidationRunCatalogue {
 			config.put("groupsList", List.of(s.groups()));
 		}
 		Map<String, Object> result = new LinkedHashMap<>();
+		if (s.assertionPacks() != null) {
+			result.put("assertionPacks", s.assertionPacks());
+		}
 		if (s.totalTestsRun() != null) {
 			result.put("totalTestsRun", s.totalTestsRun());
 		}
@@ -236,6 +255,7 @@ public class ValidationRunCatalogue {
 			result.put("totalWarnings", s.totalWarnings());
 		}
 		Map<String, Object> doc = new LinkedHashMap<>();
+		doc.put("summaryVersion", SUMMARY_VERSION);
 		doc.put("validationConfig", config);
 		doc.put("TestResult", result);
 		if (s.startTime() != null) {
@@ -277,11 +297,13 @@ public class ValidationRunCatalogue {
 		Long runId;
 		String testFileName;
 		String groups;
+		List<AssertionPackSummary> assertionPacks;
 		Integer totalTestsRun;
 		Integer totalFailures;
 		Integer totalWarnings;
 		String startTime;
 		String endTime;
+		int summaryVersion;
 	}
 
 	/**
@@ -293,14 +315,18 @@ public class ValidationRunCatalogue {
 	 * megabytes off a network file share to display a few numbers, so this walks
 	 * the token stream and skips every array it does not need.
 	 */
-	private RunSummary readSummary(Path file, String storageLocation, String state, String progress,
-			String submitted, long modified) throws IOException {
+	private record ParsedSummary(RunSummary summary, int version) {}
+
+	private ParsedSummary readSummary(Path file, String storageLocation, String state,
+			String progress, String submitted, long modified) throws IOException {
 		Fields f = new Fields();
 		try (JsonReader in = new JsonReader(Files.newBufferedReader(file, StandardCharsets.UTF_8))) {
 			readResultObject(in, f);
 		}
-		return new RunSummary(storageLocation, f.runId, state, progress, f.testFileName, f.groups,
-				f.totalTestsRun, f.totalFailures, f.totalWarnings, f.startTime, f.endTime, submitted, modified);
+		RunSummary summary = new RunSummary(storageLocation, f.runId, state, progress,
+				f.testFileName, f.groups, f.assertionPacks, f.totalTestsRun, f.totalFailures,
+				f.totalWarnings, f.startTime, f.endTime, submitted, modified);
+		return new ParsedSummary(summary, f.summaryVersion);
 	}
 
 	/**
@@ -322,6 +348,7 @@ public class ValidationRunCatalogue {
 		in.beginObject();
 		while (in.hasNext()) {
 			switch (in.nextName()) {
+				case "summaryVersion" -> f.summaryVersion = in.nextInt();
 				case "rvfValidationResult" -> readResultObject(in, f);
 				case "validationConfig" -> {
 					in.beginObject();
@@ -337,11 +364,15 @@ public class ValidationRunCatalogue {
 				}
 				case "TestResult" -> {
 					in.beginObject();
+					// Presence of TestResult but no assertionPacks means a legacy
+					// report, not an in-flight run whose report does not exist yet.
+					f.assertionPacks = List.of();
 					while (in.hasNext()) {
 						switch (in.nextName()) {
 							case "totalTestsRun" -> f.totalTestsRun = in.nextInt();
 							case "totalFailures" -> f.totalFailures = in.nextInt();
 							case "totalWarnings" -> f.totalWarnings = in.nextInt();
+							case "assertionPacks" -> f.assertionPacks = readAssertionPacks(in);
 							// assertionsFailed / Passed / Warning / Skipped fall to
 							// skipValue, which is the whole point of streaming this.
 							default -> in.skipValue();
@@ -355,6 +386,31 @@ public class ValidationRunCatalogue {
 			}
 		}
 		in.endObject();
+	}
+
+	private static List<AssertionPackSummary> readAssertionPacks(JsonReader in) throws IOException {
+		if (in.peek() == JsonToken.NULL) {
+			in.nextNull();
+			return List.of();
+		}
+		List<AssertionPackSummary> packs = new ArrayList<>();
+		in.beginArray();
+		while (in.hasNext()) {
+			String name = null;
+			String version = null;
+			in.beginObject();
+			while (in.hasNext()) {
+				switch (in.nextName()) {
+					case "name" -> name = nextStringOrNull(in);
+					case "version" -> version = nextStringOrNull(in);
+					default -> in.skipValue();
+				}
+			}
+			in.endObject();
+			packs.add(new AssertionPackSummary(name, version));
+		}
+		in.endArray();
+		return List.copyOf(packs);
 	}
 
 	private static List<String> readStringArray(JsonReader in) throws IOException {
