@@ -22,12 +22,11 @@ public class ValidationReport {
 	/**
 	 * Which assertion packs produced this report.
 	 *
-	 * <p>Empty on the MySQL engine and on any DuckDB run using only the bundled
-	 * store, which is every deployment today. It stops being optional the
-	 * moment assertions are fetched at runtime: baked into the image, the image
-	 * tag named the corpus, and nothing else does. Without this, "which
-	 * assertions produced this report" is unanswerable, and trading a rebuild
-	 * for silent drift is no trade.
+	 * <p>Empty on the MySQL engine and on reports written before provenance was
+	 * recorded. A DuckDB store carries its own identity even when no extension
+	 * packs are merged, because once assertions can be fetched at runtime the
+	 * image tag no longer answers which corpus ran. Without this field, "which
+	 * assertions produced this report" is unanswerable.
 	 *
 	 * <p>Name, version, digest and assertion count per pack - the digest
 	 * because a version is a label a publisher controls and a digest is not.

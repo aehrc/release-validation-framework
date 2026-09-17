@@ -137,4 +137,20 @@ class ValidationRunnerPhaseConcurrencyTest {
 				"structural counts must be merged into the run's report");
 		assertEquals(2, statusReport.getResultReport().getTotalFailures());
 	}
+
+	@Test
+	void assertionPackProvenanceSurvivesTheMerge() {
+		ValidationReport.AssertionPackRecord pack = new ValidationReport.AssertionPackRecord(
+				"amt-corpus", "2026.09.2", "sha256:abc", 586);
+		ValidationStatusReport main = new ValidationStatusReport(config());
+		main.setResultReport(new ValidationReport());
+		ValidationStatusReport sqlPhase = new ValidationStatusReport(config());
+		sqlPhase.setResultReport(new ValidationReport());
+		sqlPhase.getResultReport().setAssertionPacks(List.of(pack));
+
+		ReflectionTestUtils.invokeMethod(runner, "mergeValidationStatusReports", main, sqlPhase);
+
+		assertEquals(List.of(pack), main.getResultReport().getAssertionPacks(),
+				"the run report must name the store executed by its SQL phase");
+	}
 }

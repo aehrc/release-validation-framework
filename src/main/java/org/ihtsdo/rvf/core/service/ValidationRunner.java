@@ -264,6 +264,19 @@ public class ValidationRunner {
 		mainResult.getAssertionsWarning().addAll(taskResult.getAssertionsWarning());
 		mainResult.getAssertionsSkipped().addAll(taskResult.getAssertionsSkipped());
 		mainResult.getAssertionsPassed().addAll(taskResult.getAssertionsPassed());
+
+		// Only the SQL phase executes assertion packs, so it is the only phase
+		// that normally carries provenance. Preserve it when the independently
+		// produced phase report is folded into the run report; merging only the
+		// assertion rows made the persisted report claim no pack was recorded
+		// even though the SQL report had recorded the exact store it executed.
+		if (!taskResult.getAssertionPacks().isEmpty()) {
+			if (!mainResult.getAssertionPacks().isEmpty()
+					&& !mainResult.getAssertionPacks().equals(taskResult.getAssertionPacks())) {
+				throw new IllegalStateException("Validation phases reported different assertion packs");
+			}
+			mainResult.setAssertionPacks(List.copyOf(taskResult.getAssertionPacks()));
+		}
 		
 		mainResult.setTotalTestsRun(mainResult.getTotalTestsRun() + taskResult.getTotalTestsRun());
 		mainResult.setTotalFailures(mainResult.getTotalFailures() + taskResult.getTotalFailures());
