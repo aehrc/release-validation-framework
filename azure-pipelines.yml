@@ -5,6 +5,9 @@ trigger:
     include:
       - 'groups-api-fix'
       - 'support-stored-proc-file'
+      # Weekly merges of SNOMED International's master (.github/workflows/upstream-sync.yml on
+      # master). Each builds an image the upstream-sync-rvf pipeline then validates (aehrc/rvf#48).
+      - 'upstream-sync/*'
 pool:
   vmImage: 'ubuntu-latest'
 
@@ -17,6 +20,10 @@ variables:
   # also what the :catchup image needs.
   ${{ if eq(variables['Build.SourceBranchName'], 'groups-api-fix') }}:
     imageTag: 'latest'
+  # upstream-sync/2026-10-05 -> upstream-sync-2026-10-05: SourceBranchName alone would be the
+  # bare date, which says nothing about what the image is.
+  ${{ elseif(startsWith(variables['Build.SourceBranch'], 'refs/heads/upstream-sync/')) }}:
+    imageTag: upstream-sync-$(Build.SourceBranchName)
   ${{ else }}:
     imageTag: $(Build.SourceBranchName)
 
