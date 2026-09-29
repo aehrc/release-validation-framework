@@ -1,0 +1,156 @@
+# Merge SNOMED International's latest RVF into a temporary branch of our fork.
+#
+# Why (aehrc/rvf#48): nobody should have to remember to pull SI's changes in, and SI's
+# changes must never land straight in the branch the daily and prod RVF run. So once a
+# week this merges IHTSDO's master into a NEW branch, upstream-sync/<date>, cut from our
+# production branch, and opens a draft PR. Nothing is merged into the production branch
+# automatically - that is a human decision, made in the quiet period after a release.
+#
+# What happens next, without anyone doing anything:
+#   1. The push triggers the image build (azure-pipelines.yml on the production branch
+#      includes upstream-sync/*), which publishes
+#      ontoserver.azurecr.io/aehrc-rvf/release-validation-framework:upstream-sync-<date>.
+#      A failed build shows as a failed check on the PR.
+#   2. That build completing triggers upstream-sync-rvf in Azure DevOps (rvf-pipelines,
+#      azure-pipeline.upstream_sync_rvf.yml), which runs the image against the RF2 of the
+#      latest daily-rvf, compares the two reports with AU and SI separated, and comments
+#      the result on the PR (counts only - this repo is public).
+#
+# If the merge conflicts, nothing is pushed; one issue labelled upstream-sync is opened
+# (or updated) with the conflicting files. That is expected while the production branch
+# is far behind upstream - see "Base branch" below.
+#
+# Base branch: repository variable SYNC_BASE_BRANCH (Settings > Secrets and variables >
+# Actions > Variables), default groups-api-fix, the branch production images are built
+# from. Change it when production moves to another branch (e.g. after the catch-up).
+#
+# This file lives on master because GitHub only runs scheduled workflows from the
+# default branch. It never merges into master.
+
+name: Upstream sync
+
+on:
+  schedule:
+    - cron: '0 20 * * 0'   # 06:00 Monday, Brisbane
+  workflow_dispatch:
+    inputs:
+      base:
+        description: Branch to merge SI into (default SYNC_BASE_BRANCH, else groups-api-fix)
+        required: false
+      upstream_ref:
+        description: IHTSDO ref to merge (default master)
+        required: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      BASE: ${{ inputs.base || vars.SYNC_BASE_BRANCH || 'groups-api-fix' }}
+      UPSTREAM_REF: ${{ inputs.upstream_ref || 'master' }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BASE }}
+          fetch-depth: 0
+
+      - name: Fetch SNOMED International
+        run: |
+          git remote add upstream https://github.com/IHTSDO/release-validation-framework.git
+          git fetch --no-tags upstream "$UPSTREAM_REF"
+          git config user.name "rvf-upstream-sync"
+          git config user.email "rvf-upstream-sync@users.noreply.github.com"
+
+      - name: Anything new?
+        id: new
+        run: |
+          COUNT=$(git rev-list --count HEAD..FETCH_HEAD)
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "upstream=$(git rev-parse --short FETCH_HEAD)" >> "$GITHUB_OUTPUT"
+          echo "$COUNT upstream commits not in $BASE"
+          # Skip when an open sync PR already covers this upstream commit.
+          OPEN=$(gh pr list --state open --label upstream-sync --json headRefName,body \
+                 --jq "[.[] | select(.body | contains(\"$(git rev-parse FETCH_HEAD)\"))] | length" 2>/dev/null || echo 0)
+          echo "covered=$OPEN" >> "$GITHUB_OUTPUT"
+
+      - name: Merge into a temporary branch
+        id: merge
+        if: steps.new.outputs.count != '0' && steps.new.outputs.covered == '0'
+        run: |
+          BRANCH="upstream-sync/$(date -u +%Y-%m-%d)"
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null; then
+            BRANCH="$BRANCH-$(date -u +%H%M)"
+          fi
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          git switch -c "$BRANCH"
+          if git merge --no-ff --no-edit -m "Merge IHTSDO/$UPSTREAM_REF ($(git rev-parse --short FETCH_HEAD)) into $BASE" FETCH_HEAD; then
+            echo "result=clean" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=conflict" >> "$GITHUB_OUTPUT"
+            git diff --name-only --diff-filter=U > conflicts.txt
+            git merge --abort
+          fi
+
+      - name: Ensure labels
+        if: steps.merge.outputs.result != ''
+        run: gh label create upstream-sync --color 5319e7 --description "SNOMED International upstream sync" 2>/dev/null || true
+
+      - name: Push and open a draft PR
+        if: steps.merge.outputs.result == 'clean'
+        env:
+          BRANCH: ${{ steps.merge.outputs.branch }}
+          COUNT: ${{ steps.new.outputs.count }}
+        run: |
+          git push origin "$BRANCH"
+          FULL=$(git rev-parse FETCH_HEAD)
+          {
+            echo "Automated merge of **IHTSDO/$UPSTREAM_REF** (\`$FULL\`, $COUNT new commits) into \`$BASE\`."
+            echo
+            echo "Nothing merges automatically. What happens on this branch:"
+            echo
+            echo "- [ ] **Image build** (Azure Pipelines check on this PR) publishes \`release-validation-framework:upstream-sync-${BRANCH#upstream-sync/}\`."
+            echo "- [ ] **Comparison run** (Azure DevOps \`upstream-sync-rvf\`) runs that image on the latest daily-rvf RF2 and comments here: AU parity first, then SI changes."
+            echo "- [ ] **AU at parity**, or every AU change explained."
+            echo "- [ ] **SI changes reviewed** against SI's release notes."
+            echo "- [ ] **Merge only in the quiet period after a release** - never in release week or during content closure."
+            echo "- [ ] After merging, build the production image and promote it by digest in \`aehrc/rvf\` \`values.yaml\` (see the SOP *RVF upstream sync*)."
+            echo
+            echo "Upstream commits:"
+            echo
+            git log --no-merges --format='- %h %s' HEAD^1..FETCH_HEAD | head -60
+          } > body.md
+          gh pr create --draft --base "$BASE" --head "$BRANCH" --label upstream-sync \
+            --title "Upstream sync: IHTSDO/$UPSTREAM_REF $(git rev-parse --short FETCH_HEAD) into $BASE" \
+            --body-file body.md
+
+      - name: Report a conflict
+        if: steps.merge.outputs.result == 'conflict'
+        env:
+          COUNT: ${{ steps.new.outputs.count }}
+          UPSTREAM: ${{ steps.new.outputs.upstream }}
+        run: |
+          {
+            echo "The weekly merge of **IHTSDO/$UPSTREAM_REF** (\`$UPSTREAM\`, $COUNT commits) into \`$BASE\` conflicts, so nothing was pushed."
+            echo
+            echo "Conflicting files ($(wc -l < conflicts.txt)):"
+            echo
+            sed 's/^/- `/; s/$/`/' conflicts.txt | head -80
+            echo
+            echo "Resolve by hand on a branch from \`$BASE\`, or move \`SYNC_BASE_BRANCH\` to a branch that is closer to upstream. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          } > conflict.md
+          N=$(gh issue list --state open --label upstream-sync --search "in:title Upstream sync conflicts" --json number --jq '.[0].number // empty')
+          if [ -n "$N" ]; then
+            gh issue comment "$N" --body-file conflict.md
+          else
+            gh issue create --label upstream-sync --title "Upstream sync conflicts with $BASE" --body-file conflict.md
+          fi
+          echo "::warning::Merge conflicts with $BASE - see the upstream-sync issue"
