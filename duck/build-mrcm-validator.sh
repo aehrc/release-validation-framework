@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
 # Build the MRCM validator that RVF's pom pins: IHTSDO's 4.0.1 with the
-# validation loops parallelised.
+# validation loops parallelised and the SEP/Lateralizable phases module-filtered
+# instead of switched off.
 #
 # WHY THIS EXISTS
 #
@@ -40,6 +41,35 @@
 # settling to 1-2.8 GB retained.
 #
 # DELETE THIS SCRIPT AND THE POM PIN if SI takes the change upstream.
+#
+# THE SECOND PATCH: SEP AND LATERALIZABLE FILTERED BY MODULE, NOT SKIPPED
+#
+# Upstream, ValidationService runs the SEP and Lateralizable phases only when
+# the run has NO module ids:
+#
+#     ContentType.INFERRED.equals(...) && CollectionUtils.isEmpty(run.getModuleIds())
+#
+# Those are the only two of the seven MRCM validation types that are skipped
+# rather than filtered. Each service registers its own assertions, so a skipped
+# phase is not reported as skipped - its 16 assertions (14 SEP, 2
+# Lateralizable) vanish from every bucket, and submitting includedModules took
+# the AU nightly's totalTestsRun from 1,507 to 1,491 with no gate noticing. The
+# gate also made LateralizableRefsetValidationService's own module filter dead
+# code: the only way moduleIds is non-empty is the condition that stops it.
+#
+# mrcm-validator-module-filter.patch drops the module half of the gate (the
+# INFERRED half stays), and filters SEP findings on the flagged concept's
+# module, the key Lateralizable already uses. An assertion left with no
+# findings stays registered and reports as passed, so the count holds. It
+# also stops Lateralizable's remove-check from pruning the run's own member
+# set, which only mattered once that code could run. Measured on the AU
+# 20260930 edition: 16 SEP findings, all international-module, with no
+# modules; 0 with AU's two modules, 16 assertions still reported, all passed.
+#
+# Coverage restored: with includedModules the SEP and Lateralizable checks
+# police AU-module content instead of not running at all.
+#
+# DELETE THAT PATCH if SI replaces the gate with a module filter upstream.
 
 set -euo pipefail
 
@@ -60,6 +90,9 @@ COMMIT="${MRCM_COMMIT:-bfdf76f}"          # "Release 4.0.1"
 WORKDIR="${MRCM_BUILD_DIR:-/data/work/mrcm-src}"
 REPO="${MAVEN_REPO_LOCAL:-/data/m2}"
 PATCH="${PATCH_FILE:-$SCRIPT_DIR/mrcm-validator-parallel.patch}"
+# Applied after PATCH, and only on top of it: its context is the parallelised
+# ValidationService.
+FILTER_PATCH="${MODULE_FILTER_PATCH_FILE:-$SCRIPT_DIR/mrcm-validator-module-filter.patch}"
 
 echo "==> building mrcm-validator $VERSION from IHTSDO $COMMIT"
 
@@ -77,6 +110,14 @@ git checkout -q .
 git apply --check "$PATCH" || { echo "FATAL: $PATCH does not apply to $COMMIT" >&2; exit 1; }
 git apply "$PATCH"
 echo "    applied $(basename "$PATCH")"
+
+[ -f "$FILTER_PATCH" ] || { echo "FATAL: $FILTER_PATCH not found. Without it a run with" >&2
+                            echo "       includedModules silently drops the 16 SEP and" >&2
+                            echo "       Lateralizable assertions, at the same version." >&2
+                            exit 1; }
+git apply --check "$FILTER_PATCH" || { echo "FATAL: $FILTER_PATCH does not apply on top of $(basename "$PATCH")" >&2; exit 1; }
+git apply "$FILTER_PATCH"
+echo "    applied $(basename "$FILTER_PATCH")"
 
 python3 - "$VERSION" <<'PY'
 import pathlib, re, sys
@@ -131,5 +172,11 @@ pool=$("${JAVA_HOME:-/usr}/bin/javap" -p "$tmp/org/snomed/quality/validator/mrcm
         | grep -c 'runInParallel' || true)
 [ "$pool" -ge 1 ] || { echo "FATAL: runInParallel absent - patch did not take" >&2; exit 1; }
 
-echo "==> installed $VERSION; bytecode confirms the parallel executor"
+# And the module filter, for the same reason.
+unzip -qo "$JAR" 'org/snomed/quality/validator/mrcm/SEPRefsetValidationService.class' -d "$tmp"
+filter=$("${JAVA_HOME:-/usr}/bin/javap" -p "$tmp/org/snomed/quality/validator/mrcm/SEPRefsetValidationService.class" \
+        | grep -c 'retainViolationsInModules' || true)
+[ "$filter" -ge 1 ] || { echo "FATAL: retainViolationsInModules absent - module-filter patch did not take" >&2; exit 1; }
+
+echo "==> installed $VERSION; bytecode confirms the parallel executor and the SEP module filter"
 echo "    pom pin: <mrcm.validator.version>$VERSION</mrcm.validator.version>"

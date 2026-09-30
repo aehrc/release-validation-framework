@@ -16,7 +16,7 @@
     </parent>
 
     <properties>
-        <mrcm.validator.version>4.0.5-aehrc-perf</mrcm.validator.version>
+        <mrcm.validator.version>4.0.6-aehrc-perf</mrcm.validator.version>
         <snomed.query.service.version>6.0.3-aehrc-perf</snomed.query.service.version>
         <snomed.drools.version>6.1.3-aehrc-perf</snomed.drools.version>
         <packageName>rvf-api</packageName>
@@ -214,7 +214,10 @@
               construction - Lucene IndexSearcher and Analyzer, a stateless
               ECL-to-Lucene converter, a ConcurrentHashMap refset cache - and
               because ValidationRun's assertion lists are synchronized in the
-              same patch. Reproduce with duck/build-mrcm-validator.sh.
+              same patch. A second patch runs the SEP and Lateralizable phases
+              under includedModules, filtering their findings by module, where
+              upstream skipped both and lost 16 assertions from the report.
+              Reproduce with duck/build-mrcm-validator.sh.
 
               DROP THIS PIN if SI takes the change upstream.
             -->
@@ -423,6 +426,15 @@
                             <path>
                                 <from>${project.basedir}/snomed-release-validation-assertions</from>
                                 <into>/app/snomed-release-validation-assertions</into>
+                            </path>
+                            <!-- Drools test resources: the international set plus the
+                                 AU semantic-tag files, assembled by checkout-resources.sh.
+                                 Read when TESTRESOURCES_USECLOUD=false and
+                                 TESTRESOURCES_LOCAL_PATH=test-resources/ (relative to
+                                 the /app working directory). -->
+                            <path>
+                                <from>${project.basedir}/test-resources</from>
+                                <into>/app/test-resources</into>
                             </path>
                         </paths>
                         <permissions>

@@ -1,0 +1,70 @@
+diff --git a/src/main/java/org/snomed/quality/validator/mrcm/LateralizableRefsetValidationService.java b/src/main/java/org/snomed/quality/validator/mrcm/LateralizableRefsetValidationService.java
+index 9ca1c32..d5f104c 100644
+--- a/src/main/java/org/snomed/quality/validator/mrcm/LateralizableRefsetValidationService.java
++++ b/src/main/java/org/snomed/quality/validator/mrcm/LateralizableRefsetValidationService.java
+@@ -116,7 +116,10 @@ public class LateralizableRefsetValidationService {
+ 			Set<ReferenceSetMember> referenceSetMembers = run.getLateralizableRefsetMembers();
+ 			Set<String> moduleIds = run.getModuleIds();
+ 			if (moduleIds != null && !moduleIds.isEmpty()) {
+-				referenceSetMembers.removeIf(referenceSetMember -> !moduleIds.contains(referenceSetMember.moduleId()));
++				// A filtered copy: removing from the run's own set would hide
++				// out-of-module members from reportConceptsToAdd, which would then
++				// ask for in-module concepts that are already members to be added.
++				referenceSetMembers = referenceSetMembers.stream().filter(referenceSetMember -> moduleIds.contains(referenceSetMember.moduleId())).collect(Collectors.toSet());
+ 			}
+ 
+ 			List<String> referencedComponentIds = referenceSetMembers.stream().filter(ReferenceSetMember::active).map(ReferenceSetMember::referencedComponentId).toList();
+diff --git a/src/main/java/org/snomed/quality/validator/mrcm/SEPRefsetValidationService.java b/src/main/java/org/snomed/quality/validator/mrcm/SEPRefsetValidationService.java
+index 4e14ecc..bed2d57 100644
+--- a/src/main/java/org/snomed/quality/validator/mrcm/SEPRefsetValidationService.java
++++ b/src/main/java/org/snomed/quality/validator/mrcm/SEPRefsetValidationService.java
+@@ -92,6 +92,27 @@ public class SEPRefsetValidationService {
+         validateAllOrEntireConceptInSERefset(run, queryService, exclusionList);
+         validateBodyStructureConcepts(run, queryService, bodyStructureConcepts);
+         validateParentConceptsOfTargetComponents(run, queryService);
++        retainViolationsInModules(run);
++    }
++
++    // Every check above runs over the whole loaded edition. When the run is
++    // scoped to modules, keep only the findings whose flagged concept is in one
++    // of them - the same key LateralizableRefsetValidationService uses. The
++    // assertion itself stays registered, so one left with no findings reports
++    // as passed rather than disappearing from the run.
++    // A concept that could not be resolved carries no module; it is a dangling
++    // reference that cannot be attributed to any module, so it is kept.
++    private void retainViolationsInModules(ValidationRun run) {
++        Set<String> moduleIds = run.getModuleIds();
++        if (moduleIds == null || moduleIds.isEmpty()) return;
++        for (Assertion assertion : run.getCompletedAssertions()) {
++            if (SEPAssertionType.fromUUID(assertion.getUuid().toString()) == null) continue;
++            List<ConceptResult> inScope = assertion.getCurrentViolatedConcepts().stream()
++                    .filter(concept -> concept.getModuleId() == null || moduleIds.contains(concept.getModuleId()))
++                    .collect(Collectors.toCollection(ArrayList::new));
++            assertion.setCurrentViolatedConcepts(inScope);
++            assertion.setCurrentViolatedConceptIds(inScope.stream().map(ConceptResult::getId).map(Long::parseLong).collect(Collectors.toCollection(ArrayList::new)));
++        }
+     }
+ 
+     // 1. For active members, all referenced components and target components are active
+diff --git a/src/main/java/org/snomed/quality/validator/mrcm/ValidationService.java b/src/main/java/org/snomed/quality/validator/mrcm/ValidationService.java
+index be399fc..9c15382 100644
+--- a/src/main/java/org/snomed/quality/validator/mrcm/ValidationService.java
++++ b/src/main/java/org/snomed/quality/validator/mrcm/ValidationService.java
+@@ -135,13 +135,15 @@ public class ValidationService {
+ 							executeAttributeGroupCardinalityValidation(run, queryService, preCoordinatedTypes);
+ 					case CONCRETE_ATTRIBUTE_DATA_TYPE ->
+ 							executeConcreteDataTypeValidation(extractedRF2FilesDirectories, run, queryService);
++					// Filtered by module inside each service, like every other type,
++					// rather than skipped whenever modules are given.
+ 					case LATERALIZABLE_BODY_STRUCTURE_REFSET_TYPE -> {
+-						if (ContentType.INFERRED.equals(run.getContentType()) && CollectionUtils.isEmpty(run.getModuleIds())) {
++						if (ContentType.INFERRED.equals(run.getContentType())) {
+ 							executeLateralizableRefsetValidation(run, queryService);
+ 						}
+ 					}
+ 					case SEP_REFSET_TYPE -> {
+-						if (ContentType.INFERRED.equals(run.getContentType()) && CollectionUtils.isEmpty(run.getModuleIds())) {
++						if (ContentType.INFERRED.equals(run.getContentType())) {
+ 							executeSEPRefsetValidation(run, queryService);
+ 						}
+ 					}
