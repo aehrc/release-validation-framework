@@ -1,3 +1,48 @@
+--- a/common-authoring/relationships/axioms-contain-only-is-a-reletionship/AxiomsContainOnlyIsaRelationship.drl
++++ b/common-authoring/relationships/axioms-contain-only-is-a-reletionship/AxiomsContainOnlyIsaRelationship.drl
+@@ -13,7 +13,10 @@
+ 		r1 : Relationship(active, typeId == Constants.IS_A, characteristicTypeId == Constants.STATED_RELATIONSHIP, !axiomGCI)
+ 		activeStatedRelationship1: ArrayList( size == 1 )
+ 				from collect( Relationship(active, !axiomGCI, sourceId == c.id, axiomId == r1.axiomId, characteristicTypeId == Constants.STATED_RELATIONSHIP))
+-		r2 : Relationship(active, id != r1.id, axiomId != r1.axiomId, typeId == Constants.IS_A, characteristicTypeId == Constants.STATED_RELATIONSHIP, !axiomGCI)
++		// Same module only. An extension that republishes a concept adds its own
++		// IsA-only axiom beside the international one it cannot edit; two such
++		// axioms from two modules are an override, not a modelling defect.
++		r2 : Relationship(active, id != r1.id, axiomId != r1.axiomId, moduleId == r1.moduleId, typeId == Constants.IS_A, characteristicTypeId == Constants.STATED_RELATIONSHIP, !axiomGCI)
+ 		activeStatedRelationship2: ArrayList( size == 1 )
+ 				from collect( Relationship(active, !axiomGCI, sourceId == c.id, axiomId == r2.axiomId, characteristicTypeId == Constants.STATED_RELATIONSHIP))
+ 	then
+--- a/common-authoring/relationships/axioms-contain-only-is-a-reletionship/test-cases.json
++++ b/common-authoring/relationships/axioms-contain-only-is-a-reletionship/test-cases.json
+@@ -87,6 +87,28 @@
+                     "axiomId":"730edf66-dd73-4cab-8977-e12796987d4d"
+                 }                
+             ]
++        },
++        {
++            // An extension's IsA-only axiom beside the international one it overrides
++            "id": "1",
++            "relationships": [
++                {
++                    "id": "1",
++                    "relationshipGroup": "0",
++                    "typeId": "116680003", // is-a
++                    "destinationId": "100",
++                    "moduleId": "900000000000207008", // "SNOMED CT core module"
++                    "axiomId":"730edf66-dd73-4cab-8977-e12796987d4d"
++                },
++                {
++                    "id": "2",
++                    "relationshipGroup": "0",
++                    "typeId": "116680003", // is-a
++                    "destinationId": "123",
++                    "moduleId": "32506021000036107", // "SNOMED CT-AU module"
++                    "axiomId":"cf557207-9225-4492-a8b9-d15522f01531"
++                }
++            ]
+         }
+     ],
+     "assertConceptsFail": [
 --- a/common-authoring/relationships/redundant-is-a-relationship/RedundantIsaRelationship.drl
 +++ b/common-authoring/relationships/redundant-is-a-relationship/RedundantIsaRelationship.drl
 @@ -4,6 +4,7 @@
@@ -17,6 +62,189 @@
  		r1 : Relationship(active && sourceId == c.id && typeId == Constants.IS_A && characteristicTypeId == Constants.STATED_RELATIONSHIP && !axiomGCI)
  		r2 : Relationship(active && sourceId == c.id && typeId == Constants.IS_A && characteristicTypeId == Constants.STATED_RELATIONSHIP && !axiomGCI && r1.id != id)
  		statedAncestors : ArrayList(size > 0) from collect( String() from conceptService.findStatedAncestorsOfConcepts(Collections.singletonList(r1.destinationId)))
+--- a/common-authoring/relationships/relationship-inappropriate-module-against-concept/RelationshipInappropriateModuleAgainstConcept.drl
++++ b/common-authoring/relationships/relationship-inappropriate-module-against-concept/RelationshipInappropriateModuleAgainstConcept.drl
+@@ -3,17 +3,27 @@
+ import org.ihtsdo.drools.response.InvalidContent
+ import org.ihtsdo.drools.domain.Constants
+ import org.ihtsdo.drools.service.DescriptionService
++import org.ihtsdo.drools.helper.ConceptHelper
+ import java.util.Collections
+ import org.ihtsdo.drools.response.Severity
+ 
+ global java.util.List invalidContent
+ global DescriptionService descriptionService
+ 
++// A module difference is only a defect when nothing links the two modules. The
++// faithful test is the module dependency refset (an active dependency in either
++// direction), but no rule-visible service exposes it - refset members are not
++// Drools facts. The closest equivalent available to a rule is that every
++// extension module depends on the international core and model modules, so a
++// pair where either side is international (ConceptHelper.isCoreModule) is always
++// linked, and so is core <-> model. What remains is extension <-> extension,
++// which is reported whether or not the pair declares a dependency.
+ rule "The relationships must have the same module as the source concept."
+ 	dialect "mvel"
+ 	when
+ 		c : Concept(active)
+-		r : Relationship(active && moduleId != c.moduleId && sourceId == c.id && !axiomGCI)
++		r : Relationship(active && moduleId != c.moduleId && sourceId == c.id && !axiomGCI
++						&& !ConceptHelper.isCoreModule(moduleId) && !ConceptHelper.isCoreModule(c.moduleId))
+ 	then
+ 		invalidContent.add(new InvalidContent("26713930-fece-484d-ac9c-3e00b0e1090d",
+ 				c, "The " + (r.characteristicTypeId == Constants.INFERRED_RELATIONSHIP ? "inferred" : "stated") + " relationship " + r.id + " has a different module (" + r.moduleId + " |" + (descriptionService.getFSNs(Collections.singleton(r.moduleId), Constants.US_EN_LANG_REFSET)).toString().replace("[", "").replace("]", "") +"|) than the source concept (" + c.moduleId + " |" + (descriptionService.getFSNs(Collections.singleton(c.moduleId), Constants.US_EN_LANG_REFSET)).toString().replace("[", "").replace("]", "") + "|).", Severity.WARNING));
+--- a/common-authoring/relationships/relationship-inappropriate-module-against-concept/test-cases.json
++++ b/common-authoring/relationships/relationship-inappropriate-module-against-concept/test-cases.json
+@@ -53,7 +53,10 @@
+         {
+             "id": "2",
+             "active" : true
+-        }
++        },
++        // The module concepts, so the finding's message (which names both modules) renders
++        { "id": "32506021000036107", "active": true }, // SNOMED CT-AU module
++        { "id": "11000146104", "active": true } // Netherlands module
+     ],
+     "assertConceptsPass": [
+         {
+@@ -66,22 +69,60 @@
+                     "typeId": "116680003" // is-a
+                 }
+             ]
+-        }       
++        },
++        {
++            // An extension relationship on an international concept: what an extension is
++            "id": "2",
++            "moduleId": "900000000000207008", // "SNOMED CT core module"
++            "relationships": [
++                {
++                    "destinationId": "a1",
++                    "moduleId": "32506021000036107", // "SNOMED CT-AU module"
++                    "typeId": "116680003" // is-a
++                }
++            ]
++        },
++        {
++            // An extension override of an international concept keeps its international relationships
++            "id": "2",
++            "moduleId": "32506021000036107", // "SNOMED CT-AU module"
++            "relationships": [
++                {
++                    "destinationId": "a1",
++                    "moduleId": "900000000000207008", // "SNOMED CT core module"
++                    "typeId": "116680003" // is-a
++                }
++            ]
++        },
++        {
++            // Core and model modules: the core module depends on the model module
++            "id": "2",
++            "moduleId": "900000000000207008", // "SNOMED CT core module"
++            "relationships": [
++                {
++                    "destinationId": "a2",
++                    "characteristicTypeId": "900000000000011006",
++                    "moduleId": "900000000000012004", // "SNOMED CT model component module"
++                    "typeId": "116680003" // is-a
++                }
++            ]
++        }
+     ],
+     "assertConceptsFail": [
+         {
++            // Two extension modules: nothing a rule can see links them
+             "id": "2",
+-            "moduleId": "900000000000207008", // "SNOMED CT core module"
++            "moduleId": "32506021000036107", // "SNOMED CT-AU module"
+             "relationships": [
+                 {
+                     "destinationId": "a2",
+-                    "moduleId": "900000000000207008", // "SNOMED CT model component module"                    
++                    "moduleId": "32506021000036107", // "SNOMED CT-AU module"
+                     "typeId": "116680003" // is-a
+                 },
+                 {
+                     "destinationId": "a2",
+                     "characteristicTypeId": "900000000000011006",
+-                    "moduleId": "900000000000012004", // "SNOMED CT model component module"                    
++                    "moduleId": "11000146104", // "Netherlands module"
+                     "typeId": "116680003" // is-a
+                 }
+             ]
+--- a/common-authoring/terms/fsn-term/FSNTermFormat.drl
++++ b/common-authoring/terms/fsn-term/FSNTermFormat.drl
+@@ -7,6 +7,7 @@
+ import org.ihtsdo.drools.service.ConceptService
+ import org.ihtsdo.drools.service.DescriptionService
+ import java.util.ArrayList
++import java.util.Set
+ 
+ global java.util.List invalidContent
+ global ConceptService conceptService
+@@ -52,21 +53,61 @@
+ 				d, "Active FSN should end with a valid semantic tag.", Severity.WARNING));
+ end
+ 
++// Registered product and trade names (AMT's ARTG-derived levels) legitimately
++// carry '&', '%' and '#' ("Bausch & Lomb", "Naphcon-A 0.025%"), and they sit in
++// three hierarchies:
++//   373873005 |Pharmaceutical / biologic product|  - MP/MPP and every AMT drug level
++//   774167006 |Product name|                       - AMT trade names (under Qualifier value)
++//   260787004 |Physical object|                    - AMT device levels
++// A hierarchy test rather than a semantic-tag list: the concept must actually
++// be in the hierarchy, so a mis-tagged concept elsewhere is still reported and
++// a new model level under one of the roots needs no reference-data change.
++function boolean isFsnInSpecialCharacterExemptHierarchy(Set statedAncestors, String conceptId) {
++	String[] roots = { "373873005", "774167006", "260787004" };
++	for (int i = 0; i < roots.length; i++) {
++		if (roots[i].equals(conceptId) || (statedAncestors != null && statedAncestors.contains(roots[i]))) {
++			return true;
++		}
++	}
++	return false;
++}
++
+ rule "An active FSN should not contain the special characters &, %, $, @ or #."
+ 	dialect "mvel"
+ 	when
+ 		c : Concept(active)
+ 		d : Description(conceptId == c.id && active == true && typeId == Constants.FSN && term matches ".*[&%$@#].*")
++		eval(!isFsnInSpecialCharacterExemptHierarchy(conceptService.findStatedAncestorsOfConcept(c), c.id))
+ 	then
+ 		invalidContent.add(new InvalidContent("e3048fa9-4238-48f1-a836-1b91ed4fcec2",
+ 				d, "An active FSN should not contain the special characters &, %, $, @ or #.", Severity.WARNING));
+ end
+ 
++// An FSN whose lowercase first letter is itself the meaning. Capitalising any
++// of these would be wrong, so they are not a style defect:
++//   chemical / stereo locant prefix   d-alpha-tocopherol, dl-alpha-tocopheryl, sec-Hexyl,
++//                                     tert-Butyl, cis-/trans-, n-Butane, o-/m-/p-, p,p'-,
++//                                     sn-Glycerol, alpha-/beta-/gamma-/delta-
++//   mixed-case first token            pH, cE, cDE, iStent, mL/kg, eIF-5A
++//   blood-group antigen sign          s+ phenotype, k- phenotype
++//   proper-name particle + name       de Morton, von Willebrand, van ...
++// A plain lowercase word (a gene name, "gram", "per 10 minutes") matches none of
++// these and is still reported.
++function boolean isDeliberateLowercaseStart(String term) {
++	return term.matches("^(?:"
++			+ "(?:[a-z]|dl|sn|sec|tert|cis|trans|sym|meso|erythro|threo|scyllo|myo|para|ortho|meta|bis|alpha|beta|gamma|delta)(?:,[a-z]'*)*'*-[\\p{L}\\p{N}(]"
++			+ "|[a-z]+\\p{Lu}"
++			+ "|[a-z][+-](?:\\s|$)"
++			+ "|(?:de|du|da|del|della|der|den|di|la|le|van|von|ter|ten)\\s+\\p{Lu}"
++			+ ").*");
++}
++
+ rule "The first letter of an active US-English or GB-English FSN should be capitalized."
+ 	dialect "mvel"
+ 	when
+ 		c : Concept(active)
+-		d : Description(conceptId == c.id && active == true && typeId == Constants.FSN && (acceptabilityMap["900000000000509007"] == Constants.ACCEPTABILITY_PREFERRED || acceptabilityMap["900000000000508004"] == Constants.ACCEPTABILITY_PREFERRED) && term matches "[a-z].*")
++		d : Description(conceptId == c.id && active == true && typeId == Constants.FSN && (acceptabilityMap["900000000000509007"] == Constants.ACCEPTABILITY_PREFERRED || acceptabilityMap["900000000000508004"] == Constants.ACCEPTABILITY_PREFERRED) && term matches "[a-z].*"
++						&& !isDeliberateLowercaseStart(term))
+ 	then
+ 		invalidContent.add(new InvalidContent("8a74edc2-ebbe-4c59-992b-d80ea72a11ba",
+ 				d, "The first letter of an active FSN should be capitalized.", Severity.WARNING));
 --- a/common-authoring/terms/fsn-term-having-a-same-synonym-term/FsnTermHavingASameSynonynTerm.drl
 +++ b/common-authoring/terms/fsn-term-having-a-same-synonym-term/FsnTermHavingASameSynonynTerm.drl
 @@ -6,16 +6,18 @@
@@ -41,30 +269,130 @@
  		ArrayList(size > 0) from collect (
  			Description(active, conceptId == c.id, typeId == Constants.SYNONYM)
  		)
---- a/common-authoring/terms/fsn-term/FSNTermFormat.drl
-+++ b/common-authoring/terms/fsn-term/FSNTermFormat.drl
-@@ -7,6 +7,8 @@
- import org.ihtsdo.drools.service.ConceptService
- import org.ihtsdo.drools.service.DescriptionService
- import java.util.ArrayList
-+import java.util.Arrays
-+import java.util.HashSet
- 
- global java.util.List invalidContent
- global ConceptService conceptService
-@@ -56,7 +58,8 @@
- 	dialect "mvel"
- 	when
- 		c : Concept(active)
--		d : Description(conceptId == c.id && active == true && typeId == Constants.FSN && term matches ".*[&%$@#].*")
-+		d : Description(conceptId == c.id && active == true && typeId == Constants.FSN && term matches ".*[&%$@#].*"
-+						&& !descriptionService.isSemanticTagCompatibleWithinHierarchy(term, new HashSet(Arrays.asList("fsn-special-char-exempt"))))
- 	then
- 		invalidContent.add(new InvalidContent("e3048fa9-4238-48f1-a836-1b91ed4fcec2",
- 				d, "An active FSN should not contain the special characters &, %, $, @ or #.", Severity.WARNING));
+--- a/common-authoring/terms/fsn-term/test-cases.json
++++ b/common-authoring/terms/fsn-term/test-cases.json
+@@ -1,4 +1,9 @@
+ {
++    "givenConcepts": [
++        { "id": "116680003", "active": true }, // Is a
++        { "id": "373873005", "active": true }, // Pharmaceutical / biologic product
++        { "id": "105590001", "active": true }  // Substance
++    ],
+     //
+     // 2 no space before semantic tag - rule removed
+     "assertConceptsPass": [
+@@ -45,6 +50,69 @@
+                 }
+             ]
+         }*/
++        {
++            // A registered product name under Pharmaceutical / biologic product keeps its '&'
++            "id": "20",
++            "descriptions": [
++                {
++                    "id": "20",
++                    "typeId": "900000000000003001",
++                    "term": "Bausch & Lomb Sensitive Eyes solution (clinical drug)",
++                    "languageCode": "en"
++                }
++            ],
++            "relationships": [
++                {
++                    "typeId": "116680003", // is-a
++                    "destinationId": "373873005" // Pharmaceutical / biologic product
++                }
++            ]
++        },
++        {
++            // A lowercase stereo locant is the meaning, not a style defect
++            "id": "21",
++            "descriptions": [
++                {
++                    "id": "21",
++                    "typeId": "900000000000003001",
++                    "term": "d-alpha-tocopherol 671 mg capsule (clinical drug)",
++                    "languageCode": "en",
++                    "acceptabilityMap": {
++                        "900000000000509007": "900000000000548007" // INT Preferred
++                    }
++                }
++            ]
++        },
++        {
++            // ...and so is a proper-name particle
++            "id": "22",
++            "descriptions": [
++                {
++                    "id": "22",
++                    "typeId": "900000000000003001",
++                    "term": "de Morton Mobility Index (assessment scale)",
++                    "languageCode": "en",
++                    "acceptabilityMap": {
++                        "900000000000509007": "900000000000548007" // INT Preferred
++                    }
++                }
++            ]
++        },
++        {
++            // ...and a mixed-case first token
++            "id": "23",
++            "descriptions": [
++                {
++                    "id": "23",
++                    "typeId": "900000000000003001",
++                    "term": "cE blood group antibody identification (procedure)",
++                    "languageCode": "en",
++                    "acceptabilityMap": {
++                        "900000000000509007": "900000000000548007" // INT Preferred
++                    }
++                }
++            ]
++        }
+     ],
+     // Failure cases:
+     // 1 does not end in )
+@@ -181,6 +249,38 @@
+                     "languageCode": "en",
+                     "acceptabilityMap": {
+                         "900000000000509007": "900000000000548007" // INT Preferred
++                    }
++                }
++            ]
++        },
++        {
++            // Outside the three exempt hierarchies '%' is still reported
++            "id": "24",
++            "descriptions": [
++                {
++                    "id": "24",
++                    "typeId": "900000000000003001",
++                    "term": "Ethanol 90% (substance)"
++                }
++            ],
++            "relationships": [
++                {
++                    "typeId": "116680003", // is-a
++                    "destinationId": "105590001" // Substance
++                }
++            ]
++        },
++        {
++            // A plain lowercase word is still reported, hyphenated or not
++            "id": "25",
++            "descriptions": [
++                {
++                    "id": "25",
++                    "typeId": "900000000000003001",
++                    "term": "pre-beta-Lipoprotein measurement (procedure)",
++                    "languageCode": "en",
++                    "acceptabilityMap": {
++                        "900000000000509007": "900000000000548007" // INT Preferred
+                     }
+                 }
+             ]
 --- a/common-authoring/terms/term-case-significance/TermCaseSignificance.drl
 +++ b/common-authoring/terms/term-case-significance/TermCaseSignificance.drl
-@@ -16,15 +16,14 @@
+@@ -16,15 +16,17 @@
  	return str;
  }
  
@@ -78,25 +406,259 @@
  	String stripTerm = term.trim();
  	String spTerm = " " + stripTerm;
 -	String[] abbrevs = { "mg", "g", "ml", "mcg", "unit", "units", "IU", "mEq", "mL",  "MBq", "ppm" };
++	// m (metre - M is molar), w/w, w/v, v/v: the strength basis is as
++	// case-significant as the unit; "W/V" is not a thing.
 +	String[] abbrevs = { "mg", "g", "ml", "mcg", "unit", "units", "IU", "mEq", "mL", "MBq", "ppm",
 +			"microgram", "micrograms", "milligram", "milligrams", "nanogram", "nanograms",
 +			"millilitre", "millilitres", "litre", "litres", "mmol", "mol",
-+			"cm", "mm", "kg", "kBq", "GBq", "mmHg" };
++			"cm", "mm", "kg", "kBq", "GBq", "mmHg",
++			"m", "w/w", "w/v", "v/v" };
  	for (int i = 0; i < abbrevs.length; i++) {
  		if (stripTerm.contains(" " + abbrevs[i] + " ") || 
  			stripTerm.endsWith(" " + abbrevs[i]) ||
-@@ -50,7 +49,7 @@
+@@ -34,11 +36,27 @@
+ 			stripTerm.equals(abbrevs[i])) {
+ 			return true;
+ 		}
++		// The unit written straight after its number, "7g protein exchanges/day".
++		if (Pattern.compile("(?:^|[^\\p{Alnum}])\\d+(?:[.,]\\d+)?" + Pattern.quote(abbrevs[i]) + "(?![\\p{Alnum}])").matcher(stripTerm).find()) {
++			return true;
++		}
+ 	}
+ 	
+ 	return false;
+ }
+ 
++// A single lowercase letter standing as its own token after the first character,
++// optionally with a digit suffix, is case-significant in the same way a capital
++// is: Anti-k is not Anti-K, p-aminophenol is not P-aminophenol, and so for
++// alfa-n3, Cytochrome b5, Little c, Weak e, serotype b, k-free, s-adenosyl, p,p'-.
++// "a" and "x" are excluded - the article and the multiplication sign
++// ("6 x 77 tablets") carry no case. Position 1 is never examined: cI already
++// says the first character's case is not significant.
++function boolean isTermWithLowercaseSignificantToken(String term) {
++	if (term == null || term.isEmpty()) return false;
++	return Pattern.compile("(?<=[\\s(/+,-])(?![ax](?![0-9]))[a-z][0-9]*(?=$|[\\s),/+'-])").matcher(term).find();
++}
++
+ rule "An active term on an active concept with case significance 'only initial character case insensitive' should contain a capital letter after the first character."
+ 	dialect "mvel"
+ 	when
+@@ -50,7 +68,8 @@
  						&& stripAccents(term) not matches "^..*[0-9][A-Za-z].*$"
  						&& stripAccents(term) not matches "^[<, %, >, . , &, ^, /].*$"
  						&& stripAccents(term) not matches "^..*\\p{Lu}.*$"
 -						&& !isDrugWithCaseSensitiveUnit(d1.term, term))
-+						&& !isTermWithCaseSensitiveUnit(term))
++						&& !isTermWithCaseSensitiveUnit(term)
++						&& !isTermWithLowercaseSignificantToken(term))
  
  	then
  		invalidContent.add(new InvalidContent("4ee9cfeb-3ce5-48bf-b238-de7498fde042",
+--- a/common-authoring/terms/term-case-significance/test-cases.json
++++ b/common-authoring/terms/term-case-significance/test-cases.json
+@@ -236,6 +236,60 @@
+                     "term": "Test mg"
+                 }
+             ]
++        },
++        {
++            // A lowercase letter as its own token is case-significant: Anti-k is not Anti-K
++            "id": "20",
++            "descriptions": [
++                {
++                    "id": "20",
++                    "typeId": "900000000000003001", //FSN
++                    "caseSignificanceId": "900000000000017005",
++                    "term": "Anti-k blood group antibody titre measurement (procedure)"
++                },
++                {
++                    "id": "21",
++                    "typeId": "900000000000013009", //SYNONYM
++                    "caseSignificanceId": "900000000000020002",
++                    "term": "Anti-k titre"
++                }
++            ]
++        },
++        {
++            // w/v, and m (metre - M is molar), are case-significant units
++            "id": "22",
++            "descriptions": [
++                {
++                    "id": "22",
++                    "typeId": "900000000000003001", //FSN
++                    "caseSignificanceId": "900000000000017005",
++                    "term": "Bandage tubular 10 m bandage (physical object)"
++                },
++                {
++                    "id": "23",
++                    "typeId": "900000000000013009", //SYNONYM
++                    "caseSignificanceId": "900000000000020002",
++                    "term": "Bandage tubular 10 m bandage"
++                },
++                {
++                    "id": "24",
++                    "typeId": "900000000000013009", //SYNONYM
++                    "caseSignificanceId": "900000000000020002",
++                    "term": "Hydrogen peroxide 3% w/v solution"
++                }
++            ]
++        },
++        {
++            // A unit written straight after its number
++            "id": "25",
++            "descriptions": [
++                {
++                    "id": "25",
++                    "typeId": "900000000000003001", //FSN
++                    "caseSignificanceId": "900000000000020002",
++                    "term": "7g protein exchanges/day (qualifier value)"
++                }
++            ]
+         }
+     ],
+     // 1 - only initial character case insensitive
+@@ -297,6 +351,18 @@
+                     "term": "ibuprofen & Oxycodone (product)"
+                 }
+             ]
+-        }        
++        },
++        {
++            // No case-significant token: the article "a" does not count
++            "id": "26",
++            "descriptions": [
++                {
++                    "id": "26",
++                    "typeId": "900000000000003001", //FSN
++                    "caseSignificanceId": "900000000000020002",
++                    "term": "Removal of a foreign body (procedure)"
++                }
++            ]
++        }
+     ]
+ }
+--- a/common-authoring/terms/term-characters/TermCharacters.drl
++++ b/common-authoring/terms/term-characters/TermCharacters.drl
+@@ -1,14 +1,37 @@
++import org.ihtsdo.drools.domain.Concept
+ import org.ihtsdo.drools.domain.Description
+ import org.ihtsdo.drools.domain.Constants
+ import org.ihtsdo.drools.response.InvalidContent
+ import org.ihtsdo.drools.response.Severity
++import org.ihtsdo.drools.service.ConceptService
++import java.util.Set
+ 
+ global java.util.List invalidContent
++global ConceptService conceptService
++
++// Registered product and trade names (AMT's ARTG-derived levels) legitimately
++// carry '#' ("Lot420 Gelato #33"), and they sit in three hierarchies:
++//   373873005 |Pharmaceutical / biologic product|  - MP/MPP and every AMT drug level
++//   774167006 |Product name|                       - AMT trade names (under Qualifier value)
++//   260787004 |Physical object|                    - AMT device levels
++// Evaluated only for a term that already contains a flagged character, so the
++// ancestor lookup (a precomputed set) runs for a handful of concepts, not all.
++function boolean isInSpecialCharacterExemptHierarchy(Set statedAncestors, String conceptId) {
++	String[] roots = { "373873005", "774167006", "260787004" };
++	for (int i = 0; i < roots.length; i++) {
++		if (roots[i].equals(conceptId) || (statedAncestors != null && statedAncestors.contains(roots[i]))) {
++			return true;
++		}
++	}
++	return false;
++}
+ 
+ rule "An active term should not contain tabs, newlines, or characters @, $, #, \."
+ 	dialect "mvel"
+ 	when
+-		d : Description(active == true && term matches ".*[\\\\\t\r\n@$#].*")
++		c : Concept(active)
++		d : Description(conceptId == c.id && active == true && term matches ".*[\\\\\t\r\n@$#].*")
++		eval(!isInSpecialCharacterExemptHierarchy(conceptService.findStatedAncestorsOfConcept(c), c.id))
+ 	then
+ 		invalidContent.add(new InvalidContent("fbd4bbb5-3e62-4ccb-824a-e82d9771c0ee",
+ 				d, "An active term should not contain tabs, newlines, or characters @, $, #, \\.", Severity.WARNING));
+--- a/common-authoring/terms/term-characters/test-cases.json
++++ b/common-authoring/terms/term-characters/test-cases.json
+@@ -1,4 +1,10 @@
+ {
++    "givenConcepts": [
++        { "id": "116680003", "active": true }, // Is a
++        { "id": "373873005", "active": true }, // Pharmaceutical / biologic product
++        { "id": "774167006", "active": true }, // Product name
++        { "id": "404684003", "active": true }  // Clinical finding
++    ],
+     "assertConceptsPass": [
+         {
+             "id": "1",
+@@ -9,6 +15,40 @@
+                     "term": "Ibuprofen and oxycodone (product)"
+                 }
+             ]
++        },
++        {
++            // A registered trade name under Product name keeps its '#'
++            "id": "20",
++            "descriptions": [
++                {
++                    "id": "20",
++                    "typeId": "900000000000013009",
++                    "term": "Lot420 Gelato #33"
++                }
++            ],
++            "relationships": [
++                {
++                    "typeId": "116680003", // is-a
++                    "destinationId": "774167006" // Product name
++                }
++            ]
++        },
++        {
++            // ...and so does a product under Pharmaceutical / biologic product
++            "id": "21",
++            "descriptions": [
++                {
++                    "id": "21",
++                    "typeId": "900000000000003001",
++                    "term": "Lot420 Gelato #33 dried herb (branded clinical drug)"
++                }
++            ],
++            "relationships": [
++                {
++                    "typeId": "116680003", // is-a
++                    "destinationId": "373873005" // Pharmaceutical / biologic product
++                }
++            ]
+         }
+     ],
+     // 1 - \\
+@@ -99,6 +139,23 @@
+                     "term": "Ibuprofen # oxycodone (product)"
+                 }
+             ]
++        },
++        {
++            // Outside the three exempt hierarchies a '#' is still reported
++            "id": "22",
++            "descriptions": [
++                {
++                    "id": "22",
++                    "typeId": "900000000000013009",
++                    "term": "Ibuprofen # oxycodone"
++                }
++            ],
++            "relationships": [
++                {
++                    "typeId": "116680003", // is-a
++                    "destinationId": "404684003" // Clinical finding
++                }
++            ]
+         }/*,
+         {
+             "id": "9",
 --- a/common-authoring/terms/term-unique-in-hierarchy/TermUniqueInHierarchy.drl
 +++ b/common-authoring/terms/term-unique-in-hierarchy/TermUniqueInHierarchy.drl
-@@ -5,18 +5,46 @@
+@@ -5,11 +5,47 @@
  import org.ihtsdo.drools.service.ConceptService
  import org.ihtsdo.drools.response.InvalidContent
  import org.ihtsdo.drools.response.Severity
@@ -117,9 +679,19 @@
 +// levels - two concepts at the SAME level sharing a term is still a duplicate.
 +// Membership is data, in semantic-tag-hierarchies.txt, so an extension can name
 +// its own levels without a rule change.
-+function boolean isSameProductFamilyAtDifferentLevel(String fsn, String duplicateConceptId, DescriptionService descriptionService) {
++// The concept's FSN is read here rather than matched as a pattern, so a concept
++// with no active FSN is still checked (upstream's test cases carry none) and a
++// concept with two FSNs is not reported twice.
++function boolean isSameProductFamilyAtDifferentLevel(Concept concept, String duplicateConceptId, DescriptionService descriptionService) {
 +	Set<String> key = new HashSet<>(Arrays.asList("duplicate-term-exempt"));
-+	if (!descriptionService.isSemanticTagCompatibleWithinHierarchy(fsn, key)) {
++	String fsn = null;
++	for (Description description : concept.getDescriptions()) {
++		if (description.isActive() && Constants.FSN.equals(description.getTypeId())) {
++			fsn = description.getTerm();
++			break;
++		}
++	}
++	if (fsn == null || !descriptionService.isSemanticTagCompatibleWithinHierarchy(fsn, key)) {
 +		return false;
 +	}
 +	Set<String> duplicateFsns = descriptionService.getFSNs(Collections.singleton(duplicateConceptId), Constants.US_EN_LANG_REFSET, Constants.GB_EN_LANG_REFSET);
@@ -134,12 +706,11 @@
  // "Correlation ID" is a special case where duplicates are expected
  rule "Two active descriptions in the same hierarchy should not share the same term, unless the language is different."
  	dialect "mvel"
- 	when
+@@ -17,6 +53,7 @@
  		c : Concept(active)
-+		fsn : Description(c.id == fsn.conceptId && active && typeId == Constants.FSN)
  		d : Description(c.id == d.conceptId && active && term.length > 1 && !term.startsWith("Correlation ID"))
  		$duplicate : Description(active && id != d.id && conceptService.isActive(conceptId) == true) from descriptionService.findMatchingDescriptionInHierarchy(c, d)
-+		eval(!isSameProductFamilyAtDifferentLevel(fsn.term, $duplicate.conceptId, descriptionService))
++		eval(!isSameProductFamilyAtDifferentLevel(c, $duplicate.conceptId, descriptionService))
  	then
  		invalidContent.add(new InvalidContent("25334385-83b3-4531-8e6e-cf9e32ebccd2",
  				d, "Term already exists within this hierarchy on concept " + $duplicate.conceptId +

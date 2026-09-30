@@ -63,6 +63,10 @@ trigger:
       - src
       - pom.xml
       - checkout-resources.sh
+      # Overlaid onto the pinned clones by checkout-resources.sh at build time,
+      # so a change to either is an image change even when nothing else moves.
+      - assertions-au
+      - test-resources-au
       - duck/build-pinned-forks.sh
       - duck/maven-settings.xml
       - az/azure-pipeline.image.yml

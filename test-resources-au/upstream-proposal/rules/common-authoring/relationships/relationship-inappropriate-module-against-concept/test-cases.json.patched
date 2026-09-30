@@ -1,0 +1,131 @@
+{
+    "givenConcepts": [
+        {
+            "id": "138875005", // Root concept
+            "active" : true,
+            "descriptions": [
+                {
+                    "id": "1",
+                    "term": "description text 1 (product)",
+                    "conceptId": "138875005"
+                }
+            ]
+        },
+        {
+            "id": "116680003", // Is A
+            "active" : true,
+            "descriptions": [
+                {
+                    "id": "1",
+                    "term": "Is A",
+                    "conceptId": "116680003"
+                }
+            ]
+        },
+        {
+            "id": "parent",
+            "active" : true,
+            "descriptions": [
+                {
+                    "id": "2",
+                    "term": "Parent",
+                    "conceptId": "parent"
+                }
+            ],
+            "relationships": [
+                {
+                    "id": "1",
+                    "destinationId": "138875005",
+                    "typeId": "116680003", // is-a
+                    "active": true,
+                    "characteristicTypeId": "900000000000010007"
+                }
+            ]
+        },
+        {
+            "id": "a1",
+            "active" : true
+        },
+        {
+            "id": "a2",
+            "active" : false
+        },
+        {
+            "id": "2",
+            "active" : true
+        },
+        // The module concepts, so the finding's message (which names both modules) renders
+        { "id": "32506021000036107", "active": true }, // SNOMED CT-AU module
+        { "id": "11000146104", "active": true } // Netherlands module
+    ],
+    "assertConceptsPass": [
+        {
+            "id": "1",
+            "moduleId": "900000000000207008", // "SNOMED CT core module"
+            "relationships": [
+                {
+                    "destinationId": "a1",
+                    "moduleId": "900000000000207008", // "SNOMED CT model component module"                    
+                    "typeId": "116680003" // is-a
+                }
+            ]
+        },
+        {
+            // An extension relationship on an international concept: what an extension is
+            "id": "2",
+            "moduleId": "900000000000207008", // "SNOMED CT core module"
+            "relationships": [
+                {
+                    "destinationId": "a1",
+                    "moduleId": "32506021000036107", // "SNOMED CT-AU module"
+                    "typeId": "116680003" // is-a
+                }
+            ]
+        },
+        {
+            // An extension override of an international concept keeps its international relationships
+            "id": "2",
+            "moduleId": "32506021000036107", // "SNOMED CT-AU module"
+            "relationships": [
+                {
+                    "destinationId": "a1",
+                    "moduleId": "900000000000207008", // "SNOMED CT core module"
+                    "typeId": "116680003" // is-a
+                }
+            ]
+        },
+        {
+            // Core and model modules: the core module depends on the model module
+            "id": "2",
+            "moduleId": "900000000000207008", // "SNOMED CT core module"
+            "relationships": [
+                {
+                    "destinationId": "a2",
+                    "characteristicTypeId": "900000000000011006",
+                    "moduleId": "900000000000012004", // "SNOMED CT model component module"
+                    "typeId": "116680003" // is-a
+                }
+            ]
+        }
+    ],
+    "assertConceptsFail": [
+        {
+            // Two extension modules: nothing a rule can see links them
+            "id": "2",
+            "moduleId": "32506021000036107", // "SNOMED CT-AU module"
+            "relationships": [
+                {
+                    "destinationId": "a2",
+                    "moduleId": "32506021000036107", // "SNOMED CT-AU module"
+                    "typeId": "116680003" // is-a
+                },
+                {
+                    "destinationId": "a2",
+                    "characteristicTypeId": "900000000000011006",
+                    "moduleId": "11000146104", // "Netherlands module"
+                    "typeId": "116680003" // is-a
+                }
+            ]
+        }
+    ]
+}

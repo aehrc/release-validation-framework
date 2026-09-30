@@ -1,0 +1,86 @@
+import org.ihtsdo.drools.domain.Concept
+import org.ihtsdo.drools.domain.Description
+import org.ihtsdo.drools.domain.Constants
+import org.ihtsdo.drools.response.InvalidContent
+import org.ihtsdo.drools.response.Severity
+import org.ihtsdo.drools.service.ConceptService
+import java.util.Set
+
+global java.util.List invalidContent
+global ConceptService conceptService
+
+// Registered product and trade names (AMT's ARTG-derived levels) legitimately
+// carry '#' ("Lot420 Gelato #33"), and they sit in three hierarchies:
+//   373873005 |Pharmaceutical / biologic product|  - MP/MPP and every AMT drug level
+//   774167006 |Product name|                       - AMT trade names (under Qualifier value)
+//   260787004 |Physical object|                    - AMT device levels
+// Evaluated only for a term that already contains a flagged character, so the
+// ancestor lookup (a precomputed set) runs for a handful of concepts, not all.
+function boolean isInSpecialCharacterExemptHierarchy(Set statedAncestors, String conceptId) {
+	String[] roots = { "373873005", "774167006", "260787004" };
+	for (int i = 0; i < roots.length; i++) {
+		if (roots[i].equals(conceptId) || (statedAncestors != null && statedAncestors.contains(roots[i]))) {
+			return true;
+		}
+	}
+	return false;
+}
+
+rule "An active term should not contain tabs, newlines, or characters @, $, #, \."
+	dialect "mvel"
+	when
+		c : Concept(active)
+		d : Description(conceptId == c.id && active == true && term matches ".*[\\\\\t\r\n@$#].*")
+		eval(!isInSpecialCharacterExemptHierarchy(conceptService.findStatedAncestorsOfConcept(c), c.id))
+	then
+		invalidContent.add(new InvalidContent("fbd4bbb5-3e62-4ccb-824a-e82d9771c0ee",
+				d, "An active term should not contain tabs, newlines, or characters @, $, #, \\.", Severity.WARNING));
+end
+
+function String findUnexpectedCharactersError(String term) {
+	String ZEROSP = "\u200B";
+	String LONG_DASH = "—";
+	String EM_DASH = "\u2014";
+	String EN_DASH = "\u2013";
+	String RIGHT_APOS = "\u2019";
+	String LEFT_APOS = "\u2018";
+	String RIGHT_QUOTE = "\u201D";
+	String LEFT_QUOTE = "\u201C";
+	String GRAVE_ACCENT = "\u0060";
+	String ACUTE_ACCENT = "\u00B4";
+	String DOUBLE_APOS = "\u0027\u0027";
+	String SOFT_HYPHEN = "\u00AD";
+
+	String [][] unwantedChars = new String[][] {
+		{ ZEROSP , "zero width space" },
+		{ EM_DASH , "EM dash" },
+		{ EN_DASH , "EN dash" },
+		{ LONG_DASH , "long dash" },
+		{ RIGHT_APOS , "right apostrophe" },
+		{ LEFT_APOS , "left apostrophe" },
+		{ RIGHT_QUOTE , "right quote" },
+		{ LEFT_QUOTE , "left quote" },
+		{ GRAVE_ACCENT , "grave accent" },
+		{ ACUTE_ACCENT , "acute accents" },
+		{ DOUBLE_APOS, "double apostrophe" },
+		{ SOFT_HYPHEN, "soft hyphen" }
+	};
+	for (String unwantedChar[] : unwantedChars) {
+		if (term.indexOf(unwantedChar[0]) != -1) {
+			return unwantedChar[1];
+		}
+	}
+
+	return "";
+}
+
+rule "Active terms should not contain any illegal characters."
+	dialect "mvel"
+	when
+		d : Description(active == true && error: findUnexpectedCharactersError(term), error.length != 0)
+	then
+		InvalidContent invalid = new InvalidContent("e0745082-0b54-4bfb-ab77-6aa039ec692a",
+				d, "An active term must not contain any \'" + error + "\' characters.", d.released ? Severity.WARNING : Severity.ERROR);
+		invalid.ignorePublishedCheck();
+		invalidContent.add(invalid);
+end

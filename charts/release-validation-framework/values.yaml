@@ -261,6 +261,14 @@ api:
   affinity: {}
   # -- Extra environment variables for API container
   extraEnv: []
+  # An image built by checkout-resources.sh carries the Drools test resources
+  # (international set + AU semantic tags) at /app/test-resources. To read them
+  # instead of the prod/international bucket, set on api AND worker:
+  # extraEnv:
+  # - name: TESTRESOURCES_USECLOUD
+  #   value: "false"
+  # - name: TESTRESOURCES_LOCAL_PATH
+  #   value: "test-resources/"   # relative to /app; a leading '/' is stripped
 
 # -- RVF Worker Deployment configuration
 worker:
@@ -335,6 +343,12 @@ worker:
   affinity: {}
   # -- Extra environment variables for worker container
   extraEnv: []
+  # Drools test resources baked into the image - see api.extraEnv:
+  # extraEnv:
+  # - name: TESTRESOURCES_USECLOUD
+  #   value: "false"
+  # - name: TESTRESOURCES_LOCAL_PATH
+  #   value: "test-resources/"
 
 # -- ActiveMQ broker configuration
 activemq:

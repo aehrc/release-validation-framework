@@ -22,9 +22,19 @@ global ConceptService conceptService
 // levels - two concepts at the SAME level sharing a term is still a duplicate.
 // Membership is data, in semantic-tag-hierarchies.txt, so an extension can name
 // its own levels without a rule change.
-function boolean isSameProductFamilyAtDifferentLevel(String fsn, String duplicateConceptId, DescriptionService descriptionService) {
+// The concept's FSN is read here rather than matched as a pattern, so a concept
+// with no active FSN is still checked (upstream's test cases carry none) and a
+// concept with two FSNs is not reported twice.
+function boolean isSameProductFamilyAtDifferentLevel(Concept concept, String duplicateConceptId, DescriptionService descriptionService) {
 	Set<String> key = new HashSet<>(Arrays.asList("duplicate-term-exempt"));
-	if (!descriptionService.isSemanticTagCompatibleWithinHierarchy(fsn, key)) {
+	String fsn = null;
+	for (Description description : concept.getDescriptions()) {
+		if (description.isActive() && Constants.FSN.equals(description.getTypeId())) {
+			fsn = description.getTerm();
+			break;
+		}
+	}
+	if (fsn == null || !descriptionService.isSemanticTagCompatibleWithinHierarchy(fsn, key)) {
 		return false;
 	}
 	Set<String> duplicateFsns = descriptionService.getFSNs(Collections.singleton(duplicateConceptId), Constants.US_EN_LANG_REFSET, Constants.GB_EN_LANG_REFSET);
@@ -41,10 +51,9 @@ rule "Two active descriptions in the same hierarchy should not share the same te
 	dialect "mvel"
 	when
 		c : Concept(active)
-		fsn : Description(c.id == fsn.conceptId && active && typeId == Constants.FSN)
 		d : Description(c.id == d.conceptId && active && term.length > 1 && !term.startsWith("Correlation ID"))
 		$duplicate : Description(active && id != d.id && conceptService.isActive(conceptId) == true) from descriptionService.findMatchingDescriptionInHierarchy(c, d)
-		eval(!isSameProductFamilyAtDifferentLevel(fsn.term, $duplicate.conceptId, descriptionService))
+		eval(!isSameProductFamilyAtDifferentLevel(c, $duplicate.conceptId, descriptionService))
 	then
 		invalidContent.add(new InvalidContent("25334385-83b3-4531-8e6e-cf9e32ebccd2",
 				d, "Term already exists within this hierarchy on concept " + $duplicate.conceptId +

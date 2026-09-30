@@ -1,0 +1,114 @@
+{
+    "assertConceptsPass": [
+        {
+            "id": "1",
+            "descriptions": [
+                {
+                    "id": "1",
+                    "typeId": "900000000000003001",
+                    "term": "Ibuprofen and oxycodone (product)"
+                }
+            ]
+        }
+    ],
+    // 1 - \\
+    // 2 - \t
+    // 3 - \r
+    // 4 - \n
+    // 5 - \Z
+    // 6 - $
+    // 7 - @
+    // 8 - #
+    "assertConceptsFail": [
+        {
+            "id": "1",
+            "descriptions": [
+                {
+                    "id": "2",
+                    "typeId": "900000000000003001",
+                    "term": "Ibuprofen\\\\oxycodone (product)"
+                }
+            ]
+        },
+        {
+            "id": "7",
+            "descriptions": [
+                {
+                    "id": "2",
+                    "typeId": "900000000000003001",
+                    "term": "Ibuprofen \t oxycodone (product)"
+                }
+            ]
+        },
+        {
+            "id": "3",
+            "descriptions": [
+                {
+                    "id": "2",
+                    "typeId": "900000000000003001",
+                    "term": "Ibuprofen \r oxycodone (product)"
+                }
+            ]
+        },
+        {
+            "id": "4",
+            "descriptions": [
+                {
+                    "id": "2",
+                    "typeId": "900000000000003001",
+                    "term": "Ibuprofen \n oxycodone (product)"
+                }
+            ]
+        },
+        // {
+        //     "id": "5",
+        //     "descriptions": [
+        //         {
+        //             "id": "2",
+        //             "typeId": "900000000000003001",
+        //             "term": "Ibuprofen \\\Z oxycodone (product)"
+        //         }
+        //     ]
+        // },
+        {
+            "id": "6",
+            "descriptions": [
+                {
+                    "id": "1",
+                    "typeId": "900000000000003001",
+                    "term": "Ibuprofen $ oxycodone (product)"
+                }
+            ]
+        },
+        {
+            "id": "7",
+            "descriptions": [
+                {
+                    "id": "2",
+                    "typeId": "900000000000003001",
+                    "term": "Ibuprofen @ oxycodone (product)"
+                }
+            ]
+        },
+        {
+            "id": "8",
+            "descriptions": [
+                {
+                    "id": "2",
+                    "typeId": "900000000000003001",
+                    "term": "Ibuprofen # oxycodone (product)"
+                }
+            ]
+        }/*,
+        {
+            "id": "9",
+            "descriptions": [
+                {
+                    "id": "2",
+                    "typeId": "900000000000003001",
+                    "term": "myelodysplastic/​myeloproliferative neoplasm with ring sideroblasts and thrombocytosis"
+                }
+            ]
+        }*/
+    ]
+}

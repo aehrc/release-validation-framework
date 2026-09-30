@@ -95,3 +95,61 @@ checkout() {
 
 checkout https://github.com/IHTSDO/snomed-drools-rules.git "$DROOLS_RULES_DIR" "$DROOLS_RULES_REF"
 checkout https://github.com/IHTSDO/snomed-release-validation-assertions.git "$ASSERTIONS_DIR" "$ASSERTIONS_REF"
+
+# AU patch set over the pinned corpus. assertions-au/scripts holds AU-edited
+# copies of individual SI scripts at their corpus-relative paths; README.md
+# there says, per file, which ruling it implements and what it measured.
+#
+# OVERLAY ONLY, NEVER ADD. Every target must already exist in the clone. A pin
+# bump that renames or deletes a script would otherwise leave the AU copy as a
+# stray file no manifest entry names - RVF never runs it, and the AU fix
+# silently disappears while the original, unpatched, runs under its new name.
+#
+# The bundled DuckDB store is published from the OVERLAID corpus, so changing a
+# file here means republishing src/main/resources/duck/store.json (see
+# duck/README.md); BundledStoreMatchesCorpusTest fails until you do.
+AU_OVERLAY_DIR=assertions-au/scripts
+
+echo "==> overlay $AU_OVERLAY_DIR -> $ASSERTIONS_DIR/scripts"
+(cd "$AU_OVERLAY_DIR" && find . -type f | sort) | while read -r f; do
+    f=${f#./}
+    target="$ASSERTIONS_DIR/scripts/$f"
+    if [ ! -f "$target" ]; then
+        echo "ERROR: overlay target $target does not exist at $ASSERTIONS_REF" >&2
+        echo "       (renamed or removed upstream?) - re-derive $AU_OVERLAY_DIR/$f" >&2
+        exit 1
+    fi
+    cp "$AU_OVERLAY_DIR/$f" "$target"
+    echo "    overlaid scripts/$f"
+done
+
+# AU rule patches over the pinned Drools rules. Same contract as the overlay
+# above: every target must exist and must still equal the .drl.orig the patch
+# was written against, or this fails - so a pin bump cannot silently ship an
+# unpatched rule or a stale copy of one. What each patch does and what it
+# measured: test-resources-au/upstream-proposal/UPSTREAM-FEEDBACK.md.
+echo "==> rule patches test-resources-au/upstream-proposal -> $DROOLS_RULES_DIR"
+RULES_DIR="$PWD/$DROOLS_RULES_DIR" test-resources-au/upstream-proposal/apply.sh
+
+# Drools test resources, baked into the image by jib as /app/test-resources.
+# The engine reads them from ONE place - a local directory or the bucket, never
+# both - so the directory carries the whole international set plus the two AU
+# files over it (test-resources-au/README.md). The deployment selects it with
+# TESTRESOURCES_USECLOUD=false and TESTRESOURCES_LOCAL_PATH=test-resources/
+# (relative to the image's /app working directory: the resource manager strips
+# a leading '/', so an absolute path does not work).
+TEST_RESOURCES_DIR=test-resources
+echo "==> test resources -> $TEST_RESOURCES_DIR"
+rm -rf "$TEST_RESOURCES_DIR"
+./fetch-test-resources.sh "$TEST_RESOURCES_DIR" | sed 's/^/    /'
+for f in semantic-tags.txt semantic-tag-hierarchies.txt; do
+    cp "test-resources-au/$f" "$TEST_RESOURCES_DIR/$f"
+    echo "    AU $f"
+done
+for f in semantic-tags.txt semantic-tag-hierarchies.txt cs_words.txt us-to-gb-terms-map.txt; do
+    if [ ! -s "$TEST_RESOURCES_DIR/$f" ]; then
+        echo "ERROR: $TEST_RESOURCES_DIR/$f missing or empty - the Drools phase cannot start without it" >&2
+        exit 1
+    fi
+done
+echo "    $(find "$TEST_RESOURCES_DIR" -type f | wc -l) files, required four present"

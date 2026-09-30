@@ -1,0 +1,368 @@
+{
+    "givenConcepts": [
+        {
+            "id": "138875005", // Root concept
+            "active" : true,
+            "descriptions": [
+                {
+                    "id": "1",
+                    "term": "description text 1 (product)",
+                    "conceptId": "138875005"
+                }
+            ]
+        },
+        {
+            "id": "116680003", // Is A
+            "active" : true,
+            "descriptions": [
+                {
+                    "id": "1",
+                    "term": "Is A",
+                    "conceptId": "116680003"
+                }
+            ]
+        },
+        {
+            "id": "373873005",
+            "descriptions": [
+                {
+                    "id": "2",
+                    "term": "Pharmaceutical / biologic product (product)",
+                    "typeId": "900000000000003001", // FSN
+                    "acceptabilityMap": {
+                        "900000000000509007": "900000000000548007", // PREFERRED
+                        "900000000000508004": "900000000000548007" // PREFERRED
+                    }
+                }
+            ],
+            "relationships": [
+                {
+                    "id": "1",
+                    "destinationId": "138875005",
+                    "typeId": "116680003", // is-a
+                    "active": true,
+                    "characteristicTypeId": "900000000000010007"
+                }
+            ]
+        },
+        {
+            "id": "7",
+            "relationships": [
+                {
+                    "id": "1",
+                    "destinationId": "373873005",
+                    "typeId": "116680003", // is-a
+                    "active": true,
+                    "characteristicTypeId": "900000000000010007"
+                }
+            ]
+        },
+        {
+            "id": "8",
+            "relationships": [
+                {
+                    "id": "1",
+                    "destinationId": "373873005",
+                    "typeId": "116680003", // is-a
+                    "active": true,
+                    "characteristicTypeId": "900000000000010007"
+                }
+            ]
+        },
+        {
+            "id": "9",
+            "relationships": [
+                {
+                    "id": "1",
+                    "destinationId": "373873005",
+                    "typeId": "116680003", // is-a
+                    "active": true,
+                    "characteristicTypeId": "900000000000010007"
+                }
+            ]
+        },
+        {
+            "id": "10",
+            "relationships": [
+                {
+                    "id": "1",
+                    "destinationId": "373873005",
+                    "typeId": "116680003", // is-a
+                    "active": true,
+                    "characteristicTypeId": "900000000000010007"
+                }
+            ]
+        },
+        {
+            "id": "11",
+            "relationships": [
+                {
+                    "id": "1",
+                    "destinationId": "373873005",
+                    "typeId": "116680003", // is-a
+                    "active": true,
+                    "characteristicTypeId": "900000000000010007"
+                }
+            ]
+        },
+        {
+            "id": "12",
+            "relationships": [
+                {
+                    "id": "1",
+                    "destinationId": "373873005",
+                    "typeId": "116680003", // is-a
+                    "active": true,
+                    "characteristicTypeId": "900000000000010007"
+                }
+            ]
+        },
+        {
+            "id": "13",
+            "relationships": [
+                {
+                    "id": "1",
+                    "destinationId": "373873005",
+                    "typeId": "116680003", // is-a
+                    "active": true,
+                    "characteristicTypeId": "900000000000010007"
+                }
+            ]
+        },
+        {
+            "id": "14",
+            "relationships": [
+                {
+                    "id": "1",
+                    "destinationId": "373873005",
+                    "typeId": "116680003", // is-a
+                    "active": true,
+                    "characteristicTypeId": "900000000000010007"
+                }
+            ]
+        },
+        {
+            "id": "15",
+            "relationships": [
+                {
+                    "id": "1",
+                    "destinationId": "373873005",
+                    "typeId": "116680003", // is-a
+                    "active": true,
+                    "characteristicTypeId": "900000000000010007"
+                }
+            ]
+        }
+    ],
+    // 1 - only initial character case insensitive
+	// 3 - entire term case insensitive
+    "assertConceptsPass": [
+        {
+            "id": "1",
+            "descriptions": [
+                {
+                    "id": "1",
+                    "caseSignificanceId": "900000000000020002",
+                    "term": "Entire medial Ligament of ankle joint"
+                }
+            ]
+        }, {
+            "id": "3",
+            "descriptions": [
+                {
+                    "id": "3",
+                    "caseSignificanceId": "900000000000448009",
+                    "term": "Ibuprofen & oxycodone (product)"
+                }
+
+            ]
+        },
+        {
+            "id": "4",
+            "descriptions": [
+                {
+                    "id": "4",
+                    "caseSignificanceId": "900000000000020002",
+                    "term": "6-O-methylnorlaudanosoline 5'-O-methyltransferase (substance)"
+                }
+            ]
+        },
+        {
+            "id": "5",
+            "descriptions": [
+                {
+                    "id": "5",
+                    "caseSignificanceId": "900000000000020002",
+                    "term": "Non-distal monosomy 12q (disorder)"
+                }
+            ]
+        },
+        {
+            "id": "6",
+            "descriptions": [
+                {
+                    "id": "6",
+                    "caseSignificanceId": "900000000000020002",
+                    "term": "/10 min"
+                }
+            ]
+        },
+        {
+            "id": "7",
+            "descriptions": [
+                {
+                    "id": "7",
+                    "caseSignificanceId": "900000000000020002",
+                    "term": "<35"
+                }
+            ]
+        },
+        {
+            "id": "8",
+            "descriptions": [
+                {
+                    "id": "8",
+                    "caseSignificanceId": "900000000000020002",
+                    "term": "Ö test"
+                }
+            ]
+        },
+        {
+            "id": "9",
+            "descriptions": [
+                {
+                    "id": "8",
+                    "caseSignificanceId": "900000000000020002",
+                    "term": "Test mg"
+                }
+            ]
+        },
+        {
+            // A lowercase letter as its own token is case-significant: Anti-k is not Anti-K
+            "id": "20",
+            "descriptions": [
+                {
+                    "id": "20",
+                    "typeId": "900000000000003001", //FSN
+                    "caseSignificanceId": "900000000000017005",
+                    "term": "Anti-k blood group antibody titre measurement (procedure)"
+                },
+                {
+                    "id": "21",
+                    "typeId": "900000000000013009", //SYNONYM
+                    "caseSignificanceId": "900000000000020002",
+                    "term": "Anti-k titre"
+                }
+            ]
+        },
+        {
+            // w/v, and m (metre - M is molar), are case-significant units
+            "id": "22",
+            "descriptions": [
+                {
+                    "id": "22",
+                    "typeId": "900000000000003001", //FSN
+                    "caseSignificanceId": "900000000000017005",
+                    "term": "Bandage tubular 10 m bandage (physical object)"
+                },
+                {
+                    "id": "23",
+                    "typeId": "900000000000013009", //SYNONYM
+                    "caseSignificanceId": "900000000000020002",
+                    "term": "Bandage tubular 10 m bandage"
+                },
+                {
+                    "id": "24",
+                    "typeId": "900000000000013009", //SYNONYM
+                    "caseSignificanceId": "900000000000020002",
+                    "term": "Hydrogen peroxide 3% w/v solution"
+                }
+            ]
+        },
+        {
+            // A unit written straight after its number
+            "id": "25",
+            "descriptions": [
+                {
+                    "id": "25",
+                    "typeId": "900000000000003001", //FSN
+                    "caseSignificanceId": "900000000000020002",
+                    "term": "7g protein exchanges/day (qualifier value)"
+                }
+            ]
+        }
+    ],
+    // 1 - only initial character case insensitive
+	// 3 - entire term case insensitive
+	// 4, 5 - Terms starting with a lower case letter are expected to be marked CS
+	// 6 - Terms containing a capital letter are expected to be marked cI or CS
+    "assertConceptsFail": [
+       {
+            "id": "1",
+            "descriptions": [
+                {
+                    "id": "1",
+                    "typeId": "900000000000003001", //FSN
+                    "caseSignificanceId": "900000000000448009",
+                    "term": "Ibuprofen & oxycodone (product)"
+                },
+                {
+                    "id": "2",
+                    "typeId": "900000000000013009", //SYNONYM
+                    "caseSignificanceId": "900000000000020002",
+                    "term": "Ibuprofen & oxycodone"
+                }
+            ]
+        }, {
+            "id": "3",
+            "descriptions": [
+                {
+                    "id": "3",
+                    "caseSignificanceId": "900000000000448009",
+                    "term": "Ibuprofen & Oxycodone (product)"
+                }
+            ]
+        },
+        /* {
+            "id": "4",
+            "descriptions": [
+                {
+                    "id": "4",
+                    "caseSignificanceId": "900000000000448009",
+                    "term": "ibuprofen & Oxycodone (product)"
+                }
+            ]
+        }, {
+            "id": "5",
+            "descriptions": [
+                {
+                    "id": "5",
+                    "caseSignificanceId": "900000000000020002",
+                    "term": "ibuprofen & Oxycodone (product)"
+                }
+            ]
+        }, */
+        {
+            "id": "6",
+            "descriptions": [
+                {
+                    "id": "6",
+                    "caseSignificanceId": "900000000000448009",
+                    "term": "ibuprofen & Oxycodone (product)"
+                }
+            ]
+        },
+        {
+            // No case-significant token: the article "a" does not count
+            "id": "26",
+            "descriptions": [
+                {
+                    "id": "26",
+                    "typeId": "900000000000003001", //FSN
+                    "caseSignificanceId": "900000000000020002",
+                    "term": "Removal of a foreign body (procedure)"
+                }
+            ]
+        }
+    ]
+}

@@ -20,10 +20,13 @@ function boolean isTermWithCaseSensitiveUnit(String term) {
 	if (term == null || term.isEmpty()) return false;
 	String stripTerm = term.trim();
 	String spTerm = " " + stripTerm;
+	// m (metre - M is molar), w/w, w/v, v/v: the strength basis is as
+	// case-significant as the unit; "W/V" is not a thing.
 	String[] abbrevs = { "mg", "g", "ml", "mcg", "unit", "units", "IU", "mEq", "mL", "MBq", "ppm",
 			"microgram", "micrograms", "milligram", "milligrams", "nanogram", "nanograms",
 			"millilitre", "millilitres", "litre", "litres", "mmol", "mol",
-			"cm", "mm", "kg", "kBq", "GBq", "mmHg" };
+			"cm", "mm", "kg", "kBq", "GBq", "mmHg",
+			"m", "w/w", "w/v", "v/v" };
 	for (int i = 0; i < abbrevs.length; i++) {
 		if (stripTerm.contains(" " + abbrevs[i] + " ") || 
 			stripTerm.endsWith(" " + abbrevs[i]) ||
@@ -33,9 +36,25 @@ function boolean isTermWithCaseSensitiveUnit(String term) {
 			stripTerm.equals(abbrevs[i])) {
 			return true;
 		}
+		// The unit written straight after its number, "7g protein exchanges/day".
+		if (Pattern.compile("(?:^|[^\\p{Alnum}])\\d+(?:[.,]\\d+)?" + Pattern.quote(abbrevs[i]) + "(?![\\p{Alnum}])").matcher(stripTerm).find()) {
+			return true;
+		}
 	}
 	
 	return false;
+}
+
+// A single lowercase letter standing as its own token after the first character,
+// optionally with a digit suffix, is case-significant in the same way a capital
+// is: Anti-k is not Anti-K, p-aminophenol is not P-aminophenol, and so for
+// alfa-n3, Cytochrome b5, Little c, Weak e, serotype b, k-free, s-adenosyl, p,p'-.
+// "a" and "x" are excluded - the article and the multiplication sign
+// ("6 x 77 tablets") carry no case. Position 1 is never examined: cI already
+// says the first character's case is not significant.
+function boolean isTermWithLowercaseSignificantToken(String term) {
+	if (term == null || term.isEmpty()) return false;
+	return Pattern.compile("(?<=[\\s(/+,-])(?![ax](?![0-9]))[a-z][0-9]*(?=$|[\\s),/+'-])").matcher(term).find();
 }
 
 rule "An active term on an active concept with case significance 'only initial character case insensitive' should contain a capital letter after the first character."
@@ -49,7 +68,8 @@ rule "An active term on an active concept with case significance 'only initial c
 						&& stripAccents(term) not matches "^..*[0-9][A-Za-z].*$"
 						&& stripAccents(term) not matches "^[<, %, >, . , &, ^, /].*$"
 						&& stripAccents(term) not matches "^..*\\p{Lu}.*$"
-						&& !isTermWithCaseSensitiveUnit(term))
+						&& !isTermWithCaseSensitiveUnit(term)
+						&& !isTermWithLowercaseSignificantToken(term))
 
 	then
 		invalidContent.add(new InvalidContent("4ee9cfeb-3ce5-48bf-b238-de7498fde042",

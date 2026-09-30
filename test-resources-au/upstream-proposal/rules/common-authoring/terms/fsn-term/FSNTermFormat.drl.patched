@@ -7,8 +7,7 @@ import org.ihtsdo.drools.helper.DescriptionHelper
 import org.ihtsdo.drools.service.ConceptService
 import org.ihtsdo.drools.service.DescriptionService
 import java.util.ArrayList
-import java.util.Arrays
-import java.util.HashSet
+import java.util.Set
 
 global java.util.List invalidContent
 global ConceptService conceptService
@@ -54,22 +53,61 @@ rule "An active US-English or GB-English FSN should end with a valid semantic ta
 				d, "Active FSN should end with a valid semantic tag.", Severity.WARNING));
 end
 
+// Registered product and trade names (AMT's ARTG-derived levels) legitimately
+// carry '&', '%' and '#' ("Bausch & Lomb", "Naphcon-A 0.025%"), and they sit in
+// three hierarchies:
+//   373873005 |Pharmaceutical / biologic product|  - MP/MPP and every AMT drug level
+//   774167006 |Product name|                       - AMT trade names (under Qualifier value)
+//   260787004 |Physical object|                    - AMT device levels
+// A hierarchy test rather than a semantic-tag list: the concept must actually
+// be in the hierarchy, so a mis-tagged concept elsewhere is still reported and
+// a new model level under one of the roots needs no reference-data change.
+function boolean isFsnInSpecialCharacterExemptHierarchy(Set statedAncestors, String conceptId) {
+	String[] roots = { "373873005", "774167006", "260787004" };
+	for (int i = 0; i < roots.length; i++) {
+		if (roots[i].equals(conceptId) || (statedAncestors != null && statedAncestors.contains(roots[i]))) {
+			return true;
+		}
+	}
+	return false;
+}
+
 rule "An active FSN should not contain the special characters &, %, $, @ or #."
 	dialect "mvel"
 	when
 		c : Concept(active)
-		d : Description(conceptId == c.id && active == true && typeId == Constants.FSN && term matches ".*[&%$@#].*"
-						&& !descriptionService.isSemanticTagCompatibleWithinHierarchy(term, new HashSet(Arrays.asList("fsn-special-char-exempt"))))
+		d : Description(conceptId == c.id && active == true && typeId == Constants.FSN && term matches ".*[&%$@#].*")
+		eval(!isFsnInSpecialCharacterExemptHierarchy(conceptService.findStatedAncestorsOfConcept(c), c.id))
 	then
 		invalidContent.add(new InvalidContent("e3048fa9-4238-48f1-a836-1b91ed4fcec2",
 				d, "An active FSN should not contain the special characters &, %, $, @ or #.", Severity.WARNING));
 end
 
+// An FSN whose lowercase first letter is itself the meaning. Capitalising any
+// of these would be wrong, so they are not a style defect:
+//   chemical / stereo locant prefix   d-alpha-tocopherol, dl-alpha-tocopheryl, sec-Hexyl,
+//                                     tert-Butyl, cis-/trans-, n-Butane, o-/m-/p-, p,p'-,
+//                                     sn-Glycerol, alpha-/beta-/gamma-/delta-
+//   mixed-case first token            pH, cE, cDE, iStent, mL/kg, eIF-5A
+//   blood-group antigen sign          s+ phenotype, k- phenotype
+//   proper-name particle + name       de Morton, von Willebrand, van ...
+// A plain lowercase word (a gene name, "gram", "per 10 minutes") matches none of
+// these and is still reported.
+function boolean isDeliberateLowercaseStart(String term) {
+	return term.matches("^(?:"
+			+ "(?:[a-z]|dl|sn|sec|tert|cis|trans|sym|meso|erythro|threo|scyllo|myo|para|ortho|meta|bis|alpha|beta|gamma|delta)(?:,[a-z]'*)*'*-[\\p{L}\\p{N}(]"
+			+ "|[a-z]+\\p{Lu}"
+			+ "|[a-z][+-](?:\\s|$)"
+			+ "|(?:de|du|da|del|della|der|den|di|la|le|van|von|ter|ten)\\s+\\p{Lu}"
+			+ ").*");
+}
+
 rule "The first letter of an active US-English or GB-English FSN should be capitalized."
 	dialect "mvel"
 	when
 		c : Concept(active)
-		d : Description(conceptId == c.id && active == true && typeId == Constants.FSN && (acceptabilityMap["900000000000509007"] == Constants.ACCEPTABILITY_PREFERRED || acceptabilityMap["900000000000508004"] == Constants.ACCEPTABILITY_PREFERRED) && term matches "[a-z].*")
+		d : Description(conceptId == c.id && active == true && typeId == Constants.FSN && (acceptabilityMap["900000000000509007"] == Constants.ACCEPTABILITY_PREFERRED || acceptabilityMap["900000000000508004"] == Constants.ACCEPTABILITY_PREFERRED) && term matches "[a-z].*"
+						&& !isDeliberateLowercaseStart(term))
 	then
 		invalidContent.add(new InvalidContent("8a74edc2-ebbe-4c59-992b-d80ea72a11ba",
 				d, "The first letter of an active FSN should be capitalized.", Severity.WARNING));

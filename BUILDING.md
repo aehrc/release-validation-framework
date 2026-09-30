@@ -5,7 +5,7 @@ deleted theirs in `ef01033` (*"Delete Dockerfile as not used when using jib
 maven plugin"*) and this fork follows, so there is one build mechanism rather
 than two that can drift apart.
 
-## The two cloned directories
+## The three generated directories
 
 Jib copies these into the image from the build workspace:
 
@@ -13,12 +13,20 @@ Jib copies these into the image from the build workspace:
 <extraDirectories><paths>
   <path><from>${project.basedir}/snomed-drools-rules</from>                  <into>/app/snomed-drools-rules</into></path>
   <path><from>${project.basedir}/snomed-release-validation-assertions</from> <into>/app/snomed-release-validation-assertions</into></path>
+  <path><from>${project.basedir}/test-resources</from>                       <into>/app/test-resources</into></path>
 </paths></extraDirectories>
 ```
 
 They are **not** in git (see `.gitignore`) — `./checkout-resources.sh` clones
-them. That moves a responsibility out of the Dockerfile and into the build, so
-it has to be carried deliberately:
+the first two, overlays `assertions-au/scripts` on the corpus and the rule
+patches in `test-resources-au/upstream-proposal/` on the rules (failing if a
+target is missing or no longer matches the file the patch was written
+against), and assembles `test-resources/` from the `prod/international` bucket
+plus the AU semantic-tag files. The image reads that directory only when the
+deployment sets `TESTRESOURCES_USECLOUD=false` and
+`TESTRESOURCES_LOCAL_PATH=test-resources/` (see `test-resources-au/README.md`).
+That moves a responsibility out of the Dockerfile and into the build, so it has
+to be carried deliberately:
 
 > **Both clones MUST be pinned to an explicit commit.**
 >

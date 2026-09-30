@@ -1,0 +1,289 @@
+{
+    "givenConcepts": [
+        { "id": "116680003", "active": true }, // Is a
+        { "id": "373873005", "active": true }, // Pharmaceutical / biologic product
+        { "id": "105590001", "active": true }  // Substance
+    ],
+    //
+    // 2 no space before semantic tag - rule removed
+    "assertConceptsPass": [
+        /*{
+            "descriptions": [
+                {
+                    "id": "1",
+                    "typeId": "900000000000003001",
+                    "term": "Ibuprofen + oxycodone (product)" // Good FSN
+                }
+            ]
+        },
+        {
+            "id": "2",
+            "descriptions": [
+                {
+                    "id": "3",
+                    "typeId": "900000000000003001",
+                    "term": "Ibuprofen oxycodone(product)"
+                }
+            ]
+        },
+        {
+            "id": "3",
+            "descriptions": [
+                {
+                    "id": "3",
+                    "typeId": "900000000000003001",
+                    "term": "ibuprofen oxycodone(product)",
+                    "languageCode": "nl",
+                    "acceptabilityMap": {
+                        "31000146106": "900000000000548007" // NL Preferred
+                    }
+                }
+            ]
+        },
+        {
+            "id": "138875005",
+            "descriptions": [
+                {
+                    "id": "1",
+                    "typeId": "900000000000003001",
+                    "term": "SNOMED CT Concept (SNOMED RT+CTV3)"
+                }
+            ]
+        }*/
+        {
+            // A registered product name under Pharmaceutical / biologic product keeps its '&'
+            "id": "20",
+            "descriptions": [
+                {
+                    "id": "20",
+                    "typeId": "900000000000003001",
+                    "term": "Bausch & Lomb Sensitive Eyes solution (clinical drug)",
+                    "languageCode": "en"
+                }
+            ],
+            "relationships": [
+                {
+                    "typeId": "116680003", // is-a
+                    "destinationId": "373873005" // Pharmaceutical / biologic product
+                }
+            ]
+        },
+        {
+            // A lowercase stereo locant is the meaning, not a style defect
+            "id": "21",
+            "descriptions": [
+                {
+                    "id": "21",
+                    "typeId": "900000000000003001",
+                    "term": "d-alpha-tocopherol 671 mg capsule (clinical drug)",
+                    "languageCode": "en",
+                    "acceptabilityMap": {
+                        "900000000000509007": "900000000000548007" // INT Preferred
+                    }
+                }
+            ]
+        },
+        {
+            // ...and so is a proper-name particle
+            "id": "22",
+            "descriptions": [
+                {
+                    "id": "22",
+                    "typeId": "900000000000003001",
+                    "term": "de Morton Mobility Index (assessment scale)",
+                    "languageCode": "en",
+                    "acceptabilityMap": {
+                        "900000000000509007": "900000000000548007" // INT Preferred
+                    }
+                }
+            ]
+        },
+        {
+            // ...and a mixed-case first token
+            "id": "23",
+            "descriptions": [
+                {
+                    "id": "23",
+                    "typeId": "900000000000003001",
+                    "term": "cE blood group antibody identification (procedure)",
+                    "languageCode": "en",
+                    "acceptabilityMap": {
+                        "900000000000509007": "900000000000548007" // INT Preferred
+                    }
+                }
+            ]
+        }
+    ],
+    // Failure cases:
+    // 1 does not end in )
+    // 2 does not end in )
+    // 4 not end with a semantic tag
+    // 5 includes comma
+    // 6 no space around "+"
+    // 7 starts with (
+    // 8-12 contains &, %, $, @ or #
+    // 13 starts with lower case letter
+    "assertConceptsFail": [
+        {
+            "id": "1",
+            "descriptions": [
+                {
+                    "id": "1",
+                    "typeId": "900000000000003001",
+                    "active": true,
+                    "term": "Ibuprofen + oxycodone (product"
+                }
+            ]
+        },
+        {
+            "id": "2",
+            "descriptions": [
+                {
+                    "id": "2",
+                    "typeId": "900000000000003001",
+                    "term": "Ibuprofen oxycodone (product) something"
+                }
+            ]
+        },
+        {
+            "id": "4",
+            "descriptions": [
+                {
+                    "id": "4",
+                    "typeId": "900000000000003001",
+                    "term": "Ibuprofen oxycodone"
+                }
+            ]
+        },
+        //{
+        //    "id": "5",
+        //    "descriptions": [
+        //        {
+        //            "id": "5",
+        //            "typeId": "900000000000003001",
+        //            "term": "Ibuprofen, oxycodone (product)"
+        //       }
+        //    ]
+        //},
+        {
+            "id": "6",
+            "descriptions": [
+                {
+                    "id": "6",
+                    "typeId": "900000000000003001",
+                    "term": "(Ibuprofen oxycodone product)"
+                }
+            ]
+        },
+        {
+            "id": "7",
+            "descriptions": [
+                {
+                    "id": "7",
+                    "typeId": "900000000000003001",
+                    "term": "Ibuprofen & oxycodone (product)"
+                }
+            ]
+        },
+        {
+            "id": "8",
+            "descriptions": [
+                {
+                    "id": "8",
+                    "typeId": "900000000000003001",
+                    "term": "Ibuprofen % oxycodone (product)"
+                }
+            ]
+        },
+        {
+            "id": "9",
+            "descriptions": [
+                {
+                    "id": "9",
+                    "typeId": "900000000000003001",
+                    "term": "Ibuprofen $ oxycodone (product)"
+                }
+            ]
+        },
+        {
+            "id": "10",
+            "descriptions": [
+                {
+                    "id": "10",
+                    "typeId": "900000000000003001",
+                    "term": "Ibuprofen @ oxycodone (product)"
+                }
+            ]
+        },
+        {
+            "id": "11",
+            "descriptions": [
+                {
+                    "id": "11",
+                    "typeId": "900000000000003001",
+                    "term": "#Ibuprofen oxycodone (product)"
+                }
+            ]
+        },
+        {
+            "id": "12",
+            "descriptions": [
+                {
+                    "id": "12",
+                    "typeId": "900000000000003001",
+                    "term": "ibuprofen oxycodone (product)",
+                    "languageCode": "en",
+                    "acceptabilityMap": {
+                        "900000000000509007": "900000000000548007" // INT Preferred
+                    }
+                }
+            ]
+        },
+        {
+            "id": "13",
+            "descriptions": [
+                {
+                    "id": "13",
+                    "typeId": "900000000000003001",
+                    "term": "Spanien (geography location)",
+                    "languageCode": "en",
+                    "acceptabilityMap": {
+                        "900000000000509007": "900000000000548007" // INT Preferred
+                    }
+                }
+            ]
+        },
+        {
+            // Outside the three exempt hierarchies '%' is still reported
+            "id": "24",
+            "descriptions": [
+                {
+                    "id": "24",
+                    "typeId": "900000000000003001",
+                    "term": "Ethanol 90% (substance)"
+                }
+            ],
+            "relationships": [
+                {
+                    "typeId": "116680003", // is-a
+                    "destinationId": "105590001" // Substance
+                }
+            ]
+        },
+        {
+            // A plain lowercase word is still reported, hyphenated or not
+            "id": "25",
+            "descriptions": [
+                {
+                    "id": "25",
+                    "typeId": "900000000000003001",
+                    "term": "pre-beta-Lipoprotein measurement (procedure)",
+                    "languageCode": "en",
+                    "acceptabilityMap": {
+                        "900000000000509007": "900000000000548007" // INT Preferred
+                    }
+                }
+            ]
+        }
+    ]
+}

@@ -52,8 +52,8 @@ because AU authored it.
 | FSN must be represented in at least one dialect (ERROR) | 1,347 | 0 | same |
 | Text definitions must be preferred in at least one dialect (ERROR) | 34 | 0 | same |
 | Concept should not contain redundantly stated IsA | 6,524 | 287 | scoped to core modules |
-| FSN contains &, %, $, @ or # | 5,147 | 12 | `fsn-special-char-exempt` |
-| Relationship module differs from source concept | 4,299 | 0 | `assertionExclusionList` (run config, no rule change) |
+| FSN contains &, %, $, @ or # | 5,147 | 12 | hierarchy exemption (373873005 / 774167006 / 260787004), was `fsn-special-char-exempt` |
+| Relationship module differs from source concept | 4,299 | 0 | fires only extension <-> extension (patch, `UPSTREAM-FEEDBACK.md` item 2); was `assertionExclusionList` |
 | Semantic tag compatible with active parent(s) | 78 | 0 | `administrative=` hierarchy line |
 
 Three of the fixes are worth reading twice, because the obvious version of each
@@ -322,16 +322,15 @@ remaining-75k triage above is valid whether or not the patch is applied.
 
 ## Status
 
-Implemented and compiling on this branch as a PROOF, not as a fork we intend to
-carry - `checkout-resources.sh` clones the rules at a pinned commit, so this
-patch is applied on top locally and is lost on every re-clone. It HAS been lost
-once already, silently, between two runs. Artefacts in `upstream-proposal/`:
+Not a fork we intend to carry - the right home is upstream in
+snomed-drools-rules. `checkout-resources.sh` clones the rules at a pinned commit
+and then runs `upstream-proposal/apply.sh`, so the patch is in every image and
+cannot be silently lost on a re-clone, as it once was between two runs.
+Artefacts in `upstream-proposal/rules/`, at the rule's path:
 
     FsnTermHavingASameSynonynTerm.drl.orig      pristine, at the pinned commit
     FsnTermHavingASameSynonynTerm.drl.patched   the proposed rule
-    rule.patch                                  unified diff between the two
-    apply.sh                                    re-applies it after any re-clone
 
-Run `apply.sh` after `checkout-resources.sh`, or the next run silently reverts to
-143,065 and looks like a regression in the reference data. The right home is
-upstream in snomed-drools-rules.
+`apply.sh` refuses to run if the clone's file no longer equals the `.orig`, so a
+pin bump that changes the rule fails the checkout instead of shipping a stale
+copy, and it regenerates `upstream-proposal/rules.patch` from the pairs.

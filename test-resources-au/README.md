@@ -5,15 +5,22 @@ The canonical bucket (`validation-resources.ihtsdo`) publishes only
 against it reports AMT's own semantic tags as invalid content.
 
 These two files are the international ones plus AMT's additions. Everything else
-in the resource set is unchanged and should still be fetched from the bucket by
-`fetch-test-resources.sh`.
+in the resource set is unchanged and is fetched from the bucket by
+`fetch-test-resources.sh`. `../checkout-resources.sh` assembles the whole set -
+the international files, then these two over them - into `../test-resources/`,
+which jib bakes into the image as `/app/test-resources` (see "How the image
+uses it" below).
 
 ## What was added, and why it is not guesswork
 
-**`semantic-tags.txt`** — 12 tags, taken from snomio's
+**`semantic-tags.txt`** — 13 tags. 12 are taken from snomio's
 `api/src/main/resources/default-model-config.yaml` under `MAIN_SNOMEDCT-AU`,
 which is the authoritative definition of the AMT model levels (MP, MPUU, TPUU,
 MPP, TPP, CTPP, TP) and their `medicine`/`device`/`drugDevice` semantic tags.
+The 13th is `reference set`, the tag of AU's refset concepts
+(`281000036105 |Substance to SNOMED CT-AU mapping reference set (reference
+set)|`); it was on the `metadata=` line of the hierarchy file but missing here,
+so the FSN-tag rule reported it.
 
 An earlier attempt derived the list from the release itself. It was reverted:
 deriving from the content is circular (a malformed tag blesses itself), and it
@@ -28,11 +35,11 @@ release uses it - AMT's MPP tag is `clinical drug package`. It is deliberately
 NOT added: a tag nothing uses cannot prevent a false positive, and would hide a
 real one if the level were ever renamed.
 
-**`semantic-tag-hierarchies.txt`** — the same 12 tags added to the `product=`
+**`semantic-tag-hierarchies.txt`** — the 12 AMT model-level tags added to the `product=`
 and `physical object=` lines, plus `administrative=administrative` and
 `reference set` on `metadata=` (AU has a top-level hierarchy,
 `32570731000036101 |Administrative value (administrative)|`, that the
-international file has no line for), plus five keys that are not hierarchies at
+international file has no line for), plus two keys that are not hierarchies at
 all - see below.
 
 The format is NOT a parent/child chain. `FSNSemanticTagAgainstParent.drl` calls
@@ -64,7 +71,7 @@ The international model already contains AMT's levels under different names -
 `real clinical drug` is TPUU, `packaged clinical drug` is MPP,
 `real packaged clinical drug` is TPP. Only CTPP has no international equivalent.
 
-## The five exemption keys
+## The two exemption keys
 
 `semantic-tag-hierarchies.txt` is loaded into a plain `Map<String, Set<String>>`
 and queried by `isSemanticTagCompatibleWithinHierarchy(term, keys)`, which is a
@@ -74,24 +81,43 @@ extension can supply its own level names without forking the rules:
 
     fsn-synonym-exempt              FsnTermHavingASameSynonynTerm
     duplicate-term-exempt           TermUniqueInHierarchy
-    redundant-isa-exempt            RedundantIsaRelationship
-    fsn-special-char-exempt         FSNTermFormat (special characters)
-    case-significance-unit-exempt   TermCaseSignificance (isDrugWithCaseSensitiveUnit)
 
 Each defaults to the tags already in the rule's literal, so the international
 edition's behaviour is unchanged. The matching rule patches are in
-`upstream-proposal/` with an `apply.sh`; they are a proposal, not a fork we
-intend to carry.
+`upstream-proposal/`, applied by `checkout-resources.sh` after every rules
+clone; they are a proposal, not a fork we intend to carry. The other patched
+rules need no key: the special-character rules test the concept's hierarchy,
+redundant IsA tests the module, and case significance tests the term.
 
 ## Effect, on the AU daily build 20260831
 
     Active FSN should end with a valid semantic tag        143,684 -> 0
     Concept's semantic tag compatible with parent(s)       143,761 -> 0
     total rule violations                                  505,471 -> 218,106
-    ...with the five exemption keys and the rule patches   218,106 -> 16,736
+    ...with the exemption keys and the rule patches        218,106 -> 16,736
+
+On the 20260930 daily build, with every rule patch in `upstream-proposal/` and
+`includedModules=32506021000036107,351000168100`, Drools goes from 498,503
+findings to 4,747, measured with the engine RVF deploys (snomed-drools 6.1.3).
 
 ## Where this should really live
 
 A `prod/au` path in the same bucket. RVF already selects the resource set with
 `test-resources.cloud.path`, so that needs no engine change at all - which is
 the reason to do it there rather than carry these files in the repo.
+
+## How the image uses it
+
+The engine reads test resources from ONE place - the bucket or a local
+directory, never a merge - so the local directory has to carry the whole set.
+The deployment selects it with two environment variables on both the API and
+the worker:
+
+    TESTRESOURCES_USECLOUD=false
+    TESTRESOURCES_LOCAL_PATH=test-resources/
+
+The path is relative to the container's working directory, `/app`. It must not
+be written `/app/test-resources/`: the resource manager strips one leading `/`
+from a local path (`ResourceConfiguration.normalisePath`), so that value resolves
+to `/app/app/test-resources/`, the listing returns nothing, and the Drools phase
+stops with a NullPointerException before any rule runs.

@@ -57,6 +57,13 @@ preserved wherever in the model it sits, and any gate is another list to get
 wrong - the `(physical object)` dressings are what a widened-but-still-gated
 version missed.
 
+Three more gaps were closed on the 20260930 build (164 findings, ruling R5),
+because each is case the uppercase test cannot see: a lowercase letter that is
+the meaning (`Anti-k`, `p-aminophenol`, `d-alpha-tocopherol`, `alfa-n3`, `b5` -
+132, `isTermWithLowercaseSignificantToken`), the units `m`, `w/w`, `w/v`, `v/v`
+(28), and a unit written straight after its number (`7g`, 2). That leaves 3,604,
+3,602 of them AU-module, each turning on the cI/ci question below.
+
 ## What AU should change
 
 `../../rvf-local-runs/au-cI-to-review.tsv` - 3,766 descriptions, one row each,

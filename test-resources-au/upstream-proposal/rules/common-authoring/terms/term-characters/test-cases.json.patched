@@ -1,0 +1,171 @@
+{
+    "givenConcepts": [
+        { "id": "116680003", "active": true }, // Is a
+        { "id": "373873005", "active": true }, // Pharmaceutical / biologic product
+        { "id": "774167006", "active": true }, // Product name
+        { "id": "404684003", "active": true }  // Clinical finding
+    ],
+    "assertConceptsPass": [
+        {
+            "id": "1",
+            "descriptions": [
+                {
+                    "id": "1",
+                    "typeId": "900000000000003001",
+                    "term": "Ibuprofen and oxycodone (product)"
+                }
+            ]
+        },
+        {
+            // A registered trade name under Product name keeps its '#'
+            "id": "20",
+            "descriptions": [
+                {
+                    "id": "20",
+                    "typeId": "900000000000013009",
+                    "term": "Lot420 Gelato #33"
+                }
+            ],
+            "relationships": [
+                {
+                    "typeId": "116680003", // is-a
+                    "destinationId": "774167006" // Product name
+                }
+            ]
+        },
+        {
+            // ...and so does a product under Pharmaceutical / biologic product
+            "id": "21",
+            "descriptions": [
+                {
+                    "id": "21",
+                    "typeId": "900000000000003001",
+                    "term": "Lot420 Gelato #33 dried herb (branded clinical drug)"
+                }
+            ],
+            "relationships": [
+                {
+                    "typeId": "116680003", // is-a
+                    "destinationId": "373873005" // Pharmaceutical / biologic product
+                }
+            ]
+        }
+    ],
+    // 1 - \\
+    // 2 - \t
+    // 3 - \r
+    // 4 - \n
+    // 5 - \Z
+    // 6 - $
+    // 7 - @
+    // 8 - #
+    "assertConceptsFail": [
+        {
+            "id": "1",
+            "descriptions": [
+                {
+                    "id": "2",
+                    "typeId": "900000000000003001",
+                    "term": "Ibuprofen\\\\oxycodone (product)"
+                }
+            ]
+        },
+        {
+            "id": "7",
+            "descriptions": [
+                {
+                    "id": "2",
+                    "typeId": "900000000000003001",
+                    "term": "Ibuprofen \t oxycodone (product)"
+                }
+            ]
+        },
+        {
+            "id": "3",
+            "descriptions": [
+                {
+                    "id": "2",
+                    "typeId": "900000000000003001",
+                    "term": "Ibuprofen \r oxycodone (product)"
+                }
+            ]
+        },
+        {
+            "id": "4",
+            "descriptions": [
+                {
+                    "id": "2",
+                    "typeId": "900000000000003001",
+                    "term": "Ibuprofen \n oxycodone (product)"
+                }
+            ]
+        },
+        // {
+        //     "id": "5",
+        //     "descriptions": [
+        //         {
+        //             "id": "2",
+        //             "typeId": "900000000000003001",
+        //             "term": "Ibuprofen \\\Z oxycodone (product)"
+        //         }
+        //     ]
+        // },
+        {
+            "id": "6",
+            "descriptions": [
+                {
+                    "id": "1",
+                    "typeId": "900000000000003001",
+                    "term": "Ibuprofen $ oxycodone (product)"
+                }
+            ]
+        },
+        {
+            "id": "7",
+            "descriptions": [
+                {
+                    "id": "2",
+                    "typeId": "900000000000003001",
+                    "term": "Ibuprofen @ oxycodone (product)"
+                }
+            ]
+        },
+        {
+            "id": "8",
+            "descriptions": [
+                {
+                    "id": "2",
+                    "typeId": "900000000000003001",
+                    "term": "Ibuprofen # oxycodone (product)"
+                }
+            ]
+        },
+        {
+            // Outside the three exempt hierarchies a '#' is still reported
+            "id": "22",
+            "descriptions": [
+                {
+                    "id": "22",
+                    "typeId": "900000000000013009",
+                    "term": "Ibuprofen # oxycodone"
+                }
+            ],
+            "relationships": [
+                {
+                    "typeId": "116680003", // is-a
+                    "destinationId": "404684003" // Clinical finding
+                }
+            ]
+        }/*,
+        {
+            "id": "9",
+            "descriptions": [
+                {
+                    "id": "2",
+                    "typeId": "900000000000003001",
+                    "term": "myelodysplastic/​myeloproliferative neoplasm with ring sideroblasts and thrombocytosis"
+                }
+            ]
+        }*/
+    ]
+}
