@@ -47,7 +47,7 @@
 18a9f6b4-b66f-4af3-8c67-2a07b4655d27	component-centric-snapshot-association-unique-id.sql	RAN	2	6f5eaa3ced3a8620067feb799f373f6f12557bced8d0daa889674865e66160b1
 18d36527-9247-406a-bd1f-d7d608b0663a	component-centric-snapshot-expression-association-mapTarget-valid-loinc.sql	RAN	1	980c786ccf6408917ff3705c921ec16511b4e8a3a9d45614a6be25ab41343637
 19423070-7118-45bd-98ba-6d0dc18bc619	component-centric-snapshot-description-fsn-synonym-text.sql	RAN	126	994658900209e33ac630095d76c81a7407aa36eec49fea7f7edeffe50b7388ef
-1a4e40a9-cf14-4703-b206-9f2fbeb56c7f	component-centric-snapshot-referencedComponentID-of-refset-member-must-be-valid.sql	RAN	67	46bfdbfe37261727b67a32e0bbfbba4123b777fb3223454852df1fc6b199a6ad
+1a4e40a9-cf14-4703-b206-9f2fbeb56c7f	component-centric-snapshot-referencedComponentID-of-refset-member-must-be-valid.sql	RAN	65	428160511f5b22c88860e05ce851ec28a11a1b266be789d187a8fd69848a9ece
 1b9e2371-1b0a-46d4-ac9d-fd222329ad9d	release-type-full-delta-validation-relationship-concrete-values.sql	RAN	2	74924e111bee8ca1fa7e607cb9baf50103f9b29d39c6c5b8998205200bc182b8
 1be975bb-2a1b-4c21-ae61-6e9fcd556718	release-type-delta-validation-concept.sql	RAN	2	067fbec7a573ed6a56926d9e8e6456067d615ca6497184e1584a7e52f48902fa
 1cd8b7f9-5730-4db9-b508-13575825b28f	component-centric-snapshot-simple-refset-unique-id.sql	RAN	2	aa6d2bd325dc4cdc5ec4a5dfaeabf4d8779bffa412962307be5493288874252d

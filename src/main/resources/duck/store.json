@@ -495,12 +495,12 @@
   },
   "530f9483-ff33-474f-85b7-29899b1d6f83": {
    "file": "component-centric-snapshot-concept-missing-axiom.sql",
-   "sha256": "bb3eb749dba6490e",
+   "sha256": "72f4b68fc3469c98",
    "text": "Active concepts have at least one active axiom in the same module as the concepts themselves.",
    "keywords": "component-centric-validation",
    "severity": "",
    "statements": [
-    "INSERT INTO qa_result (run_id, assertion_id, concept_id, details, component_id, table_name) SELECT 424242424242424242, 'rvfph_assertionuuid_', a.id, 'CONCEPT: id=' || a.id || ': Active concept has no active axiom in the same module as the concept.', a.id, 'rvfph_prospective_.concept_s' FROM rvfph_prospective_.concept_s AS a WHERE a.active = '1' AND a.id <> 138875005 AND NOT EXISTS(SELECT 1 FROM rvfph_prospective_.owlexpressionrefset_s WHERE referencedcomponentid = a.id AND moduleid = a.moduleid AND active = '1')"
+    "INSERT INTO qa_result (run_id, assertion_id, concept_id, details, component_id, table_name) SELECT 424242424242424242, 'rvfph_assertionuuid_', a.id, 'CONCEPT: id=' || a.id || ': Active concept has no active axiom in the same module as the concept.', a.id, 'rvfph_prospective_.concept_s' FROM rvfph_prospective_.concept_s AS a WHERE a.active = '1' AND a.id <> 138875005 AND NOT EXISTS(SELECT 1 FROM rvfph_prospective_.owlexpressionrefset_s AS o WHERE o.referencedcomponentid = a.id AND o.active = '1' AND (o.moduleid = a.moduleid OR EXISTS(SELECT 1 FROM rvfph_prospective_.moduledependencyrefset_s AS m WHERE m.active = '1' AND ((m.moduleid = a.moduleid AND m.referencedcomponentid = o.moduleid) OR (m.moduleid = o.moduleid AND m.referencedcomponentid = a.moduleid)))))"
    ]
   },
   "309d0620-0a32-43a6-9d08-8e6bdefda3be": {
@@ -707,12 +707,12 @@
   },
   "6614ff12-fca2-42b7-a5da-ea26353979fe": {
    "file": "component-centric-snapshot-description-valid-characters.sql",
-   "sha256": "f17f61191368453e",
+   "sha256": "14909458cf9420f5",
    "text": "Active description of active concept consists of valid characters.",
    "keywords": "component-centric-validation",
    "severity": "",
    "statements": [
-    "INSERT INTO qa_result (run_id, assertion_id, concept_id, details, component_id, table_name) SELECT 424242424242424242, 'rvfph_assertionuuid_', a.conceptid, 'DESCRIPTION ID=' || a.id || ': FSN=' || a.term || ' contains invalid character.', a.id, 'rvfph_prospective_.description_d' FROM rvfph_prospective_.description_d AS a, rvfph_prospective_.concept_s AS b WHERE a.active = 1 AND b.active = 1 AND a.conceptid = b.id AND a.typeid = '900000000000003001' AND REGEXP_MATCHES(term, '[\\\t\r\n\\x1a@$#]') AND a.effectivetime = (SELECT MAX(z.effectivetime) FROM rvfph_prospective_.description_d AS z WHERE z.id = a.id)",
+    "INSERT INTO qa_result (run_id, assertion_id, concept_id, details, component_id, table_name) SELECT 424242424242424242, 'rvfph_assertionuuid_', a.conceptid, 'DESCRIPTION ID=' || a.id || ': FSN=' || a.term || ' contains invalid character.', a.id, 'rvfph_prospective_.description_d' FROM rvfph_prospective_.description_d AS a, rvfph_prospective_.concept_s AS b WHERE a.active = 1 AND b.active = 1 AND a.conceptid = b.id AND a.typeid = '900000000000003001' AND REGEXP_MATCHES(term, '[\\\t\r\n\\x1a@$#]') AND a.effectivetime = (SELECT MAX(z.effectivetime) FROM rvfph_prospective_.description_d AS z WHERE z.id = a.id) AND NOT ISKINDOF_CR(a.conceptid, 373873005) AND NOT ISKINDOF_CR(a.conceptid, 774167006) AND NOT ISKINDOF_CR(a.conceptid, 260787004)",
     "INSERT INTO qa_result (run_id, assertion_id, concept_id, details, component_id, table_name) SELECT 424242424242424242, 'rvfph_assertionuuid_', a.conceptid, 'DESCRIPTION ID=' || a.id || ': Synonym=' || a.term || ' contains invalid character.', a.id, 'rvfph_prospective_.description_d' FROM rvfph_prospective_.description_d AS a, rvfph_prospective_.concept_s AS b WHERE a.active = 1 AND b.active = 1 AND a.conceptid = b.id AND a.typeid = '900000000000013009' AND REGEXP_MATCHES(term, '[\\\t\r\n\\x1a@$]') AND a.effectivetime = (SELECT MAX(z.effectivetime) FROM rvfph_prospective_.description_d AS z WHERE z.id = a.id)"
    ]
   },
@@ -1034,12 +1034,12 @@
   },
   "17b6c41e-9bf2-456f-ba59-9ad8230d7e52": {
    "file": "component-centric-snapshot-language-valid-moduleid.sql",
-   "sha256": "6d595abe4f8934ab",
+   "sha256": "9aee4740acf94fd0",
    "text": "Language refset members have the wrong module.",
    "keywords": "component-centric-validation",
    "severity": "",
    "statements": [
-    "INSERT INTO qa_result (run_id, assertion_id, concept_id, details, component_id, table_name) SELECT 424242424242424242, 'rvfph_assertionuuid_', a.referencedcomponentid, 'Language refset member: id=' || a.id || ': Member has the wrong module.', a.id, 'rvfph_prospective_.langrefset_s' FROM rvfph_prospective_.langrefset_s AS a LEFT JOIN rvfph_prospective_.description_s AS b ON a.referencedcomponentid = b.id LEFT JOIN rvfph_dependency_.langrefset_s AS c ON a.id = c.id WHERE a.active = '1' AND b.active = '1' AND (('NULL' <> 'rvfph_included_modules_' AND c.id IS NULL AND a.moduleid <> '900000000000207008' AND NOT a.moduleid IN (rvfph_included_modules_)) OR ('NULL' = 'rvfph_included_modules_' AND a.moduleid <> b.moduleid AND NOT (b.moduleid = '900000000000012004' AND a.moduleid = '900000000000207008')))"
+    "INSERT INTO qa_result (run_id, assertion_id, concept_id, details, component_id, table_name) SELECT 424242424242424242, 'rvfph_assertionuuid_', a.referencedcomponentid, 'Language refset member: id=' || a.id || ': Member has the wrong module.', a.id, 'rvfph_prospective_.langrefset_s' FROM rvfph_prospective_.langrefset_s AS a LEFT JOIN rvfph_prospective_.description_s AS b ON a.referencedcomponentid = b.id WHERE a.active = '1' AND b.active = '1' AND a.moduleid <> b.moduleid AND NOT (b.moduleid = '900000000000012004' AND a.moduleid = '900000000000207008') AND NOT EXISTS(SELECT 1 FROM rvfph_prospective_.moduledependencyrefset_s AS m WHERE m.active = '1' AND ((m.moduleid = a.moduleid AND m.referencedcomponentid = b.moduleid) OR (m.moduleid = b.moduleid AND m.referencedcomponentid = a.moduleid)))"
    ]
   },
   "335b2810-8cbb-43bf-807e-092dacb20f6a": {
@@ -1244,7 +1244,7 @@
   },
   "1a4e40a9-cf14-4703-b206-9f2fbeb56c7f": {
    "file": "component-centric-snapshot-referencedComponentID-of-refset-member-must-be-valid.sql",
-   "sha256": "88310f5f23453ff2",
+   "sha256": "3f9e34cb01d501dd",
    "text": "All active Refset records are valid.",
    "keywords": "component-centric-validation",
    "severity": "",
@@ -1256,7 +1256,7 @@
     "INSERT INTO qa_result (run_id, assertion_id, concept_id, details, component_id, table_name) SELECT 424242424242424242, 'rvfph_assertionuuid_', a.referencedcomponentid, 'Reference component id:' || a.referencedcomponentid || ' for refset id: ' || a.refsetid || ' in map correlation origin refset must be valid.', a.id, 'rvfph_prospective_.mapcorrelationoriginrefset_s' FROM rvfph_prospective_.mapcorrelationoriginrefset_s AS a LEFT JOIN rvfph_prospective_.concept_s AS b ON a.referencedcomponentid = b.id WHERE a.active = '1' AND (b.active = '0' OR b.id IS NULL)",
     "INSERT INTO qa_result (run_id, assertion_id, concept_id, details, component_id, table_name) SELECT 424242424242424242, 'rvfph_assertionuuid_', a.referencedcomponentid, 'Reference component id:' || a.referencedcomponentid || ' for refset id: ' || a.refsetid || ' in module dependency refset must be valid.', a.id, 'rvfph_prospective_.moduledependencyrefset_s' FROM rvfph_prospective_.moduledependencyrefset_s AS a LEFT JOIN rvfph_prospective_.concept_s AS b ON a.referencedcomponentid = b.id WHERE a.active = '1' AND (b.active = '0' OR b.id IS NULL)",
     "INSERT INTO qa_result (run_id, assertion_id, concept_id, details, component_id, table_name) SELECT 424242424242424242, 'rvfph_assertionuuid_', a.referencedcomponentid, 'Reference component id:' || a.referencedcomponentid || ' for refset id: ' || a.refsetid || ' in owl expression refset must be valid.', a.id, 'rvfph_prospective_.owlexpressionrefset_s' FROM rvfph_prospective_.owlexpressionrefset_s AS a LEFT JOIN rvfph_prospective_.concept_s AS b ON a.referencedcomponentid = b.id WHERE a.active = '1' AND (b.active = '0' OR b.id IS NULL)",
-    "INSERT INTO qa_result (run_id, assertion_id, concept_id, details, component_id, table_name) SELECT 424242424242424242, 'rvfph_assertionuuid_', a.referencedcomponentid, 'Reference component id:' || a.referencedcomponentid || ' for refset id: ' || a.refsetid || ' in simple refset must be valid.', a.id, 'rvfph_prospective_.simplerefset_s' FROM rvfph_prospective_.simplerefset_s AS a LEFT JOIN rvfph_prospective_.concept_s AS b ON a.referencedcomponentid = b.id WHERE a.active = '1' AND (b.active = '0' OR b.id IS NULL)"
+    "INSERT INTO qa_result (run_id, assertion_id, concept_id, details, component_id, table_name) SELECT 424242424242424242, 'rvfph_assertionuuid_', a.referencedcomponentid, 'Reference component id:' || a.referencedcomponentid || ' for refset id: ' || a.refsetid || ' in simple refset must be valid.', a.id, 'rvfph_prospective_.simplerefset_s' FROM rvfph_prospective_.simplerefset_s AS a LEFT JOIN rvfph_prospective_.concept_s AS b ON a.referencedcomponentid = b.id WHERE a.active = '1' AND (b.active = '0' OR b.id IS NULL) AND NOT (a.moduleid = '351000168100' OR a.refsetid IN ('933600531000036100'))"
    ]
   },
   "c35167ac-1dfc-4861-ac19-be60f95e3521": {
@@ -1569,7 +1569,7 @@
   },
   "0145fbad-f067-41ff-b700-cf54fc639e21": {
    "file": "file-centric-snapshot-correct-module-id.sql",
-   "sha256": "eea2cc3c0d8fcfc5",
+   "sha256": "4fb96fa1c426c1c5",
    "text": "The module id of components should be in module dependency list.",
    "keywords": "file-centric-validation,US,NL,AU,extension-only",
    "severity": "",
@@ -1606,7 +1606,8 @@
     "insert into qa_result (run_id, assertion_id, concept_id, details) select 424242424242424242, 'rvfph_assertionuuid_', 0, concat('simplemaprefset', ' ::id= ', a.id, ' ::module id: ', a.moduleid, ' is not in module dependency list') from (select id, moduleid from rvfph_prospective_.simplemaprefset_s where moduleid not in (select moduleid from rvfph_prospective_.module_id)) a",
     "insert into qa_result (run_id, assertion_id, concept_id, details) select 424242424242424242, 'rvfph_assertionuuid_', 0, concat('simplerefset', ' ::id= ', a.id, ' ::module id: ', a.moduleid, ' is not in module dependency list') from (select id, moduleid from rvfph_prospective_.simplerefset_s where moduleid not in (select moduleid from rvfph_prospective_.module_id)) a",
     "insert into qa_result (run_id, assertion_id, concept_id, details) select 424242424242424242, 'rvfph_assertionuuid_', 0, concat('stated_relationship', ' ::id= ', a.id, ' ::module id: ', a.moduleid, ' is not in module dependency list') from (select id, moduleid from rvfph_prospective_.stated_relationship_s where moduleid not in (select moduleid from rvfph_prospective_.module_id)) a",
-    "insert into qa_result (run_id, assertion_id, concept_id, details) select 424242424242424242, 'rvfph_assertionuuid_', 0, concat('textdefinition', ' ::id= ', a.id, ' ::module id: ', a.moduleid, ' is not in module dependency list') from (select id, moduleid from rvfph_prospective_.textdefinition_s where moduleid not in (select moduleid from rvfph_prospective_.module_id)) a"
+    "insert into qa_result (run_id, assertion_id, concept_id, details) select 424242424242424242, 'rvfph_assertionuuid_', 0, concat('textdefinition', ' ::id= ', a.id, ' ::module id: ', a.moduleid, ' is not in module dependency list') from (select id, moduleid from rvfph_prospective_.textdefinition_s where moduleid not in (select moduleid from rvfph_prospective_.module_id)) a",
+    "DELETE FROM qa_result WHERE run_id = 424242424242424242 AND assertion_id = 'rvfph_assertionuuid_' AND details IN (SELECT 'moduledependencyrefset' || ' ::id= ' || id || ' ::module id: ' || moduleid || ' is not in module dependency list' FROM rvfph_prospective_.moduledependencyrefset_s WHERE active = '0')"
    ]
   },
   "0e898ae0-15cb-45f9-b032-041193aa79e8": {
@@ -2276,14 +2277,14 @@
   },
   "6cd8d840-370d-40d1-b2e8-4539cd05ec11": {
    "file": "file-centric-snapshot-mdrs-violation-moduledependencyrefset.sql",
-   "sha256": "2894a70bd401acce",
+   "sha256": "505d2b1153bbc24f",
    "text": "The moduledependency Refset moduleId,effectiveTime pair should always respect the MDRS.",
    "keywords": "file-centric-validation,mdrs",
    "severity": "",
    "statements": [
     "INSERT INTO qa_result (run_id, assertion_id, concept_id, details, component_id, table_name) SELECT 424242424242424242, 'rvfph_assertionuuid_', a.referencedcomponentid, 'moduledependencyrefset: Component effective time: ' || a.effectivetime || ' must not be later than effective time: ' || m.targeteffectivetime || ' of included module ' || a.moduleid || ' as per MDRS', a.id, 'rvfph_prospective_.moduledependencyrefset_s' FROM rvfph_prospective_.moduledependencyrefset_s AS a, rvfph_prospective_.moduledependencyrefset_s AS m WHERE m.moduleid = 'rvfph_moduleid_' AND m.effectivetime = 'rvfph_version_' AND m.active = 1 AND a.moduleid = m.referencedcomponentid AND (a.effectivetime > m.targeteffectivetime)",
     "INSERT INTO qa_result (run_id, assertion_id, concept_id, details, component_id, table_name) SELECT 424242424242424242, 'rvfph_assertionuuid_', a.referencedcomponentid, 'moduledependencyrefset: Component effective time: ' || a.effectivetime || ' must not be later than effective time: ' || m.sourceeffectivetime || ' of Edition module ' || a.moduleid || ' as per MDRS', a.id, 'rvfph_prospective_.moduledependencyrefset_s' FROM rvfph_prospective_.moduledependencyrefset_s AS a, rvfph_prospective_.moduledependencyrefset_s AS m WHERE m.moduleid = 'rvfph_moduleid_' AND m.effectivetime = 'rvfph_version_' AND m.active = 1 AND a.moduleid = m.moduleid AND (a.effectivetime > m.sourceeffectivetime)",
-    "INSERT INTO qa_result (run_id, assertion_id, concept_id, details, component_id, table_name) SELECT 424242424242424242, 'rvfph_assertionuuid_', a.moduleid, 'moduledependencyrefset: Component moduleId: ' || a.moduleid || ' is not a valid module defined as per MDRS', a.id, 'rvfph_prospective_.moduledependencyrefset_s' FROM rvfph_prospective_.moduledependencyrefset_s AS a WHERE NOT a.moduleid IN (SELECT m.moduleid FROM rvfph_prospective_.moduledependencyrefset_s AS m WHERE m.active = 1 UNION SELECT n.referencedcomponentid FROM rvfph_prospective_.moduledependencyrefset_s AS n WHERE n.active = 1)"
+    "INSERT INTO qa_result (run_id, assertion_id, concept_id, details, component_id, table_name) SELECT 424242424242424242, 'rvfph_assertionuuid_', a.moduleid, 'moduledependencyrefset: Component moduleId: ' || a.moduleid || ' is not a valid module defined as per MDRS', a.id, 'rvfph_prospective_.moduledependencyrefset_s' FROM rvfph_prospective_.moduledependencyrefset_s AS a WHERE a.active = 1 AND NOT a.moduleid IN (SELECT m.moduleid FROM rvfph_prospective_.moduledependencyrefset_s AS m WHERE m.active = 1 UNION SELECT n.referencedcomponentid FROM rvfph_prospective_.moduledependencyrefset_s AS n WHERE n.active = 1)"
    ]
   },
   "64bbc7e6-b856-4eb8-be3e-8f154cf8a452": {
@@ -2712,12 +2713,12 @@
   },
   "c779d282-3c4d-4c16-a8a6-8d1a621b247d": {
    "file": "file-centric-snapshot-simple-refset-valid-key.sql",
-   "sha256": "33cb3f48f4e0819c",
+   "sha256": "a88afd5d3eb83e54",
    "text": "There is a 1:1 relationship between the id and the key values in the SIMPLE REFSET snapshot.",
    "keywords": "file-centric-validation",
    "severity": "",
    "statements": [
-    "INSERT INTO qa_result (run_id, assertion_id, concept_id, details, component_id, table_name) SELECT 424242424242424242, 'rvfph_assertionuuid_', a.referencedcomponentid, 'Refset id:' || a.refsetid || ' and referencedcomponent Id:' || a.referencedcomponentid || ' are duplicated in the simple refset snapshot file.', ANY_VALUE(a.id) AS id, 'rvfph_prospective_.simplerefset_s' FROM rvfph_prospective_.simplerefset_s AS a GROUP BY a.refsetid, a.referencedcomponentid HAVING COUNT(a.id) > 1"
+    "INSERT INTO qa_result (run_id, assertion_id, concept_id, details, component_id, table_name) SELECT 424242424242424242, 'rvfph_assertionuuid_', a.referencedcomponentid, 'Refset id:' || a.refsetid || ' and referencedcomponent Id:' || a.referencedcomponentid || ' are duplicated in the simple refset snapshot file.', ANY_VALUE(a.id) AS id, 'rvfph_prospective_.simplerefset_s' FROM rvfph_prospective_.simplerefset_s AS a WHERE a.active = '1' GROUP BY a.refsetid, a.referencedcomponentid HAVING COUNT(a.id) > 1"
    ]
   },
   "6a407415-8415-4870-a6ef-b5bc22f73c1f": {
@@ -4349,9 +4350,9 @@
  },
  "pack": {
   "name": "international",
-  "version": "2026.07.27",
+  "version": "2026.09.30",
   "corpusRef": "",
-  "digest": "sha256:d6f0a930e8acd55f223b32c8ba701e071f98834053139b7d1aea914beb218518",
+  "digest": "sha256:ce0bab23187f45f9feaa55a424f46f6708e4dd38f8f0deb431bc0a0e1781c6d9",
   "assertions": 360
  }
 }

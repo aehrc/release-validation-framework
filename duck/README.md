@@ -33,19 +33,24 @@ report of the wrong thing.
 
 ## Republishing
 
-Required whenever `ASSERTIONS_REF` in `checkout-resources.sh` moves. The build
-will tell you: `mvn test` fails in `BundledStoreMatchesCorpusTest` naming the
-scripts that differ.
+Required whenever `ASSERTIONS_REF` in `checkout-resources.sh` moves, and
+whenever a file under `assertions-au/scripts` changes (the AU patch set that
+`checkout-resources.sh` overlays on the pinned clone; see
+`assertions-au/README.md`). The build will tell you: `mvn test` fails in
+`BundledStoreMatchesCorpusTest` naming the scripts that differ.
 
 The publisher lives in `aehrc/rvf` under `duck/`. Build its pinned environment
 first — this is not optional, see above:
 
     uv venv --python 3.12 /tmp/duckenv
-    uv pip install --python /tmp/duckenv/bin/python duckdb==1.5.5 sqlglot==30.15.0 defusedxml
+    uv pip install --python /tmp/duckenv/bin/python duckdb==1.5.5 sqlglot==30.18.0 defusedxml
+
+sqlglot is pinned to what `aehrc/rvf`'s `publish-pack.yml` uses; a pack built by
+a different transpiler is refused at merge.
 
 Then, from a checkout of `aehrc/rvf`:
 
-    ./checkout-resources.sh          # in THIS repo, so the corpus is at the pin
+    ./checkout-resources.sh          # in THIS repo: corpus at the pin, AU overlay applied
 
     cd <aehrc/rvf>/duck
     /tmp/duckenv/bin/python publish_store.py \
@@ -54,17 +59,18 @@ Then, from a checkout of `aehrc/rvf`:
       --ddl            <this repo>/src/main/resources/sql/create-tables-mysql.sql \
       --manifest-root  <this repo>/snomed-release-validation-assertions \
       --no-derive-uuids \
+      --pack-version   2026.09.30 \
       --out            <this repo>/src/main/resources/duck/store.json
 
     cd <this repo> && mvn -o test -Dtest=BundledStoreMatchesCorpusTest
 
-Expect it to report `assertions 360 / statements 819`, a first line naming the
+Expect it to report `assertions 360 / statements 820`, a first line naming the
 store's identity, and ~93 scripts listed as "not in manifest, skipped". Those
 are corpus scripts no manifest entry declares, so RVF never runs them on either
 engine. The publisher **refuses to write a store with zero assertions** — an
 empty store reports no findings and therefore passes every validation.
 
-    pack         international 2026.07.27 sha256:d6f0a930e8acd55f (corpus 0160dd2ee830)
+    pack         international 2026.09.30 sha256:ce0bab23187f45f9 (corpus not a checkout)
 
 The version is the **assertion corpus's own commit date**, not the build's: a
 rebuild of unchanged inputs must produce the same identity, and dates are
@@ -74,6 +80,17 @@ assertion reads — so it answers "would this run the same SQL", and the engine
 **recomputes** it on load rather than repeating it. A store edited after
 publication is refused, naming both digests. Pass `--pack-version` when the
 corpus is not a git checkout; the publisher refuses to invent one.
+
+**Always pass `--pack-version` for this repository's store.** Left to derive
+it, the publisher takes the clone's commit date - `2026.07.27` at this pin -
+which the AU overlay does not change, so the patched store would claim the
+same version as the unpatched one while running different SQL for 7
+assertions. It is `2026.09.30`, the date of the AU patch set, and must stay
+later than `2026.07.27`: the pack is ordered by version ("requires at least"),
+so reusing or predating it would let the unpatched store count as the same or
+newer pack. With an explicit version the identity line reads
+`corpus not a checkout`, because no commit ref is recorded. Bump the version
+again on the next change to `assertions-au/`.
 
 ## The two inputs that are not the corpus
 
