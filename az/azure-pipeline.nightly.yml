@@ -133,6 +133,31 @@ parameters:
     displayName: 'Previous release blob name, or empty for a first-time release'
     type: string
     default: ''
+  # The AU modules. Components outside them are the international content an
+  # edition package carries, so their findings are SI's backlog, not AU's.
+  #
+  # Read by three phases, differently:
+  #   SQL    - the one assertion that branches on <INCLUDED_MODULES>
+  #   Drools - findings are kept only when the flagged COMPONENT is in these
+  #            modules (post-execution filter, DroolsRF2Validator)
+  #   MRCM   - domain/range/cardinality/concrete checks are filtered to these
+  #            modules; SEP and Lateralizable are SKIPPED outright by the
+  #            upstream validator until our fork filters them instead.
+  #
+  # Derived from the release, not remembered: the only two modules that declare
+  # their own dependencies in the MDRS. 900062011000036108 (AMT) and the other
+  # retired AU modules own no components.
+  - name: includedModules
+    displayName: 'AU module ids (comma separated), or empty to report every module'
+    type: string
+    default: '32506021000036107,351000168100'
+  # Binds <MODULEID> in the MDRS assertions. Unset, RVF falls back to the
+  # international core module and asks whether 900000000000207008 has an MDRS
+  # row at this release's date - it never will, so every MDRS row was reported.
+  - name: defaultModuleId
+    displayName: 'The edition module the MDRS assertions check'
+    type: string
+    default: '32506021000036107'
   - name: waitMinutes
     displayName: 'Minutes to wait for the validation to finish'
     type: number
@@ -515,6 +540,13 @@ stages:
                   # a green report that skipped the entire phase.
                   -F 'enableMRCMValidation=${{ parameters.enableMRCM }}'
                   -F 'releaseAsAnEdition=true'
+                  -F 'defaultModuleId=${{ parameters.defaultModuleId }}'
+                  # The release date. MRCM's Lateralizable checks only look at
+                  # concepts dated to it, and Drools treats components carrying
+                  # it as unpublished, so the authoring-time rules that skip
+                  # published content police this release's new content.
+                  # Without it every component reads as published.
+                  -F 'effectiveTime=$(release.version)'
                   -F 'failureExportMax=100'
                 )
                 PREV='$(previousRelease)'
@@ -527,6 +559,14 @@ stages:
                   # run is still green, which is why the step before this one
                   # warns rather than staying quiet about it.
                   echo "no previous release - release-type assertions will not execute"
+                fi
+
+                # Only when non-empty. RVF splits an empty string into one empty
+                # module id, which renders as `IN ()` and breaks the SQL.
+                MODULES='${{ parameters.includedModules }}'
+                if [ -n "$MODULES" ]; then
+                  ARGS+=( -F "includedModules=$MODULES" )
+                  echo "included modules: $MODULES"
                 fi
 
                 # A pack pinned for THIS run only. The deployment's own pins are
