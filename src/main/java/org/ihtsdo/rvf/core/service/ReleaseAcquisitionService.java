@@ -234,7 +234,7 @@ public class ReleaseAcquisitionService {
 
 		Set<ModuleMetadata> dependencies;
 		try {
-			dependencies = moduleStorageCoordinator.getDependencies(mdrsRows, expectedModules, true);
+			dependencies = findDependencies(mdrsRows, expectedModules, true);
 		} catch (ModuleStorageCoordinatorException e) {
 			throw new IOException("Failed to load dependencies via given MDRS", e);
 		}
@@ -385,7 +385,7 @@ public class ReleaseAcquisitionService {
 		if (validationConfig.getIncludedModules() != null) {
 			expectedModules.addAll(Arrays.stream(validationConfig.getIncludedModules().split(",")).map(String::trim).toList());
 		}
-		Set<ModuleMetadata> dependencies = moduleStorageCoordinator.getDependencies(mdrsRows, expectedModules, false);
+		Set<ModuleMetadata> dependencies = findDependencies(mdrsRows, expectedModules, false);
 		if (!CollectionUtils.isEmpty(dependencies)) {
 			dependencies.forEach(dependency -> {
 				logger.info("Found previous dependency effective time: IdentifyingModuleId {}, EffectiveTime {}", dependency.getIdentifyingModuleId(), dependency.getEffectiveTimeString());
@@ -393,6 +393,33 @@ public class ReleaseAcquisitionService {
 					dependency.getIdentifyingModuleId(),
 					dependency.getEffectiveTimeString());
 			});
+		}
+	}
+
+	/**
+	 * The module store's packages matching an MDRS, or none if the store cannot
+	 * be read.
+	 *
+	 * <p>Same defect, same remedy as {@link #findModuleMetadataByFilename}: the
+	 * store answers by listing its directory, and for a directory that does not
+	 * exist that listing throws {@code NullPointerException: Cannot read the
+	 * array length because "array" is null} instead of finding nothing.
+	 * {@code getDependencies} returns early without listing when
+	 * {@code expectedModules} is empty, so this only bites once a run names its
+	 * modules - which is how it surfaced: the AU nightly began sending
+	 * {@code includedModules} and every run then died in acquisition, before any
+	 * assertion executed.
+	 *
+	 * <p>Resolving none is exactly what such a deployment resolved before the
+	 * modules were named, so it changes no result; it only stops the run dying.
+	 */
+	private Set<ModuleMetadata> findDependencies(Set<RF2Row> mdrsRows, Set<String> expectedModules, boolean download)
+			throws ModuleStorageCoordinatorException {
+		try {
+			return moduleStorageCoordinator.getDependencies(mdrsRows, expectedModules, download);
+		} catch (RuntimeException e) {
+			logger.warn("Module Storage Coordinator could not list releases ({}); resolving no dependencies from it.", e.toString());
+			return Collections.emptySet();
 		}
 	}
 
