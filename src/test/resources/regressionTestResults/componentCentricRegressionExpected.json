@@ -1588,7 +1588,7 @@
       "tableName" : "rvf_regression_test_prospective.complexmaprefset_s",
       "skipModuleCheck" : false
     } ],
-    "totalFailed" : 67
+    "totalFailed" : 65
   }, {
     "assertionName" : "IDs must be unique in the Simple Refset Snapshot file.",
     "assertionUuid" : "1cd8b7f9-5730-4db9-b508-13575825b28f",
