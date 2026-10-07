@@ -1,3 +1,197 @@
+--- a/common-authoring/concept-active-state/active-concept-parents-product-and-physical-object/ParentsProductAndPhysicalObject.drl
++++ b/common-authoring/concept-active-state/active-concept-parents-product-and-physical-object/ParentsProductAndPhysicalObject.drl
+@@ -10,12 +10,19 @@
+ global java.util.List invalidContent
+ global ConceptService conceptService
+ 
++// AU PATCH: a drug-device combination product is BOTH a product and a physical
++// object by definition, so being under both top-levels is the model, not an
++// error. Exempt 411115002 |Drug-device combination product| and its
++// descendants; anything else under both top-levels is still reported - which
++// is how a drug-device modelled without that parent gets caught.
+ rule "Active concept has top level parents that are both (product) and (physical object)."
+ 	dialect "mvel"
+ 	when
+ 		c : Concept(active)
+ 		topLevelHierarchies : ArrayList() from collect( String() from conceptService.findTopLevelHierarchiesOfConcept(c))
+ 		Concept(ConceptHelper.containsAnyConcept(topLevelHierarchies,"373873005","260787004"))
++		statedAncestors : ArrayList() from collect( String() from conceptService.findStatedAncestorsOfConcept(c) )
++		eval(c.id != "411115002" && !(statedAncestors contains "411115002"))
+ 	then
+ 		InvalidContent invalid = new InvalidContent("566e1632-e29c-4646-8933-76328936458b",
+ 				c, "Active concept has top level parents that are both (product) and (physical object).", Severity.WARNING)
+--- a/common-authoring/concept-active-state/active-concept-parents-product-and-physical-object/test-cases.json
++++ b/common-authoring/concept-active-state/active-concept-parents-product-and-physical-object/test-cases.json
+@@ -1,8 +1,8 @@
+ {
+     "givenConcepts": [
+         {
+-            "id": "138875005", // Root concept
+-            "active" : true,
++            "id": "138875005",
++            "active": true,
+             "descriptions": [
+                 {
+                     "id": "1",
+@@ -12,8 +12,8 @@
+             ]
+         },
+         {
+-            "id": "116680003", // Is A
+-            "active" : true,
++            "id": "116680003",
++            "active": true,
+             "descriptions": [
+                 {
+                     "id": "1",
+@@ -24,7 +24,7 @@
+         },
+         {
+             "id": "373873005",
+-            "active" : true,
++            "active": true,
+             "descriptions": [
+                 {
+                     "id": "2",
+@@ -36,7 +36,7 @@
+                 {
+                     "id": "1",
+                     "destinationId": "138875005",
+-                    "typeId": "116680003", // is-a
++                    "typeId": "116680003",
+                     "active": true,
+                     "characteristicTypeId": "900000000000010007"
+                 }
+@@ -44,7 +44,7 @@
+         },
+         {
+             "id": "260787004",
+-            "active" : true,
++            "active": true,
+             "descriptions": [
+                 {
+                     "id": "2",
+@@ -56,7 +56,7 @@
+                 {
+                     "id": "2",
+                     "destinationId": "138875005",
+-                    "typeId": "116680003", // is-a
++                    "typeId": "116680003",
+                     "active": true,
+                     "characteristicTypeId": "900000000000010007"
+                 }
+@@ -64,7 +64,7 @@
+         },
+         {
+             "id": "top3",
+-            "active" : true,
++            "active": true,
+             "descriptions": [
+                 {
+                     "id": "3",
+@@ -76,46 +76,93 @@
+                 {
+                     "id": "2",
+                     "destinationId": "138875005",
+-                    "typeId": "116680003", // is-a
++                    "typeId": "116680003",
+                     "active": true
+                 }
+             ]
++        },
++        {
++            "id": "411115002",
++            "active": true,
++            "descriptions": [
++                {
++                    "id": "411",
++                    "term": "Drug-device combination product (product)",
++                    "conceptId": "411115002"
++                }
++            ],
++            "relationships": [
++                {
++                    "id": "411a",
++                    "destinationId": "373873005",
++                    "typeId": "116680003",
++                    "active": true,
++                    "characteristicTypeId": "900000000000010007"
++                },
++                {
++                    "id": "411b",
++                    "destinationId": "260787004",
++                    "typeId": "116680003",
++                    "active": true,
++                    "characteristicTypeId": "900000000000010007"
++                }
++            ]
+         }
+     ],
+     "assertConceptsPass": [
+         {
+             "id": "testCase3",
+-            "active" : false,
++            "active": false,
+             "relationships": [
+                 {
+                     "id": "1",
+                     "destinationId": "373873005",
+-                    "typeId": "116680003", // is-a
++                    "typeId": "116680003",
+                     "active": true
+                 }
+             ]
++        },
++        {
++            "id": "drugDevice",
++            "active": true,
++            "descriptions": [
++                {
++                    "id": "dd",
++                    "term": "Nicotine 25 mg / 16 hours patch (product)",
++                    "conceptId": "drugDevice"
++                }
++            ],
++            "relationships": [
++                {
++                    "id": "dd1",
++                    "destinationId": "411115002",
++                    "typeId": "116680003",
++                    "active": true,
++                    "characteristicTypeId": "900000000000010007"
++                }
++            ]
+         }
+     ],
+     "assertConceptsFail": [
+-    {
++        {
+             "id": "1",
+-            "active" : true,
++            "active": true,
+             "relationships": [
+                 {
+                     "id": "2",
+                     "destinationId": "373873005",
+-                    "typeId": "116680003", // is-a
++                    "typeId": "116680003",
+                     "active": true,
+                     "characteristicTypeId": "900000000000010007"
+                 },
+                 {
+                     "id": "3",
+                     "destinationId": "260787004",
+-                    "typeId": "116680003", // is-a
++                    "typeId": "116680003",
+                     "active": true,
+                     "characteristicTypeId": "900000000000010007"
+                 }
+             ]
+         }
+     ]
+-}
+\ No newline at end of file
++}
 --- a/common-authoring/relationships/axioms-contain-only-is-a-reletionship/AxiomsContainOnlyIsaRelationship.drl
 +++ b/common-authoring/relationships/axioms-contain-only-is-a-reletionship/AxiomsContainOnlyIsaRelationship.drl
 @@ -13,7 +13,10 @@

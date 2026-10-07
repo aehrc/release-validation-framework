@@ -322,3 +322,14 @@ rather than the old. Nothing here is a fork we intend to carry;
 `apply.sh` refuses to apply a patch whose `.orig` no longer matches your file,
 precisely because we would rather they lived upstream.
 
+
+## 9. Product + physical object (`566e1632`) should exempt drug-device combinations
+
+`ParentsProductAndPhysicalObject.drl` reports every concept whose top-level
+hierarchies are exactly {product, physical object}. A drug-device combination
+product is both by definition, and the international edition models 17 such
+concepts itself under `411115002 |Drug-device combination product|`. Patched to
+exempt 411115002 and its descendants, which keeps the rule doing useful work:
+on the AU 20260930 build it goes from 376 AU findings to 16, and those 16 are
+drug-devices modelled WITHOUT the 411115002 parent - the content defect the rule
+should be pointing at.

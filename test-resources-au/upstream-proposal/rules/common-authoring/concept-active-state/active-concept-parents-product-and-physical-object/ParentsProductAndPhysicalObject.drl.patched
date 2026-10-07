@@ -1,0 +1,31 @@
+import org.ihtsdo.drools.domain.Concept
+import org.ihtsdo.drools.domain.Constants
+import org.ihtsdo.drools.response.InvalidContent
+import org.ihtsdo.drools.helper.ConceptHelper
+import org.ihtsdo.drools.response.Severity
+import org.ihtsdo.drools.service.ConceptService
+import java.util.Collection
+import java.util.ArrayList
+
+global java.util.List invalidContent
+global ConceptService conceptService
+
+// AU PATCH: a drug-device combination product is BOTH a product and a physical
+// object by definition, so being under both top-levels is the model, not an
+// error. Exempt 411115002 |Drug-device combination product| and its
+// descendants; anything else under both top-levels is still reported - which
+// is how a drug-device modelled without that parent gets caught.
+rule "Active concept has top level parents that are both (product) and (physical object)."
+	dialect "mvel"
+	when
+		c : Concept(active)
+		topLevelHierarchies : ArrayList() from collect( String() from conceptService.findTopLevelHierarchiesOfConcept(c))
+		Concept(ConceptHelper.containsAnyConcept(topLevelHierarchies,"373873005","260787004"))
+		statedAncestors : ArrayList() from collect( String() from conceptService.findStatedAncestorsOfConcept(c) )
+		eval(c.id != "411115002" && !(statedAncestors contains "411115002"))
+	then
+		InvalidContent invalid = new InvalidContent("566e1632-e29c-4646-8933-76328936458b",
+				c, "Active concept has top level parents that are both (product) and (physical object).", Severity.WARNING)
+		invalid.ignorePublishedCheck()
+		invalidContent.add(invalid);
+end
