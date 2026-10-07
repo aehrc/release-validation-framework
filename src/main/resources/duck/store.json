@@ -707,12 +707,12 @@
   },
   "6614ff12-fca2-42b7-a5da-ea26353979fe": {
    "file": "component-centric-snapshot-description-valid-characters.sql",
-   "sha256": "14909458cf9420f5",
+   "sha256": "2d3510db2f24d925",
    "text": "Active description of active concept consists of valid characters.",
    "keywords": "component-centric-validation",
    "severity": "",
    "statements": [
-    "INSERT INTO qa_result (run_id, assertion_id, concept_id, details, component_id, table_name) SELECT 424242424242424242, 'rvfph_assertionuuid_', a.conceptid, 'DESCRIPTION ID=' || a.id || ': FSN=' || a.term || ' contains invalid character.', a.id, 'rvfph_prospective_.description_d' FROM rvfph_prospective_.description_d AS a, rvfph_prospective_.concept_s AS b WHERE a.active = 1 AND b.active = 1 AND a.conceptid = b.id AND a.typeid = '900000000000003001' AND REGEXP_MATCHES(term, '[\\\t\r\n\\x1a@$#]') AND a.effectivetime = (SELECT MAX(z.effectivetime) FROM rvfph_prospective_.description_d AS z WHERE z.id = a.id) AND NOT ISKINDOF_CR(a.conceptid, 373873005) AND NOT ISKINDOF_CR(a.conceptid, 774167006) AND NOT ISKINDOF_CR(a.conceptid, 260787004)",
+    "INSERT INTO qa_result (run_id, assertion_id, concept_id, details, component_id, table_name) SELECT 424242424242424242, 'rvfph_assertionuuid_', a.conceptid, 'DESCRIPTION ID=' || a.id || ': FSN=' || a.term || ' contains invalid character.', a.id, 'rvfph_prospective_.description_d' FROM rvfph_prospective_.description_d AS a, rvfph_prospective_.concept_s AS b WHERE a.active = 1 AND b.active = 1 AND a.conceptid = b.id AND a.typeid = '900000000000003001' AND REGEXP_MATCHES(term, '[\\\t\r\n\\x1a@$#]') AND a.effectivetime = (SELECT MAX(z.effectivetime) FROM rvfph_prospective_.description_d AS z WHERE z.id = a.id) AND NOT a.conceptid IN ('373873005', '774167006', '260787004') AND NOT a.conceptid IN (WITH RECURSIVE ancestor(conceptid, ancestorid) AS (SELECT r.sourceid, r.destinationid FROM rvfph_prospective_.relationship_s AS r WHERE r.active = 1 AND r.typeid = '116680003' AND r.sourceid IN (SELECT f.conceptid FROM rvfph_prospective_.description_d AS f WHERE f.active = 1 AND f.typeid = '900000000000003001' AND REGEXP_MATCHES(f.term, '[\\\t\r\n\\x1a@$#]')) UNION SELECT an.conceptid, r.destinationid FROM ancestor AS an JOIN rvfph_prospective_.relationship_s AS r ON r.sourceid = an.ancestorid WHERE r.active = 1 AND r.typeid = '116680003') SELECT conceptid FROM ancestor WHERE ancestorid IN ('373873005', '774167006', '260787004'))",
     "INSERT INTO qa_result (run_id, assertion_id, concept_id, details, component_id, table_name) SELECT 424242424242424242, 'rvfph_assertionuuid_', a.conceptid, 'DESCRIPTION ID=' || a.id || ': Synonym=' || a.term || ' contains invalid character.', a.id, 'rvfph_prospective_.description_d' FROM rvfph_prospective_.description_d AS a, rvfph_prospective_.concept_s AS b WHERE a.active = 1 AND b.active = 1 AND a.conceptid = b.id AND a.typeid = '900000000000013009' AND REGEXP_MATCHES(term, '[\\\t\r\n\\x1a@$]') AND a.effectivetime = (SELECT MAX(z.effectivetime) FROM rvfph_prospective_.description_d AS z WHERE z.id = a.id)"
    ]
   },
@@ -4350,9 +4350,9 @@
  },
  "pack": {
   "name": "international",
-  "version": "2026.09.30",
+  "version": "2026.10.07",
   "corpusRef": "",
-  "digest": "sha256:ce0bab23187f45f9feaa55a424f46f6708e4dd38f8f0deb431bc0a0e1781c6d9",
+  "digest": "sha256:81002053cc1adf4f9e2a3883507f346b4ccfcdc86a907f0860267a202b260204",
   "assertions": 360
  }
 }

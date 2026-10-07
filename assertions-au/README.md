@@ -9,13 +9,13 @@ of leaving a stray file no manifest names. UUIDs, file names and manifest
 entries are unchanged: RVF runs the AU text under the SI identity.
 
 The bundled DuckDB store (`../src/main/resources/duck/store.json`) is published
-from the overlaid corpus, pack `international 2026.09.30`
-(`sha256:ce0bab23187f45f9`); see `../duck/README.md` for why the version is
+from the overlaid corpus, pack `international 2026.10.07`
+(`sha256:81002053cc1adf4f`); see `../duck/README.md` for why the version is
 explicit. Changing a file here means republishing it.
 
 Rulings are those of AU nightly triage run 1789600580440 (`R1`, `R3`, `R4`, `R7`,
 `R9`). Counts are from executing the published store, before (`2026.07.27`) and
-after (`2026.09.30`), over the Parquet materialisation of
+after (`2026.09.30`; `6614ff12` re-measured at `2026.10.07`), over the Parquet materialisation of
 `SnomedCT_ManagedServiceAU_DAILYBUILD_BETA_AU1000036_20260930T120000Z`, bound
 the way `DuckBinder` binds them for the nightly's configuration:
 `includedModules=32506021000036107,351000168100`,
@@ -119,9 +119,11 @@ release. Where the old nightly configuration (no `includedModules`, no
 - **ruling** R3: the rule does not apply to AMT. The FSN statement exempts
   descendants-or-self of `373873005`, `774167006`, `260787004`.
 - **before** (FSN statement) `... and term REGEXP '[\\\t\r\n\Z\@$#]' and <latest delta row>`
-- **after** the same `and not isKindOf_cr(a.conceptid, 373873005) and not isKindOf_cr(a.conceptid, 774167006) and not isKindOf_cr(a.conceptid, 260787004)`
-  (the closure macros amtv4 uses; they are store `ports`, installed for every
-  pack). The synonym statement is unchanged.
+- **after** the same, plus `and a.conceptid not in (<the three roots>) and a.conceptid not in (<recursive CTE: inferred IS A ancestors of every concept with a flagged FSN, kept where the ancestor is one of the three roots>)`.
+  Not the `isKindOf_cr` macros amtv4 uses: those come from the AMT
+  pre-requisites, and on the MySQL engine an international-only run has no
+  such function, so the assertion failed to execute (`-1` findings, image build
+  16924). The CTE runs on both engines. The synonym statement is unchanged.
 - **measured** 0 -> 0 on this build (the check reads the delta, which has no
   such FSN). With every active snapshot FSN injected as a delta row: 4 -> 0 (the
   `Lot420 Gelato #33` family, same shape as the validated build's 4 `Terphogz

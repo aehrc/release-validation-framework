@@ -59,7 +59,7 @@ Then, from a checkout of `aehrc/rvf`:
       --ddl            <this repo>/src/main/resources/sql/create-tables-mysql.sql \
       --manifest-root  <this repo>/snomed-release-validation-assertions \
       --no-derive-uuids \
-      --pack-version   2026.09.30 \
+      --pack-version   2026.10.07 \
       --out            <this repo>/src/main/resources/duck/store.json
 
     cd <this repo> && mvn -o test -Dtest=BundledStoreMatchesCorpusTest
@@ -70,7 +70,7 @@ are corpus scripts no manifest entry declares, so RVF never runs them on either
 engine. The publisher **refuses to write a store with zero assertions** — an
 empty store reports no findings and therefore passes every validation.
 
-    pack         international 2026.09.30 sha256:ce0bab23187f45f9 (corpus not a checkout)
+    pack         international 2026.10.07 sha256:81002053cc1adf4f (corpus not a checkout)
 
 The version is the **assertion corpus's own commit date**, not the build's: a
 rebuild of unchanged inputs must produce the same identity, and dates are
@@ -85,7 +85,7 @@ corpus is not a git checkout; the publisher refuses to invent one.
 it, the publisher takes the clone's commit date - `2026.07.27` at this pin -
 which the AU overlay does not change, so the patched store would claim the
 same version as the unpatched one while running different SQL for 7
-assertions. It is `2026.09.30`, the date of the AU patch set, and must stay
+assertions. It is `2026.10.07`, the date of the latest AU patch, and must stay
 later than `2026.07.27`: the pack is ordered by version ("requires at least"),
 so reusing or predating it would let the unpatched store count as the same or
 newer pack. With an explicit version the identity line reads
