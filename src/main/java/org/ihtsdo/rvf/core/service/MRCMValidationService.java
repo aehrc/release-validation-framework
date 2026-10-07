@@ -31,6 +31,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.snomed.quality.validator.mrcm.SEPRefsetValidationService.SEPAssertionType;
 @Service
@@ -250,6 +251,10 @@ public class MRCMValidationService {
 			testRunItem = createTestRunItemWithFailures(assertion, contentType, maxFailureExports);
 			if (testRunItem != null) {
 				warnedAssertions.add(testRunItem);
+			} else {
+				// No violation survived (e.g. all whitelisted): it passed. Never
+				// drop it - an assertion missing from every bucket is invisible.
+				passedAssertions.add(createTestRunItem(assertion, contentType));
 			}
 		}
 
@@ -258,6 +263,8 @@ public class MRCMValidationService {
 			testRunItem = createTestRunItemWithFailures(assertion, contentType, maxFailureExports);
 			if (testRunItem != null) {
 				failedAssertions.add(testRunItem);
+			} else {
+				passedAssertions.add(createTestRunItem(assertion, contentType));
 			}
 		}
 
@@ -297,8 +304,27 @@ public class MRCMValidationService {
 		return testRunItem;
 	}
 
+	/**
+	 * Every concept that violates the assertion: this release's first, then the
+	 * ones already published, each once.
+	 *
+	 * <p>The validator splits violations by effectiveTime into current and
+	 * previous, and this used to report only the current. An assertion whose
+	 * violations were all previously published was then dropped from the report
+	 * altogether. AU ruling: a violation is reported whenever it was published.
+	 */
+	private static List<ConceptResult> violatedConcepts(Assertion mrcmAssertion) {
+		Map<String, ConceptResult> byId = new LinkedHashMap<>();
+		Stream.of(mrcmAssertion.getCurrentViolatedConcepts(), mrcmAssertion.getPreviousViolatedConcepts())
+				.filter(Objects::nonNull)
+				.flatMap(List::stream)
+				.forEach(concept -> byId.putIfAbsent(concept.getId(), concept));
+		return new ArrayList<>(byId.values());
+	}
+
 	private TestRunItem createTestRunItemWithFailures(Assertion mrcmAssertion, ContentType contentType, int failureExportMax) {
-		int failureCount = mrcmAssertion.getCurrentViolatedConceptIds().size();
+		List<ConceptResult> violated = violatedConcepts(mrcmAssertion);
+		int failureCount = violated.size();
 		if (failureCount == 0) {
 			if (mrcmAssertion.getCurrentViolatedReferenceSetMembers() != null) {
 				failureCount = mrcmAssertion.getCurrentViolatedReferenceSetMembers().size();
@@ -316,25 +342,25 @@ public class MRCMValidationService {
 		List<FailureDetail> failedDetails = new ArrayList<>(firstNCount);
 		if (LateralizableRefsetValidationService.ASSERTION_ID_MEMBERS_NEED_TO_BE_REMOVED_FROM_LATERALIZABLE_REFSET.equals(mrcmAssertion.getUuid().toString())) {
 			for (int i = 0; i < firstNCount; i++) {
-				ConceptResult conceptResult = mrcmAssertion.getCurrentViolatedConcepts().get(i);
+				ConceptResult conceptResult = violated.get(i);
 				String conceptId = conceptResult.getId();
 				failedDetails.add(new FailureDetail(conceptId, String.format(mrcmAssertion.getDetails(), conceptId, "removed from"), conceptResult.getFsn()).setFullComponent(getAdditionalFields(conceptResult)).setComponentId(conceptId));
 			}
 		} else if (LateralizableRefsetValidationService.ASSERTION_ID_CONCEPTS_NEED_TO_BE_ADDED_TO_LATERALIZABLE_REFSET.equals(mrcmAssertion.getUuid().toString())) {
 			for (int i = 0; i < firstNCount; i++) {
-				ConceptResult conceptResult = mrcmAssertion.getCurrentViolatedConcepts().get(i);
+				ConceptResult conceptResult = violated.get(i);
 				String conceptId = conceptResult.getId();
 				failedDetails.add(new FailureDetail(conceptId, String.format(mrcmAssertion.getDetails(), conceptId, "added to"), conceptResult.getFsn()).setFullComponent(getAdditionalFields(conceptResult)).setComponentId(conceptId));
 			}
 		} else if (Arrays.stream(SEPAssertionType.values()).map(SEPAssertionType::getUuid).collect(Collectors.toSet()).contains(mrcmAssertion.getUuid().toString())) {
 			for (int i = 0; i < firstNCount; i++) {
-				ConceptResult conceptResult = mrcmAssertion.getCurrentViolatedConcepts().get(i);
+				ConceptResult conceptResult = violated.get(i);
 				String conceptId = conceptResult.getId();
 				failedDetails.add(new FailureDetail(conceptId, String.format(mrcmAssertion.getDetails(), conceptId), conceptResult.getFsn()).setFullComponent(getAdditionalFields(conceptResult)).setComponentId(conceptId));
 			}
 		} else {
 			for (int i = 0; i < firstNCount; i++) {
-				ConceptResult concept = mrcmAssertion.getCurrentViolatedConcepts().get(i);
+				ConceptResult concept = violated.get(i);
 				String conceptId = concept.getId();
 				failedDetails.add(new FailureDetail(conceptId, mrcmAssertion.getDetails(), concept.getFsn()).setFullComponent(getAdditionalFields(concept)).setComponentId(conceptId));
 			}
@@ -362,7 +388,7 @@ public class MRCMValidationService {
 	private void archiveAll(Assertion mrcmAssertion, List<FailureArchiveRow> archiveRows) {
 		String assertionId = mrcmAssertion.getUuid() == null ? "" : mrcmAssertion.getUuid().toString();
 		String details = mrcmAssertion.getDetails();
-		List<ConceptResult> concepts = mrcmAssertion.getCurrentViolatedConcepts();
+		List<ConceptResult> concepts = violatedConcepts(mrcmAssertion);
 		if (concepts != null && !concepts.isEmpty()) {
 			for (ConceptResult concept : concepts) {
 				archiveRows.add(new FailureArchiveRow(archiveRunId, assertionId,
