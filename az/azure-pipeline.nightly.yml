@@ -158,6 +158,21 @@ parameters:
     displayName: 'The edition module the MDRS assertions check'
     type: string
     default: '32506021000036107'
+  # Where published releases live: <directory>/<yyyymmdd>/<one zip>. The
+  # nightly keeps the release a package was built on from here when RVF does
+  # not already hold it.
+  - name: publishedAccount
+    displayName: 'Storage account holding published releases'
+    type: string
+    default: 'ontoserverdevelop'
+  - name: publishedShare
+    displayName: 'File share holding published releases'
+    type: string
+    default: 'snomed-versioned-content'
+  - name: publishedDirectory
+    displayName: 'Directory of the edition on that share (dated subdirectories)'
+    type: string
+    default: 'prod/AU_32506021000036107'
   - name: waitMinutes
     displayName: 'Minutes to wait for the validation to finish'
     type: number
@@ -435,6 +450,7 @@ stages:
             condition: and(succeeded(), eq(variables['bundle.haveBundle'], 'true'))
             env:
               ACCESS_TOKEN: $(accessToken)
+              SOURCE_KEY: $(azure.accountKey.ontodevelop)
             inputs:
               targetType: 'inline'
               script: |
@@ -442,8 +458,7 @@ stages:
                 cd '$(workdir)'
 
                 # An explicit parameter wins, so a person re-running by hand can
-                # pin the comparison. Empty means "ask the server", which is the
-                # nightly's normal path.
+                # pin the comparison.
                 PREV='${{ parameters.previousRelease }}'
                 if [ -n "$PREV" ]; then
                   echo "previous release pinned by parameter: $PREV"
@@ -451,35 +466,32 @@ stages:
                   exit 0
                 fi
 
-                # The rule - same edition, newest effective time strictly before
-                # this one, release status ignored - lives in RVF so that this
-                # pipeline and the console cannot reach different conclusions
-                # about the same pair of releases.
-                HTTP="$(curl -sS -m 120 -o previous.json -w '%{http_code}' \
-                  -H "Authorization: Bearer $ACCESS_TOKEN" \
-                  --get --data-urlencode 'forFile=$(releaseName)' \
-                  '${{ parameters.rvfBaseUrl }}/releases/previous')"
+                # The package names the release it was built on (its MDRS Full
+                # history). That release is used, fetched from the share and kept
+                # if RVF does not hold it, and the run FAILS if it is not
+                # published yet - never silently compared against an older month.
+                # See ci/ensure_previous_release.py.
+                API='${{ parameters.rvfBaseUrl }}'
+                ACCOUNT='${{ parameters.publishedAccount }}'
+                SHARE='${{ parameters.publishedShare }}'
+                export API ACCOUNT SHARE
+                KEPT='curl -fsS -m 120 -H "Authorization: Bearer $ACCESS_TOKEN" "$API/releases" | python3 -c "import json,sys; print(\"\n\".join(json.load(sys.stdin)))"'
+                LIST='az storage file list --account-name "$ACCOUNT" --account-key "$SOURCE_KEY" --share-name "$SHARE" --path {dir} --query "[].name" -o tsv --only-show-errors 2>/dev/null || true'
+                FETCH='az storage file download --account-name "$ACCOUNT" --account-key "$SOURCE_KEY" --share-name "$SHARE" --path {dir}/{name} --dest . --only-show-errors >/dev/null && curl -fsS -m 1800 -H "Authorization: Bearer $ACCESS_TOKEN" -X POST "$API/releases/kept/{version}" -F file=@{name} && echo && rm -f {name}'
 
-                case "$HTTP" in
-                  204)
-                    # Nothing suitable is kept. That is legitimate for a genuine
-                    # first-time release, and a mistake the rest of the time, and
-                    # the report cannot tell the difference - the assertions are
-                    # simply absent. So it is a warning rather than silence.
-                    echo "##vso[task.logissue type=warning]RVF holds no earlier release of this edition, so release-type assertions will not run. Keep one with the rvf-keep-release pipeline."
-                    echo "##vso[task.setvariable variable=previousRelease]"
-                    ;;
-                  200)
-                    PREV="$(python3 -c 'import json;print(json.load(open("previous.json"))["previousRelease"])')"
-                    echo "resolved: $PREV"
-                    echo "##vso[task.setvariable variable=previousRelease]$PREV"
-                    ;;
-                  *)
-                    echo "##vso[task.logissue type=error]asking for the previous release returned $HTTP"
-                    cut -c1-300 previous.json || true
-                    exit 1
-                    ;;
-                esac
+                python3 '$(Build.SourcesDirectory)/ci/ensure_previous_release.py' \
+                  --package '$(releasePath)' \
+                  --module '${{ parameters.defaultModuleId }}' \
+                  --share-root '${{ parameters.publishedDirectory }}' \
+                  --kept-cmd "$KEPT" --list-cmd "$LIST" --fetch-and-keep-cmd "$FETCH" \
+                  | tee previous.log || {
+                    echo "##vso[task.logissue type=error]$(grep '^FAIL' previous.log || echo 'could not determine the previous release')"
+                    exit 1; }
+                PREV="$(sed -n 's/^previousRelease=//p' previous.log | tail -1)"
+                if [ -z "$PREV" ]; then
+                  echo "##vso[task.logissue type=warning]first release of this module: release-type assertions will not run"
+                fi
+                echo "##vso[task.setvariable variable=previousRelease]$PREV"
 
           - task: Bash@3
             displayName: 'Submit the validation'
