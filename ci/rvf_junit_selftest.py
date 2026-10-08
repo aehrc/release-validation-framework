@@ -135,18 +135,29 @@ def _():
         assert node.text and "LINK-X" in node.text, f"{node.tag} lost the link"
 
 
-@case("suites group by category and type, and hold every outcome")
+@case("tests group by testCategory, and a group holds every outcome")
 def _():
     root = convert(report(
-        failed=[item("a", 2, category="release-type-validation", test_type="SQL")],
-        passed=[item("b", 0, category="release-type-validation", test_type="SQL"),
-                item("c", 0, category="component-centric-validation", test_type="DROOL_RULES")],
+        failed=[item("a", 2, category="amtv4", test_type="SQL")],
+        passed=[item("b", 0, category="amtv4", test_type="SQL"),
+                item("c", 0, category="release-type-validation", test_type="SQL")],
     ))
     names = sorted(s.get("name") for s in root.findall("testsuite"))
-    assert names == ["rvf.component-centric-validation.DROOL_RULES",
-                     "rvf.release-type-validation.SQL"], names
-    mixed = [s for s in root.findall("testsuite") if s.get("name").endswith("SQL")][0]
-    assert mixed.get("tests") == "2" and mixed.get("failures") == "1", mixed.attrib
+    assert names == ["amtv4", "release-type-validation"], names
+    amt = [s for s in root.findall("testsuite") if s.get("name") == "amtv4"][0]
+    assert amt.get("tests") == "2" and amt.get("failures") == "1", amt.attrib
+    # Azure DevOps groups its Tests tab by classname ("Test file"), not by
+    # <testsuite>, so classname is what has to carry the category.
+    assert {c.get("classname") for c in amt.findall("testcase")} == {"amtv4"}
+
+
+@case("no testCategory (MRCM, Drools) groups by testType, not one catch-all")
+def _():
+    root = convert(report(passed=[item("m", 0, category=None, test_type="MRCM"),
+                                  item("d", 0, category="", test_type="DROOL_RULES"),
+                                  item("x", 0, category=None, test_type=None)]))
+    names = sorted(c.get("classname") for c in root.iter("testcase"))
+    assert names == ["DROOL_RULES", "MRCM", "uncategorised"], names
 
 
 @case("failure detail includes instances up to the limit")

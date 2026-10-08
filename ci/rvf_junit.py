@@ -55,14 +55,20 @@ def load_report(path: Path) -> dict:
 
 def classname(item: dict) -> str:
     """
-    JUnit groups by classname, and CI test tabs show it as the containing suite.
-    testCategory is RVF's own grouping (release-type-validation,
-    component-centric-validation, ...) and testType distinguishes SQL from
-    DROOL_RULES, so together they are the grouping a reader wants.
+    The group a test is shown under in the CI test tab: its testCategory.
+
+    Azure DevOps maps a JUnit testcase's classname to the "Test file" field,
+    and that - not the <testsuite> element - is what the Tests tab groups by
+    (Group by > Test file). So classname is the grouping a reader sees, and it
+    is testCategory alone: amtv4, release-type-validation, file-centric-
+    validation, ... A reader looking for the AMT checks finds them under
+    "amtv4" rather than "rvf.amtv4.SQL".
+
+    MRCM and Drools results carry no testCategory, so they fall back to their
+    testType (MRCM, DROOL_RULES) rather than all landing in one bucket.
     """
-    category = item.get("testCategory") or "uncategorised"
-    test_type = item.get("testType") or "UNKNOWN"
-    return f"rvf.{category}.{test_type}"
+    category = (item.get("testCategory") or "").strip()
+    return category or item.get("testType") or "uncategorised"
 
 
 def testcase_name(item: dict) -> str:
