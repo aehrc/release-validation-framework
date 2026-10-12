@@ -1,0 +1,449 @@
+diff --git a/src/main/java/org/snomed/quality/validator/mrcm/InferredHierarchy.java b/src/main/java/org/snomed/quality/validator/mrcm/InferredHierarchy.java
+new file mode 100644
+index 0000000..26366c5
+--- /dev/null
++++ b/src/main/java/org/snomed/quality/validator/mrcm/InferredHierarchy.java
+@@ -0,0 +1,146 @@
++package org.snomed.quality.validator.mrcm;
++
++import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
++import it.unimi.dsi.fastutil.longs.LongArrayList;
++import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
++import it.unimi.dsi.fastutil.longs.LongSet;
++import org.ihtsdo.otf.snomedboot.ReleaseImportException;
++import org.ihtsdo.otf.snomedboot.ReleaseImporter;
++import org.ihtsdo.otf.snomedboot.domain.ConceptConstants;
++import org.ihtsdo.otf.snomedboot.factory.ImpotentComponentFactory;
++import org.ihtsdo.otf.snomedboot.factory.LoadingProfile;
++import org.slf4j.Logger;
++import org.slf4j.LoggerFactory;
++
++import java.util.Optional;
++import java.util.Set;
++import java.util.regex.Matcher;
++import java.util.regex.Pattern;
++
++/**
++ * The inferred IS-A hierarchy and nothing else, for the STATED run's
++ * attribute-range check.
++ *
++ * <p>The stated run judges a source concept on its stated relationships, but
++ * whether the VALUE is in range is a question about where that value sits, and
++ * international content reaches many ranges only by classification:
++ * 35904009 is stated under 71388002 |Procedure| and classified under
++ * 386053000 |Evaluation procedure|. Asked of the stated index alone,
++ * {@code Interprets = 35904009} fails {@code << 386053000} and is a false
++ * positive.
++ *
++ * <p>Held as parent -> children ids, read from the active inferred IS-A rows
++ * of the Relationship file, rather than as a second query index: that is all
++ * a disjunction of {@code <<}, {@code <} and self needs, and it is a few tens
++ * of megabytes against the gigabytes an index costs.
++ */
++final class InferredHierarchy {
++
++	private static final Logger LOGGER = LoggerFactory.getLogger(InferredHierarchy.class);
++
++	private static final Pattern TERM = Pattern.compile("\\|[^|]*\\|");
++	private static final Pattern OR = Pattern.compile("\\s+OR\\s+");
++	private static final Pattern FOCUS = Pattern.compile("(<<|<)?\\s*(\\d{6,18})");
++
++	/** Only the Relationship file; no concepts, descriptions or refsets. */
++	private static final LoadingProfile INFERRED_RELATIONSHIPS_ONLY = LoadingProfile.light
++			.withoutConcepts()
++			.withoutDescriptions()
++			.withoutTextDefinitions()
++			.withoutIdentifiers()
++			.withoutAnyRefsets()
++			.withoutInferredAttributeMapOnConcept()
++			.withoutStatedRelationships()
++			.withRelationships();
++
++	private final Long2ObjectOpenHashMap<LongArrayList> children = new Long2ObjectOpenHashMap<>();
++
++	private InferredHierarchy() {
++	}
++
++	/**
++	 * Loads with the same importer mode the query index uses, so that across
++	 * several snapshots, or snapshots and a delta, each relationship counts in
++	 * its effective state only.
++	 */
++	static InferredHierarchy load(Set<String> extractedRF2FilesDirectories, boolean fullSnapshotRelease) throws ReleaseImportException {
++		long start = System.currentTimeMillis();
++		InferredHierarchy hierarchy = new InferredHierarchy();
++		IsAFactory factory = hierarchy.new IsAFactory();
++		ReleaseImporter importer = new ReleaseImporter();
++		if (fullSnapshotRelease) {
++			importer.loadSnapshotReleaseFiles(extractedRF2FilesDirectories.iterator().next(), INFERRED_RELATIONSHIPS_ONLY, factory, false);
++		} else if (RF2ReleaseFilesUtil.anyDeltaFilesPresent(extractedRF2FilesDirectories)) {
++			importer.loadEffectiveSnapshotAndDeltaReleaseFiles(extractedRF2FilesDirectories, INFERRED_RELATIONSHIPS_ONLY, factory, false);
++		} else {
++			importer.loadEffectiveSnapshotReleaseFiles(extractedRF2FilesDirectories, INFERRED_RELATIONSHIPS_ONLY, factory, false);
++		}
++		LOGGER.info("Inferred IS-A hierarchy for the stated range check: {} edges under {} parents in {} ms",
++				factory.edges, hierarchy.children.size(), System.currentTimeMillis() - start);
++		return hierarchy;
++	}
++
++	/**
++	 * The concepts {@code rangeConstraint} selects on this hierarchy, or empty
++	 * when it is not a disjunction of {@code << id}, {@code < id} and
++	 * {@code id} - every MRCM range constraint at the time of writing - in
++	 * which case the caller must keep the stated judgement.
++	 */
++	Optional<LongSet> conceptsInRange(String rangeConstraint) {
++		String expression = TERM.matcher(rangeConstraint).replaceAll(" ").trim();
++		if (expression.startsWith("(") && expression.endsWith(")")) {
++			expression = expression.substring(1, expression.length() - 1).trim();
++		}
++		LongSet selected = new LongOpenHashSet();
++		for (String part : OR.split(expression)) {
++			Matcher focus = FOCUS.matcher(part.trim());
++			if (!focus.matches()) {
++				return Optional.empty();
++			}
++			long conceptId = Long.parseLong(focus.group(2));
++			String operator = focus.group(1);
++			if (operator == null || "<<".equals(operator)) {
++				selected.add(conceptId);
++			}
++			if (operator != null) {
++				addDescendants(conceptId, selected);
++			}
++		}
++		return Optional.of(selected);
++	}
++
++	private void addDescendants(long conceptId, LongSet selected) {
++		LongArrayList pending = new LongArrayList();
++		pending.add(conceptId);
++		while (!pending.isEmpty()) {
++			LongArrayList direct = children.get(pending.popLong());
++			if (direct == null) {
++				continue;
++			}
++			for (int i = 0; i < direct.size(); i++) {
++				long child = direct.getLong(i);
++				if (selected.add(child)) {
++					pending.add(child);
++				}
++			}
++		}
++	}
++
++	/**
++	 * Keeps active inferred IS-A rows. The profile drops inactive rows, and in
++	 * the effective modes the importer has already discarded superseded ones.
++	 */
++	private final class IsAFactory extends ImpotentComponentFactory {
++
++		private long edges;
++
++		@Override
++		public synchronized void newRelationshipState(String filename, long lineNumber, String id, String effectiveTime, String active, String moduleId,
++				String sourceId, String destinationId, String relationshipGroup, String typeId, String characteristicTypeId, String modifierId) {
++			if ("1".equals(active) && ConceptConstants.isA.equals(typeId) && ConceptConstants.INFERRED_RELATIONSHIP.equals(characteristicTypeId)) {
++				children.computeIfAbsent(Long.parseLong(destinationId), k -> new LongArrayList(4)).add(Long.parseLong(sourceId));
++				edges++;
++			}
++		}
++	}
++}
+diff --git a/src/main/java/org/snomed/quality/validator/mrcm/ValidationService.java b/src/main/java/org/snomed/quality/validator/mrcm/ValidationService.java
+index 9c15382..930bda1 100644
+--- a/src/main/java/org/snomed/quality/validator/mrcm/ValidationService.java
++++ b/src/main/java/org/snomed/quality/validator/mrcm/ValidationService.java
+@@ -2,6 +2,8 @@ package org.snomed.quality.validator.mrcm;
+ 
+ import com.google.common.base.Strings;
+ import it.unimi.dsi.fastutil.longs.Long2ObjectArrayMap;
++import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
++import it.unimi.dsi.fastutil.longs.LongSet;
+ import org.apache.commons.lang3.StringUtils;
+ import org.ihtsdo.otf.snomedboot.ReleaseImportException;
+ import org.ihtsdo.otf.snomedboot.ReleaseImporter;
+@@ -128,7 +130,8 @@ public class ValidationService {
+ 				switch (type) {
+ 					case ATTRIBUTE_DOMAIN -> executeAttributeDomainValidation(run, queryService, preCoordinatedTypes);
+ 					case ATTRIBUTE_RANGE ->
+-							executeAttributeRangeValidation(run, queryService, descriptions, preCoordinatedTypes);
++							executeAttributeRangeValidation(run, queryService, descriptions, preCoordinatedTypes,
++									inferredHierarchyForRange(extractedRF2FilesDirectories, run));
+ 					case ATTRIBUTE_CARDINALITY ->
+ 							executeAttributeCardinalityValidation(run, queryService, preCoordinatedTypes);
+ 					case ATTRIBUTE_IN_GROUP_CARDINALITY ->
+@@ -452,7 +455,7 @@ public class ValidationService {
+ 	 * exactly as it was; only the queries, which are what cost, are fanned out.
+ 	 */
+ 	private void executeAttributeRangeValidation(ValidationRun run, SnomedQueryService queryService, Map<Long, List<DescriptionImpl>> descriptions,
+-			List<Long> precoordinatedTypes) throws ServiceException {
++			List<Long> precoordinatedTypes, InferredHierarchy inferredHierarchy) throws ServiceException {
+ 
+ 		Set<String> validationCompleted = new HashSet<>();
+ 		List<RangeCheck> plan = new ArrayList<>();
+@@ -463,7 +466,7 @@ public class ValidationService {
+ 		List<Callable<Void>> tasks = new ArrayList<>();
+ 		for (RangeCheck check : plan) {
+ 			tasks.add(() -> {
+-				runAttributeRangeCheck(run, queryService, descriptions, precoordinatedTypes, check);
++				runAttributeRangeCheck(run, queryService, descriptions, precoordinatedTypes, check, inferredHierarchy);
+ 				return null;
+ 			});
+ 		}
+@@ -501,10 +504,15 @@ public class ValidationService {
+ 
+ 	/**
+ 	 * The queries for one planned attribute range - the body that used to sit
+-	 * inside the domain/attribute/range loops, unchanged.
++	 * inside the domain/attribute/range loops, unchanged except that a STATED
++	 * run judges the value's range on the inferred hierarchy; see
++	 * {@link #inRangeOnInferredHierarchy}.
++	 *
++	 * @param inferredHierarchy null for an INFERRED run, whose index already is
++	 *                          the inferred hierarchy
+ 	 */
+ 	private void runAttributeRangeCheck(ValidationRun run, SnomedQueryService queryService, Map<Long, List<DescriptionImpl>> descriptions,
+-			List<Long> preCoordinatedTypes, RangeCheck check) throws ServiceException {
++			List<Long> preCoordinatedTypes, RangeCheck check, InferredHierarchy inferredHierarchy) throws ServiceException {
+ 		Attribute attributeRange = check.attributeRange();
+ 		String domainConstraint = check.domainConstraint();
+ 		String attributeId = attributeRange.getAttributeId();
+@@ -524,9 +532,12 @@ public class ValidationService {
+ 				baseEcl += baseEcl.contains(":") ? ", " : ": ";
+ 				baseEcl += attributeId;
+ 				outOfRangeRule = baseEcl + " != ";
+-				outOfRangeRule = containsMultipleConceptIds(rangeConstraint)
+-						? outOfRangeRule + "(" + rangeConstraint + ")"
+-						: outOfRangeRule + rangeConstraint;
++				String inRange = inferredHierarchy == null
++						? rangeConstraint
++						: inRangeOnInferredHierarchy(queryService, inferredHierarchy, attributeRange);
++				outOfRangeRule = containsMultipleConceptIds(inRange)
++						? outOfRangeRule + "(" + inRange + ")"
++						: outOfRangeRule + inRange;
+ 			}
+ 			LOGGER.info("Selecting content out of range for attribute '{}' with out range constraint expression '{}'", attributeId, outOfRangeRule);
+ 			List<Long> conceptIdsWithInvalidAttributeValue = queryService.eclQueryReturnConceptIdentifiers(outOfRangeRule, 0, -1).conceptIds();
+@@ -536,6 +547,63 @@ public class ValidationService {
+ 		}
+ 	}
+ 
++	/**
++	 * Loaded for a STATED run only, and only here, so a run without the range
++	 * check pays nothing and the hierarchy is released when the check ends.
++	 */
++	private InferredHierarchy inferredHierarchyForRange(Set<String> extractedRF2FilesDirectories, ValidationRun run) throws ReleaseImportException {
++		return ContentType.STATED.equals(run.getContentType())
++				? InferredHierarchy.load(extractedRF2FilesDirectories, run.isFullSnapshotRelease())
++				: null;
++	}
++
++	/**
++	 * The range for a STATED run's out-of-range query: the range constraint,
++	 * widened by the concepts it selects on the INFERRED hierarchy but not on
++	 * the stated one.
++	 *
++	 * <p>The source concept is still judged on its stated relationships - the
++	 * query runs on the stated index - but whether a VALUE is in range is a
++	 * fact about the value, and classification is what places much
++	 * international content: 35904009 is stated under 71388002 and only
++	 * classified under 386053000, so every stated {@code Interprets = 35904009}
++	 * failed {@code << 386053000} while the inferred run passed it.
++	 *
++	 * <p>Widening by explicit ids rather than replacing the constraint keeps
++	 * the query exactly as before whenever the two hierarchies agree on the
++	 * range: no extra ids, same string, same findings. A stated subsumption is
++	 * also an inferred one, so the union is the inferred range.
++	 *
++	 * <p>A constraint that is not a disjunction of {@code <<}, {@code <} and
++	 * self ids keeps the stated judgement, with a warning, rather than be
++	 * guessed at; no MRCM range constraint has another shape today.
++	 */
++	private String inRangeOnInferredHierarchy(SnomedQueryService queryService, InferredHierarchy inferredHierarchy, Attribute attributeRange) throws ServiceException {
++		String rangeConstraint = attributeRange.getRangeConstraint();
++		Optional<LongSet> inferredRange = inferredHierarchy.conceptsInRange(rangeConstraint);
++		if (inferredRange.isEmpty()) {
++			LOGGER.warn("Stated range check for attribute range {} judged on the stated hierarchy: unsupported range constraint '{}'",
++					attributeRange.getUuid(), rangeConstraint);
++			return rangeConstraint;
++		}
++		LongSet onlyInferred = new LongOpenHashSet(inferredRange.get());
++		for (Long statedInRange : queryService.eclQueryReturnConceptIdentifiers(rangeConstraint, 0, -1).conceptIds()) {
++			onlyInferred.remove(statedInRange.longValue());
++		}
++		if (onlyInferred.isEmpty()) {
++			return rangeConstraint;
++		}
++		long[] ids = onlyInferred.toLongArray();
++		Arrays.sort(ids);
++		LOGGER.info("Stated range check for attribute range {} ({}): {} values in range only on the inferred hierarchy",
++				attributeRange.getUuid(), rangeConstraint, ids.length);
++		StringBuilder widened = new StringBuilder(rangeConstraint.length() + ids.length * 22).append(rangeConstraint);
++		for (long id : ids) {
++			widened.append(" OR ").append(id);
++		}
++		return widened.toString();
++	}
++
+ 	/**
+ 	 * @param preCoordinatedTypes
+ 	 * VALIDATE: The domain of a given attribute
+diff --git a/src/test/java/org/snomed/quality/validator/mrcm/StatedRangeValidationTest.java b/src/test/java/org/snomed/quality/validator/mrcm/StatedRangeValidationTest.java
+new file mode 100644
+index 0000000..f861fd9
+--- /dev/null
++++ b/src/test/java/org/snomed/quality/validator/mrcm/StatedRangeValidationTest.java
+@@ -0,0 +1,82 @@
++package org.snomed.quality.validator.mrcm;
++
++import org.junit.Test;
++import org.snomed.quality.validator.mrcm.model.Attribute;
++import org.snomed.quality.validator.mrcm.model.Domain;
++
++import java.io.File;
++import java.nio.file.Paths;
++import java.util.*;
++
++import static org.junit.Assert.*;
++
++/**
++ * The STATED run checks the source concept's stated relationships but judges
++ * whether the VALUE is in range on the INFERRED hierarchy.
++ *
++ * <p>Fixture: 35904009 is stated only under 71388002 |Procedure| and is
++ * classified under 386053000 |Evaluation procedure|. 1000011000168108 states
++ * Interprets = 35904009 (in range only by classification); 1000021000168100
++ * states Interprets = 404684003 |Clinical finding| (out of range both ways).
++ * The Relationship file also carries an inactive and an additional IS-A from
++ * 404684003 to 386053000, neither of which may put it in range.
++ */
++public class StatedRangeValidationTest {
++
++	private static final String INTERPRETS = "363714003";
++	private static final String IN_RANGE_ONLY_BY_CLASSIFICATION = "1000011000168108";
++	private static final long OUT_OF_RANGE = 1000021000168100L;
++
++	private final File releaseFiles = Paths.get("src/test/resources/statedRangeTestFiles").toFile();
++
++	@Test
++	public void statedValueInRangeOnlyByClassificationIsNotAViolation() throws Exception {
++		Assertion assertion = rangeAssertion(ContentType.STATED);
++		assertFalse(assertion.getCurrentViolatedConceptIds().contains(Long.parseLong(IN_RANGE_ONLY_BY_CLASSIFICATION)));
++		assertEquals(List.of(OUT_OF_RANGE), assertion.getCurrentViolatedConceptIds());
++	}
++
++	@Test
++	public void inferredFormJudgesTheSame() throws Exception {
++		assertEquals(List.of(OUT_OF_RANGE), rangeAssertion(ContentType.INFERRED).getCurrentViolatedConceptIds());
++	}
++
++	private Assertion rangeAssertion(ContentType contentType) throws Exception {
++		ValidationRun run = new ValidationRun(null, contentType, false);
++		run.setFullSnapshotRelease(true);
++		run.setValidationTypes(List.of(ValidationType.ATTRIBUTE_RANGE));
++		run.setUngroupedAttributes(new HashSet<>());
++		run.setConceptsUsedInMRCMTemplates(new HashSet<>(List.of(71388002L, 386053000L, 363714003L)));
++		run.setMRCMDomains(Map.of("71388002", interpretsDomain()));
++
++		new ValidationService().validateRelease(releaseFiles, run);
++
++		// Only ATTRIBUTE_RANGE runs, so every completed assertion is a range
++		// one; a second would be an invalid-concept or invalid-term finding.
++		List<Assertion> range = run.getCompletedAssertions().stream()
++				.filter(a -> a.getAttribute().getAttributeId().equals(INTERPRETS))
++				.toList();
++		assertEquals("one range assertion, no invalid-concept or invalid-term ones: " + range, 1, range.size());
++		return range.get(0);
++	}
++
++	private static Domain interpretsDomain() {
++		Domain domain = new Domain("71388002");
++		domain.setDomainConstraint("<< 71388002 |Procedure (procedure)|");
++		Attribute attribute = new Attribute(INTERPRETS, Constants.ALL_NEW_PRE_COORDINATED_CONTENT_CONCEPT);
++		attribute.setType(Attribute.Type.DOMAIN);
++		attribute.setGrouped("1");
++		attribute.setAttributeCardinality("0..*");
++		attribute.setAttributeInGroupCardinality("0..1");
++		attribute.setRuleStrengthId(Constants.MANDATORY);
++		domain.addAttribute(attribute);
++		Attribute range = new Attribute(INTERPRETS, Constants.ALL_NEW_PRE_COORDINATED_CONTENT_CONCEPT);
++		range.setType(Attribute.Type.RANGE);
++		range.setUuid(UUID.fromString("a107baf4-0000-0000-0000-000000000000"));
++		range.setRangeConstraint("<< 386053000 |Evaluation procedure (procedure)|");
++		range.setRangeRule("<< 71388002 |Procedure (procedure)|: [0..*] { [0..1] 363714003 |Interprets (attribute)| = << 386053000 |Evaluation procedure (procedure)| }");
++		range.setRuleStrengthId(Constants.MANDATORY);
++		domain.addAttributeRange(range);
++		return domain;
++	}
++}
+diff --git a/src/test/resources/statedRangeTestFiles/sct2_Concept_Snapshot_Test_20260731.txt b/src/test/resources/statedRangeTestFiles/sct2_Concept_Snapshot_Test_20260731.txt
+new file mode 100644
+index 0000000..e4b2ffc
+--- /dev/null
++++ b/src/test/resources/statedRangeTestFiles/sct2_Concept_Snapshot_Test_20260731.txt
+@@ -0,0 +1,11 @@
++id	effectiveTime	active	moduleId	definitionStatusId
++138875005	20260731	1	900000000000207008	900000000000074008
++71388002	20260731	1	900000000000207008	900000000000074008
++386053000	20260731	1	900000000000207008	900000000000074008
++35904009	20260731	1	900000000000207008	900000000000074008
++404684003	20260731	1	900000000000207008	900000000000074008
++363714003	20260731	1	900000000000207008	900000000000074008
++723593002	20260731	1	900000000000207008	900000000000074008
++1000011000168108	20260731	1	900000000000207008	900000000000074008
++1000021000168100	20260731	1	900000000000207008	900000000000074008
++733073007	20260731	1	900000000000207008	900000000000074008
+diff --git a/src/test/resources/statedRangeTestFiles/sct2_Description_Snapshot-en_Test_20260731.txt b/src/test/resources/statedRangeTestFiles/sct2_Description_Snapshot-en_Test_20260731.txt
+new file mode 100644
+index 0000000..065add6
+--- /dev/null
++++ b/src/test/resources/statedRangeTestFiles/sct2_Description_Snapshot-en_Test_20260731.txt
+@@ -0,0 +1,11 @@
++id	effectiveTime	active	moduleId	conceptId	languageCode	typeId	term	caseSignificanceId
++10001100011	20260731	1	900000000000207008	138875005	en	900000000000003001	SNOMED CT Concept (SNOMED RT+CTV3)	900000000000448009
++20001100111	20260731	1	900000000000207008	71388002	en	900000000000003001	Procedure (procedure)	900000000000448009
++30001100211	20260731	1	900000000000207008	386053000	en	900000000000003001	Evaluation procedure (procedure)	900000000000448009
++40001100311	20260731	1	900000000000207008	35904009	en	900000000000003001	Interpretation of laboratory test (procedure)	900000000000448009
++50001100411	20260731	1	900000000000207008	404684003	en	900000000000003001	Clinical finding (finding)	900000000000448009
++60001100511	20260731	1	900000000000207008	363714003	en	900000000000003001	Interprets (attribute)	900000000000448009
++70001100611	20260731	1	900000000000207008	723593002	en	900000000000003001	All new precoordinated SNOMED CT content (foundation metadata concept)	900000000000448009
++80001100711	20260731	1	900000000000207008	1000011000168108	en	900000000000003001	Inferred-in-range interpretation (procedure)	900000000000448009
++90001100811	20260731	1	900000000000207008	1000021000168100	en	900000000000003001	Out-of-range interpretation (procedure)	900000000000448009
++100001109911	20260731	1	900000000000207008	733073007	en	900000000000003001	OWL axiom reference set (foundation metadata concept)	900000000000448009
+diff --git a/src/test/resources/statedRangeTestFiles/sct2_Relationship_Snapshot_Test_20260731.txt b/src/test/resources/statedRangeTestFiles/sct2_Relationship_Snapshot_Test_20260731.txt
+new file mode 100644
+index 0000000..8ca0ca1
+--- /dev/null
++++ b/src/test/resources/statedRangeTestFiles/sct2_Relationship_Snapshot_Test_20260731.txt
+@@ -0,0 +1,14 @@
++id	effectiveTime	active	moduleId	sourceId	destinationId	relationshipGroup	typeId	characteristicTypeId	modifierId
++1000000110021	20260731	1	900000000000207008	71388002	138875005	0	116680003	900000000000011006	900000000000451002
++1001000110121	20260731	1	900000000000207008	386053000	71388002	0	116680003	900000000000011006	900000000000451002
++1002000110221	20260731	1	900000000000207008	35904009	386053000	0	116680003	900000000000011006	900000000000451002
++1003000110321	20260731	1	900000000000207008	404684003	138875005	0	116680003	900000000000011006	900000000000451002
++1004000110421	20260731	1	900000000000207008	363714003	138875005	0	116680003	900000000000011006	900000000000451002
++1005000110521	20260731	1	900000000000207008	723593002	138875005	0	116680003	900000000000011006	900000000000451002
++1006000110621	20260731	1	900000000000207008	1000011000168108	71388002	0	116680003	900000000000011006	900000000000451002
++1007000110721	20260731	1	900000000000207008	1000021000168100	71388002	0	116680003	900000000000011006	900000000000451002
++200000112	20200131	0	900000000000207008	404684003	386053000	0	116680003	900000000000011006	900000000000451002
++200000213	20260731	1	900000000000207008	404684003	386053000	0	116680003	900000000000227009	900000000000451002
++3000000124	20260731	1	900000000000207008	1000011000168108	35904009	1	363714003	900000000000011006	900000000000451002
++3000010124	20260731	1	900000000000207008	1000021000168100	404684003	1	363714003	900000000000011006	900000000000451002
++1100001110821	20260731	1	900000000000207008	733073007	138875005	0	116680003	900000000000011006	900000000000451002
+diff --git a/src/test/resources/statedRangeTestFiles/sct2_sRefset_OWLExpressionSnapshot_Test_20260731.txt b/src/test/resources/statedRangeTestFiles/sct2_sRefset_OWLExpressionSnapshot_Test_20260731.txt
+new file mode 100644
+index 0000000..1a2d5ca
+--- /dev/null
++++ b/src/test/resources/statedRangeTestFiles/sct2_sRefset_OWLExpressionSnapshot_Test_20260731.txt
+@@ -0,0 +1,10 @@
++id	effectiveTime	active	moduleId	refsetId	referencedComponentId	owlExpression
++00000000-0000-0000-0000-000000000001	20260731	1	900000000000207008	733073007	71388002	SubClassOf(:71388002 :138875005)
++00000000-0000-0000-0000-000000000002	20260731	1	900000000000207008	733073007	386053000	SubClassOf(:386053000 :71388002)
++00000000-0000-0000-0000-000000000003	20260731	1	900000000000207008	733073007	35904009	SubClassOf(:35904009 :71388002)
++00000000-0000-0000-0000-000000000004	20260731	1	900000000000207008	733073007	404684003	SubClassOf(:404684003 :138875005)
++00000000-0000-0000-0000-000000000005	20260731	1	900000000000207008	733073007	363714003	SubClassOf(:363714003 :138875005)
++00000000-0000-0000-0000-000000000006	20260731	1	900000000000207008	733073007	723593002	SubClassOf(:723593002 :138875005)
++00000000-0000-0000-0000-000000000007	20260731	1	900000000000207008	733073007	1000011000168108	SubClassOf(:1000011000168108 ObjectIntersectionOf(:71388002 ObjectSomeValuesFrom(:609096000 ObjectSomeValuesFrom(:363714003 :35904009))))
++00000000-0000-0000-0000-000000000008	20260731	1	900000000000207008	733073007	1000021000168100	SubClassOf(:1000021000168100 ObjectIntersectionOf(:71388002 ObjectSomeValuesFrom(:609096000 ObjectSomeValuesFrom(:363714003 :404684003))))
++00000000-0000-0000-0000-000000000099	20260731	1	900000000000207008	733073007	733073007	SubClassOf(:733073007 :138875005)

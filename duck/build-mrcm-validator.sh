@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 #
 # Build the MRCM validator that RVF's pom pins: IHTSDO's 4.0.1 with the
-# validation loops parallelised and the SEP/Lateralizable phases module-filtered
-# instead of switched off.
+# validation loops parallelised, the SEP/Lateralizable phases module-filtered
+# instead of switched off, and the stated-form range check judging the value
+# on the inferred hierarchy.
 #
 # WHY THIS EXISTS
 #
@@ -70,6 +71,38 @@
 # police AU-module content instead of not running at all.
 #
 # DELETE THAT PATCH if SI replaces the gate with a module filter upstream.
+#
+# THE THIRD PATCH: STATED RANGE CHECK JUDGES THE VALUE ON THE INFERRED HIERARCHY
+#
+# The STATED run builds its index from stated relationships only, and its range
+# check asks that index both questions: does the source concept carry the
+# attribute (stated - right), and is the VALUE in range (stated - wrong).
+# International content reaches many ranges only by classification: 35904009
+# is stated under 71388002 |Procedure| and classified under 386053000
+# |Evaluation procedure|, so every stated Interprets = 35904009 failed
+# "<< 386053000" while the INFERRED run passed it. On the AU 20261031 daily
+# build that was STATED a107baf4 (Interprets) failing 5 AU concepts.
+#
+# Ruling: keep checking the source concept's stated relationships; decide the
+# value's range on the inferred hierarchy. mrcm-validator-stated-range.patch
+# loads, for the stated run's range check only, the active inferred IS-A rows
+# of the Relationship file as parent -> children ids (InferredHierarchy - no
+# second index), and widens the out-of-range query's range by the ids the
+# constraint selects on the inferred hierarchy but not the stated one. Where
+# the hierarchies agree the query string is unchanged. Every MRCM range is a
+# disjunction of <<, < and self ids, which is all it evaluates; any other shape
+# keeps the stated judgement with a warning.
+#
+# Measured on AU 20261031, both forms concurrently, all validation types:
+# 8.1 s to load 831,888 edges, 37 MB retained; peak heap and wall time within
+# run-to-run noise (the inferred run is the long pole). Of 87 distinct concept
+# ranges exactly one differs between the hierarchies (a107baf4, 18,776 values
+# in range only by classification; none the other way). Per-assertion results
+# are identical to 4.0.6 except STATED a107baf4: 5 -> 0 with AU's modules,
+# 2,396 -> 0 with none.
+#
+# DELETE THAT PATCH if SI judges stated range values on the inferred hierarchy
+# upstream.
 
 set -euo pipefail
 
@@ -93,6 +126,8 @@ PATCH="${PATCH_FILE:-$SCRIPT_DIR/mrcm-validator-parallel.patch}"
 # Applied after PATCH, and only on top of it: its context is the parallelised
 # ValidationService.
 FILTER_PATCH="${MODULE_FILTER_PATCH_FILE:-$SCRIPT_DIR/mrcm-validator-module-filter.patch}"
+# Applied third, on top of both: its context is the parallelised range check.
+STATED_RANGE_PATCH="${STATED_RANGE_PATCH_FILE:-$SCRIPT_DIR/mrcm-validator-stated-range.patch}"
 
 echo "==> building mrcm-validator $VERSION from IHTSDO $COMMIT"
 
@@ -103,6 +138,9 @@ cd "$WORKDIR"
 git fetch -q --depth 30 origin || true
 git checkout -q "$COMMIT"
 git checkout -q .
+# The stated-range patch adds files; left over from a previous build they
+# would make it fail to apply. Ignored files (target/) are kept.
+git clean -q -fd
 
 [ -f "$PATCH" ] || { echo "FATAL: $PATCH not found. Without it the build is" >&2
                      echo "       557 s slower per MRCM run and carries the same version." >&2
@@ -118,6 +156,14 @@ echo "    applied $(basename "$PATCH")"
 git apply --check "$FILTER_PATCH" || { echo "FATAL: $FILTER_PATCH does not apply on top of $(basename "$PATCH")" >&2; exit 1; }
 git apply "$FILTER_PATCH"
 echo "    applied $(basename "$FILTER_PATCH")"
+
+[ -f "$STATED_RANGE_PATCH" ] || { echo "FATAL: $STATED_RANGE_PATCH not found. Without it the stated" >&2
+                                  echo "       range check fails values that are in range only by" >&2
+                                  echo "       classification, at the same version." >&2
+                                  exit 1; }
+git apply --check "$STATED_RANGE_PATCH" || { echo "FATAL: $STATED_RANGE_PATCH does not apply on top of $(basename "$FILTER_PATCH")" >&2; exit 1; }
+git apply "$STATED_RANGE_PATCH"
+echo "    applied $(basename "$STATED_RANGE_PATCH")"
 
 python3 - "$VERSION" <<'PY'
 import pathlib, re, sys
@@ -178,5 +224,11 @@ filter=$("${JAVA_HOME:-/usr}/bin/javap" -p "$tmp/org/snomed/quality/validator/mr
         | grep -c 'retainViolationsInModules' || true)
 [ "$filter" -ge 1 ] || { echo "FATAL: retainViolationsInModules absent - module-filter patch did not take" >&2; exit 1; }
 
-echo "==> installed $VERSION; bytecode confirms the parallel executor and the SEP module filter"
+# And the stated range check's inferred hierarchy.
+unzip -qo "$JAR" 'org/snomed/quality/validator/mrcm/ValidationService.class' -d "$tmp"
+inferred=$("${JAVA_HOME:-/usr}/bin/javap" -p "$tmp/org/snomed/quality/validator/mrcm/ValidationService.class" \
+        | grep -c 'inRangeOnInferredHierarchy' || true)
+[ "$inferred" -ge 1 ] || { echo "FATAL: inRangeOnInferredHierarchy absent - stated-range patch did not take" >&2; exit 1; }
+
+echo "==> installed $VERSION; bytecode confirms the parallel executor, the SEP module filter and the stated range check"
 echo "    pom pin: <mrcm.validator.version>$VERSION</mrcm.validator.version>"
