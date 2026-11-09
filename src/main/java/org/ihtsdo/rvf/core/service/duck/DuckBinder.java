@@ -219,38 +219,119 @@ public final class DuckBinder {
 	}
 
 	/**
-	 * True when every mention of {@code release} is a LEFT JOIN whose alias is
-	 * then required to be NULL - an anti-join, and a no-op against an empty
-	 * relation.
+	 * True when every mention of {@code release} is an anti-join, so an empty
+	 * release answers the statement as MySQL's empty schema does. Two shapes,
+	 * and nothing else: a LEFT JOIN whose alias is then required to be NULL,
+	 * and {@code NOT EXISTS (SELECT ... FROM release.t ...)}.
 	 *
-	 * <p>Deliberately narrow: it recognises ONE shape and refuses everything
-	 * else, including a shape it half-recognises. The corpus is transpiled, so
-	 * the shape is uniform, and being wrong in the permissive direction here
-	 * means running a check against nothing and reporting the result as though
-	 * it meant something.
+	 * <p>Deliberately narrow: the corpus is transpiled, so the shapes are
+	 * uniform, and being wrong in the permissive direction here means running
+	 * a check against nothing and reporting the result as though it meant
+	 * something. {@code NOT x IN (SELECT ... FROM release ...)} would be
+	 * answered the same way, but no statement uses it against the dependency
+	 * and recognising it means parsing its operand, so it stays skipped.
+	 * {@code EXISTS}, {@code IN}, scalar subqueries and plain joins read the
+	 * release's rows, and are skipped.
 	 */
 	private static boolean onlyAntiJoined(String sql, String release) {
+		int mentions = 0;
+		for (int i = sql.indexOf(release); i >= 0; i = sql.indexOf(release, i + 1)) {
+			mentions++;
+		}
+		return mentions > 0 && leftAntiJoins(sql, release) + notExistsOver(sql, release) == mentions;
+	}
+
+	/** The {@code LEFT JOIN release.t AS alias} whose alias is then required to be NULL. */
+	private static int leftAntiJoins(String sql, String release) {
 		Matcher joins = Pattern.compile("LEFT\\s+JOIN\\s+" + Pattern.quote(release)
 				+ "\\.\\w+\\s+AS\\s+(\\w+)", Pattern.CASE_INSENSITIVE).matcher(sql);
 		int antiJoined = 0;
 		while (joins.find()) {
 			String alias = joins.group(1);
-			if (!Pattern.compile("\\b" + Pattern.quote(alias) + "\\.\\w+\\s+IS\\s+NULL",
+			if (Pattern.compile("\\b" + Pattern.quote(alias) + "\\.\\w+\\s+IS\\s+NULL",
 					Pattern.CASE_INSENSITIVE).matcher(sql).find()) {
-				return false;
+				antiJoined++;
 			}
-			antiJoined++;
 		}
-		if (antiJoined == 0) {
-			return false;
+		return antiJoined;
+	}
+
+	private static final Pattern NOT_EXISTS = Pattern.compile("\\bNOT\\s+EXISTS\\s*\\(", Pattern.CASE_INSENSITIVE);
+
+	/** Text ending in a NOT that would negate the NOT EXISTS after it. */
+	private static final Pattern NEGATED = Pattern.compile("\\bNOT\\s*(?:\\(\\s*)?$", Pattern.CASE_INSENSITIVE);
+
+	/**
+	 * The {@code NOT EXISTS} subqueries that read {@code release} alone:
+	 * {@code NOT EXISTS (SELECT 1 FROM release.t AS d WHERE ...)}. Such a
+	 * subquery yields no row from an empty table, so the NOT EXISTS holds. The
+	 * select list must be plain columns or constants, because an ungrouped
+	 * aggregate yields one row even from an empty table, and a set operation
+	 * or HAVING could yield rows the table did not.
+	 */
+	private static int notExistsOver(String sql, String release) {
+		Pattern readsOnlyRelease = Pattern.compile("\\s*SELECT\\s+(?:DISTINCT\\s+)?[\\w.*]+(?:\\s*,\\s*[\\w.*]+)*"
+				+ "\\s+FROM\\s+" + Pattern.quote(release) + "\\.\\w+(?:\\s+(?:AS\\s+)?(?!WHERE\\b)\\w+)?"
+				+ "(?:\\s+WHERE\\b(?:(?!\\b(?:UNION|INTERSECT|EXCEPT|HAVING)\\b).)*)?\\s*",
+				Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+		Matcher m = NOT_EXISTS.matcher(sql);
+		int count = 0;
+		while (m.find()) {
+			if (NEGATED.matcher(sql).region(0, m.start()).find()) {
+				continue;
+			}
+			int close = closingParen(sql, m.end() - 1);
+			if (close >= 0 && readsOnlyRelease.matcher(outermostLevel(sql.substring(m.end(), close))).matches()) {
+				count++;
+			}
 		}
-		// Every occurrence has to be one of the joins just counted, or there is
-		// a use this has not looked at.
-		int mentions = 0;
-		for (int i = sql.indexOf(release); i >= 0; i = sql.indexOf(release, i + 1)) {
-			mentions++;
+		return count;
+	}
+
+	/** The index of the parenthesis closing the one at {@code open}, or -1. Skips string literals. */
+	private static int closingParen(String sql, int open) {
+		int depth = 0;
+		boolean quoted = false;
+		for (int i = open; i < sql.length(); i++) {
+			char c = sql.charAt(i);
+			if (c == '\'') {
+				quoted = !quoted;
+			} else if (!quoted && c == '(') {
+				depth++;
+			} else if (!quoted && c == ')' && --depth == 0) {
+				return i;
+			}
 		}
-		return mentions == antiJoined;
+		return -1;
+	}
+
+	/** {@code sql} with every parenthesised part and string literal emptied, leaving its outermost level. */
+	private static String outermostLevel(String sql) {
+		StringBuilder out = new StringBuilder(sql.length());
+		int depth = 0;
+		boolean quoted = false;
+		for (int i = 0; i < sql.length(); i++) {
+			char c = sql.charAt(i);
+			if (c == '\'') {
+				quoted = !quoted;
+				if (depth == 0) {
+					out.append(c);
+				}
+			} else if (quoted) {
+				continue;
+			} else if (c == '(') {
+				if (depth++ == 0) {
+					out.append(c);
+				}
+			} else if (c == ')') {
+				if (--depth == 0) {
+					out.append(c);
+				}
+			} else if (depth == 0) {
+				out.append(c);
+			}
+		}
+		return out.toString();
 	}
 
 	/**

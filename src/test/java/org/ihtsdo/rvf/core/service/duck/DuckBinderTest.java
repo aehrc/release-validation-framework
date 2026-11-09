@@ -193,6 +193,73 @@ class DuckBinderTest {
 	}
 
 	@Test
+	void anAbsentDependencyUsedOnlyInNotExistsRunsAgainstTheEmptySchema() {
+		// The shape of release-type-snapshot-inferred-relationship-successive-states and
+		// release-type-delta-previous-snapshot-validation-inferred-relationship. Nothing
+		// in an empty dependency matches, so NOT EXISTS holds for every row: MySQL's answer
+		// against its empty dependency schema.
+		DuckBinder.Bound b = binderWithEmpty("previous", null).bind(
+				"insert into qa_result select a.id from rvfph_prospective_.relationship_s as a "
+						+ "where a.active = '0' and not exists(select 1 from rvfph_dependency_.relationship_s as d "
+						+ "where a.id = d.id and (a.active <> d.active or d.effectivetime < a.effectivetime))", "1");
+		assertFalse(b.isSkipped(), "NOT EXISTS over nothing is answerable");
+		assertEquals("insert into rvf_results.qa_result select a.id from prospective.relationship_s as a "
+				+ "where a.active = '0' and not exists(select 1 from empty.relationship_s as d "
+				+ "where a.id = d.id and (a.active <> d.active or d.effectivetime < a.effectivetime))", b.sql());
+	}
+
+	@Test
+	void anAntiJoinAndANotExistsTogetherRun() {
+		assertFalse(binderWithEmpty("previous", null).bind(
+				"insert into qa_result select d.id from rvfph_prospective_.concept_s as d "
+						+ "left join rvfph_dependency_.concept_s as e on d.id = e.id "
+						+ "where e.id is null and not exists (select * from rvfph_dependency_.description_s "
+						+ "where conceptid = d.id)", "1").isSkipped());
+	}
+
+	@Test
+	void aSubqueryThatReadsTheDependencysRowsIsStillSkipped() {
+		String outer = "insert into qa_result select a.id from rvfph_prospective_.concept_s as a where ";
+		Map<String, String> readsRows = Map.of(
+				"EXISTS: true only if the dependency has the row",
+				"exists (select 1 from rvfph_dependency_.concept_s as d where d.id = a.id)",
+				"IN", "a.id in (select id from rvfph_dependency_.concept_s)",
+				"NOT IN: an empty list makes it true, but the shape is not recognised",
+				"not a.id in (select id from rvfph_dependency_.concept_s)",
+				"a scalar subquery", "a.moduleid = (select moduleid from rvfph_dependency_.concept_s as d where d.id = a.id)",
+				"NOT EXISTS over an ungrouped aggregate, one row even from an empty table",
+				"not exists (select count(*) from rvfph_dependency_.concept_s as d where d.id = a.id)",
+				"NOT EXISTS whose subquery also reads another table",
+				"not exists (select 1 from rvfph_dependency_.concept_s as d join rvfph_prospective_.concept_s as p on p.id = d.id)",
+				"NOT EXISTS whose subquery unions in other rows",
+				"not exists (select id from rvfph_dependency_.concept_s as d where d.id = a.id "
+						+ "union select id from rvfph_prospective_.concept_s as p where p.id = a.id)",
+				"a negated NOT EXISTS", "not not exists (select 1 from rvfph_dependency_.concept_s as d where d.id = a.id)");
+		readsRows.forEach((shape, where) -> {
+			DuckBinder.Bound b = binderWithEmpty("previous", null).bind(outer + where, "1");
+			assertTrue(b.isSkipped(), shape);
+			assertEquals("<DEPENDENCY>", b.skippedFor(), shape);
+		});
+	}
+
+	@Test
+	void aNotExistsBesideAPlainJoinIsSkippedRatherThanGuessed() {
+		// The NOT EXISTS alone would run; the join needs real rows.
+		DuckBinder.Bound b = binderWithEmpty("previous", null).bind(
+				"insert into qa_result select a.id from rvfph_prospective_.concept_s as a "
+						+ "join rvfph_dependency_.concept_s as c on a.id = c.id "
+						+ "where not exists (select 1 from rvfph_dependency_.description_s as d "
+						+ "where d.conceptid = a.id)", "1");
+		assertTrue(b.isSkipped());
+		// So is one whose NOT EXISTS reads the dependency's rows deeper down.
+		assertTrue(binderWithEmpty("previous", null).bind(
+				"insert into qa_result select a.id from rvfph_prospective_.concept_s as a "
+						+ "where not exists (select 1 from rvfph_dependency_.description_s as d "
+						+ "where d.conceptid = a.id and d.moduleid in "
+						+ "(select moduleid from rvfph_dependency_.concept_s))", "1").isSkipped());
+	}
+
+	@Test
 	void anAbsentPreviousIsNeverStoodInFor() {
 		// "This did not exist before" and "there is no before" are different
 		// answers, and a first-time release is a real case the report already
