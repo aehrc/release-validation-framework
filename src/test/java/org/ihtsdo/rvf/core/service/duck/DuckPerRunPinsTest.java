@@ -281,7 +281,7 @@ class DuckPerRunPinsTest {
 		return new DuckDbValidationService(reportService, archiveCollector(), whitelistService,
 				new ReleaseAcquisitionService(),
 				new DuckStoreLocator(storeFile.toString(), corpus.toString()),
-				corpus.toString(), work.toString(), "qa_result", 0, "", false, "", 0,
+				corpus.toString(), work.toString(), "empty-rf2-snapshot.zip", "qa_result", 0, "", false, "", 0,
 				provider(assertions));
 	}
 

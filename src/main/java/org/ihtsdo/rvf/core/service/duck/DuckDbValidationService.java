@@ -39,6 +39,7 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -50,6 +51,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 /**
  * Runs a validation on DuckDB - the counterpart of
@@ -113,9 +116,11 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 	private static final String PREVIOUS_SCHEMA = "previous";
 	private static final String DEPENDENCY_SCHEMA = "dependency";
 	/**
-	 * The whole RF2 table set with no rows, for a run that HAS no dependency.
+	 * The whole RF2 table set with no rows: the previous release of a release
+	 * the run declares first-time, and what an anti-join against the dependency
+	 * reads for a run that HAS no dependency.
 	 *
-	 * <p>Not a stand-in for a dependency that should have been supplied: see
+	 * <p>Not a stand-in for a release that should have been supplied: see
 	 * {@link DuckBinder#bind} for which statements may use it and why the rest
 	 * are still skipped.
 	 */
@@ -166,6 +171,8 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 	private final DuckStoreLocator storeLocator;
 	private final String corpusRoot;
 	private final String workDirectory;
+	/** {@code rvf.empty-release-file}: a previous release so named declares there is none. */
+	private final String emptyReleaseFile;
 	private final String qaResultTable;
 	private final int duckThreads;
 	private final String duckMemoryLimit;
@@ -195,6 +202,7 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 			DuckStoreLocator storeLocator,
 			@Value("${rvf.assertion.resource.local.path:}") String corpusRoot,
 			@Value("${rvf.duck.work.directory:${java.io.tmpdir}}") String workDirectory,
+			@Value("${rvf.empty-release-file}") String emptyReleaseFile,
 			@Value("${rvf.qa.result.table.name:qa_result}") String qaResultTableName,
 			@Value("${rvf.duck.threads:0}") int duckThreads,
 			@Value("${rvf.duck.memory.limit:}") String duckMemoryLimit,
@@ -210,6 +218,7 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 		this.storeLocator = storeLocator;
 		this.corpusRoot = corpusRoot;
 		this.workDirectory = workDirectory;
+		this.emptyReleaseFile = emptyReleaseFile;
 		this.qaResultTable = QA_RESULT_SCHEMA + "." + qaResultTableName;
 		this.duckThreads = duckThreads;
 		this.duckMemoryLimit = requireUnit(duckMemoryLimit);
@@ -302,18 +311,28 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 	 * run against zero rows, and "nothing differs from the previous release"
 	 * would be reported as a clean pass for a comparison nothing performed.
 	 *
-	 * @param dependencies the unpacked dependency releases, in the order the run
-	 *                     names them; their union is what an extension sits on
+	 * @param prospective   the unpacked prospective package
+	 * @param shipped       which release types the prospective package ships, or
+	 *                      null to read them from {@code prospective}
+	 * @param previous      the unpacked previous release, or null when the run
+	 *                      has none
+	 * @param previousEmpty the run declared that there is no previous release (a
+	 *                      first-time release, or a previous release named
+	 *                      {@code rvf.empty-release-file}), so {@code <PREVIOUS>}
+	 *                      binds to an empty schema rather than being absent
+	 * @param dependencies  the unpacked dependency releases, in the order the run
+	 *                      names them; their union is what an extension sits on
 	 */
-	public record ReleaseDirectories(Path prospective, Path previous, List<Dependency> dependencies) {
+	public record ReleaseDirectories(Path prospective, Shipped shipped, Path previous,
+			boolean previousEmpty, List<Dependency> dependencies) {
 
 		public ReleaseDirectories {
 			dependencies = dependencies == null ? List.of() : List.copyOf(dependencies);
 		}
 
-		/** A run with at most one dependency. */
+		/** A run with at most one dependency, whose release types are read from the directory. */
 		public ReleaseDirectories(Path prospective, Path previous, Path dependency) {
-			this(prospective, previous, dependency == null ? List.of()
+			this(prospective, null, previous, false, dependency == null ? List.of()
 					: List.of(new Dependency(dependency.getFileName().toString(), dependency)));
 		}
 
@@ -324,6 +343,37 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 
 	/** One unpacked dependency release, by the release file name the run names it with. */
 	public record Dependency(String release, Path directory) {
+	}
+
+	/**
+	 * Whether a package ships Delta and Full files, decided as
+	 * {@code ValidationVersionLoader.rf2DeltaFileExists} and
+	 * {@code rf2FullFileExists} decide it: by the presence of a Concept file of
+	 * that type.
+	 */
+	public record Shipped(boolean delta, boolean full) {
+
+		private static final Pattern CONCEPT_DELTA = Pattern.compile("x?(sct|rel)2_Concept_[^_]*Delta_.*.txt");
+		private static final Pattern CONCEPT_FULL = Pattern.compile("x?(sct|rel)2_Concept_[^_]*Full_.*.txt");
+
+		/** From the package as acquired, before any file is excluded, as MySQL reads it. */
+		static Shipped in(File zip) throws IOException {
+			try (ZipFile file = new ZipFile(zip)) {
+				return of(file.stream().filter(e -> !e.isDirectory()).map(ZipEntry::getName)
+						.map(name -> name.substring(name.lastIndexOf('/') + 1)).toList());
+			}
+		}
+
+		static Shipped in(Path directory) throws IOException {
+			try (Stream<Path> walk = Files.walk(directory)) {
+				return of(walk.filter(Files::isRegularFile).map(p -> p.getFileName().toString()).toList());
+			}
+		}
+
+		private static Shipped of(List<String> fileNames) {
+			return new Shipped(fileNames.stream().anyMatch(n -> CONCEPT_DELTA.matcher(n).matches()),
+					fileNames.stream().anyMatch(n -> CONCEPT_FULL.matcher(n).matches()));
+		}
 	}
 
 	/**
@@ -398,10 +448,13 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 		Path prospective = DuckReleaseUnpacker.unpack(prospectiveZip, work, "prospective", excluded);
 
 		Path previous = null;
-		File previousZip = localFileNamed(validationConfig, validationConfig.getPreviousRelease());
+		String previousRelease = validationConfig.getPreviousRelease();
+		File previousZip = localFileNamed(validationConfig, previousRelease);
 		if (previousZip != null) {
 			previous = DuckReleaseUnpacker.unpack(previousZip, work, "previous", excluded);
 		}
+		boolean previousEmpty = previous == null
+				&& (validationConfig.isFirstTimeRelease() || emptyReleaseFile.equals(previousRelease));
 
 		// Each dependency in a directory of its own, and a schema of its own:
 		// the extension sits on their union. One shared directory does not give
@@ -420,7 +473,8 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 						String.valueOf(dependencies.size()), excluded)));
 			}
 		}
-		return new ReleaseDirectories(prospective, previous, dependencies);
+		return new ReleaseDirectories(prospective, Shipped.in(prospectiveZip), previous, previousEmpty,
+				dependencies);
 	}
 
 	/**
@@ -529,49 +583,58 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 			session(connection, PROSPECTIVE_SCHEMA);
 			statusReport.setRF2Files(rf2FileNames(releases.prospective()));
 
+			// In MySQL's order: the previous and dependency releases before the
+			// prospective release's delta-only rebuild and its missing delta and
+			// full tables, which are derived from them.
 			if (releases.previous() != null) {
 				lastItemLoadAttempted = "Previous Release - " + releases.previous();
 				materialise(connection, releases.previous(), PREVIOUS_SCHEMA, store, true);
 			}
+			// One schema per dependency, and DEPENDENCY_SCHEMA their union, as
+			// ReleaseDataManager.combineKnownVersions puts every dependency's
+			// rows into one schema on MySQL. Keyed by release file name, which
+			// is how getCurrentDependencyToPreviousEffectiveTimeMap names them.
+			Map<String, String> dependencySchemas = new LinkedHashMap<>();
+			for (Dependency dependency : releases.dependencies()) {
+				lastItemLoadAttempted = "Dependency Release - " + dependency.release();
+				String schema = releases.dependencies().size() == 1
+						? DEPENDENCY_SCHEMA : DEPENDENCY_SCHEMA + "_" + dependencySchemas.size();
+				materialise(connection, dependency.directory(), schema, store, true);
+				dependencySchemas.put(dependency.release(), schema);
+			}
+			if (dependencySchemas.size() > 1) {
+				lastItemLoadAttempted = "Union of the dependency releases";
+				unionDependencies(connection, store, dependencySchemas.values());
+			}
+			// The whole RF2 table set with no rows, always: the previous
+			// release of a release declared first-time, and - for a run with
+			// no dependency - the schema an anti-join against <DEPENDENCY>
+			// reads. Which statements may use it is DuckBinder's decision;
+			// materialising it runs nothing extra by itself.
+			lastItemLoadAttempted = "Empty schema";
+			Path none = Files.createTempDirectory("rvf-empty");
+			try {
+				materialise(connection, none, EMPTY_SCHEMA, store, false);
+			} finally {
+				Files.deleteIfExists(none);
+			}
+
 			if (executionConfig.isRf2DeltaOnly()) {
 				lastItemLoadAttempted = "Delta-only rebuild of the prospective snapshot";
 				rebuildSnapshotFromPreviousAndDelta(connection, store, releases);
-			}
-			if (!releases.dependencies().isEmpty()) {
-				// One schema per dependency, and DEPENDENCY_SCHEMA their union,
-				// as ReleaseDataManager.combineKnownVersions puts every
-				// dependency's rows into one schema on MySQL.
-				List<String> schemas = new ArrayList<>();
-				for (Dependency dependency : releases.dependencies()) {
-					lastItemLoadAttempted = "Dependency Release - " + dependency.release();
-					String schema = releases.dependencies().size() == 1
-							? DEPENDENCY_SCHEMA : DEPENDENCY_SCHEMA + "_" + schemas.size();
-					materialise(connection, dependency.directory(), schema, store, true);
-					schemas.add(schema);
-				}
-				if (schemas.size() > 1) {
-					lastItemLoadAttempted = "Union of the dependency releases";
-					unionDependencies(connection, store, schemas);
-				}
 			} else {
-				// A run with no dependency has no dependency CONTENT - which is
-				// a fact, not a gap: isExtensionValidation() IS "the dependency
-				// list is non-empty", and the nightly submits
-				// releaseAsAnEdition=true. So the whole RF2 table set is created
-				// with no rows, for the statements that cannot tell an empty
-				// dependency from an absent one to run against.
-				//
-				// Which statements those are is DuckBinder's decision, not this
-				// one: an anti-join gets the same answer either way, and the 28
-				// statements that compare AGAINST the dependency are still
-				// skipped. Materialising this does not run anything extra by
-				// itself.
-				lastItemLoadAttempted = "Empty dependency schema";
-				Path none = Files.createTempDirectory("rvf-no-dependency");
-				try {
-					materialise(connection, none, EMPTY_SCHEMA, store, false);
-				} finally {
-					Files.deleteIfExists(none);
+				// ValidationVersionLoader.loadProspectiveVersion: a package with
+				// no Delta files gets derived delta tables, and one with no Full
+				// files derived full tables. Left empty, every _d and _f
+				// assertion would pass on a snapshot-only package.
+				lastItemLoadAttempted = "Delta and full tables the prospective package does not ship";
+				Shipped shipped = releases.shipped() != null
+						? releases.shipped() : Shipped.in(releases.prospective());
+				if (!shipped.delta()) {
+					insertIntoProspectiveDeltaTables(connection, store, executionConfig, dependencySchemas);
+				}
+				if (!shipped.full()) {
+					insertIntoProspectiveFullTables(connection, store);
 				}
 			}
 			createResultTable(connection);
@@ -597,13 +660,14 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 		// phases must bind the SAME <VERSION> or their findings disagree about
 		// which release they describe.
 		String version = releaseVersion(releases.prospective());
+		String previousSchema = previousSchema(executionConfig, releases);
 
 		List<TestRunItem> items;
 		try {
 			items = executionConfig.isExtensionValidation() && !executionConfig.isReleaseAsAnEdition()
-					? runExtensionSplit(connection, store, executionConfig, releases,
+					? runExtensionSplit(connection, store, executionConfig, releases, previousSchema,
 							reportStorage, selection, version)
-					: runSinglePhase(connection, store, executionConfig, releases,
+					: runSinglePhase(connection, store, executionConfig, releases, previousSchema,
 							reportStorage, selection, version);
 		} catch (DuckDbAssertionExecutionService.SetupFailedException e) {
 			// Deliberately not downgraded to a warning and carried past. The
@@ -636,14 +700,29 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 	}
 
 	/**
+	 * What {@code <PREVIOUS>} binds to: the previous release; for a release the
+	 * run declared first-time (or whose previous release is
+	 * {@code rvf.empty-release-file}), the empty schema, as MySQL's
+	 * {@code ValidationVersionLoader.loadPreviousVersion} binds one - "nothing
+	 * was there before" is the answer there; otherwise nothing, and statements
+	 * that need it are not run.
+	 */
+	private static String previousSchema(MysqlExecutionConfig executionConfig, ReleaseDirectories releases) {
+		if (releases.previous() != null) {
+			return PREVIOUS_SCHEMA;
+		}
+		return releases.previousEmpty() || executionConfig.isFirstTimeRelease() ? EMPTY_SCHEMA : null;
+	}
+
+	/**
 	 * Every assertion against one schema - an international or edition release,
 	 * and the shape production runs.
 	 */
 	private List<TestRunItem> runSinglePhase(Connection connection, DuckStore store,
-			MysqlExecutionConfig executionConfig, ReleaseDirectories releases,
+			MysqlExecutionConfig executionConfig, ReleaseDirectories releases, String previousSchema,
 			String reportStorage, Selection selection, String version) {
 		DuckDbAssertionExecutionService executionService = executionService(
-				connection, store, executionConfig, releases, PROSPECTIVE_SCHEMA, version);
+				connection, store, executionConfig, releases, previousSchema, PROSPECTIVE_SCHEMA, version);
 		executionService.prepareSchema();
 		List<TestRunItem> items = new ArrayList<>(
 				executeAssertions(executionService, selection.resources(), reportStorage));
@@ -677,7 +756,7 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 	 * a merge that did not happen. See UPSTREAM-SQL-DEFECTS.md, defect 7.
 	 */
 	private List<TestRunItem> runExtensionSplit(Connection connection, DuckStore store,
-			MysqlExecutionConfig executionConfig, ReleaseDirectories releases,
+			MysqlExecutionConfig executionConfig, ReleaseDirectories releases, String previousSchema,
 			String reportStorage, Selection selection, String version) throws SQLException {
 		List<Assertion> releaseType = new ArrayList<>();
 		List<Assertion> rest = new ArrayList<>();
@@ -694,7 +773,7 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 				releaseType.size(), rest.size());
 
 		DuckDbAssertionExecutionService extensionPhase = executionService(
-				connection, store, executionConfig, releases, PROSPECTIVE_SCHEMA, version);
+				connection, store, executionConfig, releases, previousSchema, PROSPECTIVE_SCHEMA, version);
 		extensionPhase.prepareSchema();
 		// Resource assertions first, in THIS schema. They are re-run below in the
 		// combined one, exactly as MysqlValidationService re-runs them by calling
@@ -718,7 +797,7 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 
 		combineExtensionWithDependency(connection, store);
 		DuckDbAssertionExecutionService combinedPhase = executionService(
-				connection, store, executionConfig, releases, COMBINED_SCHEMA, version);
+				connection, store, executionConfig, releases, previousSchema, COMBINED_SCHEMA, version);
 		// The pre-requisite and port tables are built by unqualified DDL, so
 		// they landed in `prospective`. The combined schema needs its OWN -
 		// a transitive closure over the extension alone would leave every
@@ -762,8 +841,8 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 	 * a change or an inactivation, which is what makes delete-then-insert right
 	 * rather than an upsert.
 	 *
-	 * <p>With no previous release the snapshot stays empty, as on MySQL - the
-	 * delta alone IS the release for a first-time load.
+	 * <p>With no previous release MySQL copies the snapshot from an empty
+	 * schema, so the snapshot is the delta.
 	 *
 	 * <p>Keyed on {@link #keyColumns} rather than on {@code id}, which
 	 * {@code identifier_s} does not have - as MySQL's
@@ -772,29 +851,19 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 	private void rebuildSnapshotFromPreviousAndDelta(Connection connection, DuckStore store,
 			ReleaseDirectories releases) throws SQLException {
 		long t0 = System.currentTimeMillis();
-		if (releases.previous() == null) {
-			LOGGER.info("Delta-only run with no previous release - the prospective snapshot "
-					+ "stays as the delta alone");
-			return;
-		}
 		Map<String, String> tableColumns = store.tableColumns();
 		int rebuilt = 0;
 		try (Statement st = connection.createStatement()) {
-			for (Map.Entry<String, String> entry : new TreeMap<>(tableColumns).entrySet()) {
-				String snapshot = entry.getKey();
-				if (!snapshot.endsWith("_s")) {
-					continue;
-				}
-				String delta = snapshot.substring(0, snapshot.length() - 2) + "_d";
-				if (!tableColumns.containsKey(delta)) {
-					continue;
-				}
-				List<String> key = keyColumns(snapshot, columnNames(entry.getValue()));
+			for (String snapshot : snapshotTables(tableColumns, "_d")) {
+				String delta = counterpart(snapshot, "_d");
+				List<String> key = keyColumns(snapshot, columnNames(tableColumns.get(snapshot)));
 				String join = key.stream()
 						.map(c -> "s." + c + " = d." + c)
 						.collect(Collectors.joining(" AND "));
-				st.execute("INSERT INTO " + PROSPECTIVE_SCHEMA + "." + snapshot
-						+ " SELECT * FROM " + PREVIOUS_SCHEMA + "." + snapshot);
+				if (releases.previous() != null) {
+					st.execute("INSERT INTO " + PROSPECTIVE_SCHEMA + "." + snapshot
+							+ " SELECT * FROM " + PREVIOUS_SCHEMA + "." + snapshot);
+				}
 				st.execute("DELETE FROM " + PROSPECTIVE_SCHEMA + "." + snapshot + " s WHERE EXISTS "
 						+ "(SELECT 1 FROM " + PROSPECTIVE_SCHEMA + "." + delta + " d WHERE " + join + ")");
 				st.execute("INSERT INTO " + PROSPECTIVE_SCHEMA + "." + snapshot
@@ -802,8 +871,120 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 				rebuilt++;
 			}
 		}
-		LOGGER.info("Delta-only: rebuilt {} snapshot tables from the previous release and this "
-				+ "delta, in {}ms", rebuilt, System.currentTimeMillis() - t0);
+		LOGGER.info("Delta-only: rebuilt {} snapshot tables from {} and this delta, in {}ms", rebuilt,
+				releases.previous() == null ? "no previous release" : "the previous release",
+				System.currentTimeMillis() - t0);
+	}
+
+	/**
+	 * A package with no Delta files: the delta tables derived as
+	 * {@code ReleaseDataManager.insertIntoProspectiveDeltaTables} derives them,
+	 * its three rules in its order.
+	 * <ol>
+	 * <li>An edition validated as an extension: each dependency's full rows
+	 *     newer than that dependency's previous effective time.
+	 * <li>A first-time release: the snapshot rows at this release's effective
+	 *     time (or blank). Otherwise: the full rows newer than the previous
+	 *     release's effective time (or blank; with no previous effective time,
+	 *     only blank ones).
+	 * <li>For an edition validated as an extension, rule 2 leaves out rows the
+	 *     dependency's full table already holds for the same component, module
+	 *     and effective time.
+	 * </ol>
+	 * Effective times are compared as stored: zero-padded {@code YYYYMMDD}
+	 * sorts as the dates MySQL casts them to.
+	 */
+	private static void insertIntoProspectiveDeltaTables(Connection connection, DuckStore store,
+			MysqlExecutionConfig executionConfig, Map<String, String> dependencySchemas) throws SQLException {
+		Map<String, String> tableColumns = store.tableColumns();
+		List<String> snapshots = snapshotTables(tableColumns, "_d", "_f");
+		boolean editionOfExtension = executionConfig.isReleaseAsAnEdition() && executionConfig.isExtensionValidation();
+		try (Statement st = connection.createStatement()) {
+			if (editionOfExtension) {
+				Map<String, String> previousTimes = executionConfig.getCurrentDependencyToPreviousEffectiveTimeMap();
+				for (Map.Entry<String, String> dependency : dependencySchemas.entrySet()) {
+					String previousTime = previousTimes == null ? null : previousTimes.get(dependency.getKey());
+					for (String snapshot : snapshots) {
+						st.execute(insertInto(PROSPECTIVE_SCHEMA, counterpart(snapshot, "_d"), tableColumns.get(snapshot),
+								dependency.getValue() + "." + counterpart(snapshot, "_f"))
+								+ (previousTime == null ? "" : " WHERE a." + EFFECTIVE_TIME + " > " + effectiveTime(previousTime)));
+					}
+				}
+			}
+			for (String snapshot : snapshots) {
+				String columns = tableColumns.get(snapshot);
+				String where;
+				String from;
+				if (executionConfig.isFirstTimeRelease()) {
+					from = PROSPECTIVE_SCHEMA + "." + snapshot;
+					String effectiveTime = executionConfig.getEffectiveTime() == null ? "" : executionConfig.getEffectiveTime();
+					where = " WHERE (a." + EFFECTIVE_TIME + " IS NULL OR a." + EFFECTIVE_TIME + " = "
+							+ effectiveTime(effectiveTime) + ")";
+				} else {
+					from = PROSPECTIVE_SCHEMA + "." + counterpart(snapshot, "_f");
+					String previousTime = executionConfig.getPreviousEffectiveTime();
+					// MySQL compares with cast('null' as datetime), which is NULL: no row is newer.
+					where = " WHERE (a." + EFFECTIVE_TIME + " IS NULL"
+							+ (previousTime == null ? "" : " OR a." + EFFECTIVE_TIME + " > " + effectiveTime(previousTime)) + ")";
+				}
+				if (editionOfExtension && !dependencySchemas.isEmpty()) {
+					String full = counterpart(snapshot, "_f");
+					String match = keyColumns(snapshot, columnNames(columns)).stream()
+							.map(c -> "f." + c + " = a." + c)
+							.collect(Collectors.joining(" AND "));
+					where += " AND NOT EXISTS (SELECT 1 FROM " + DEPENDENCY_SCHEMA + "." + full + " f WHERE " + match
+							+ " AND f.moduleid = a.moduleid AND f." + EFFECTIVE_TIME + " = a." + EFFECTIVE_TIME + ")";
+				}
+				st.execute(insertInto(PROSPECTIVE_SCHEMA, counterpart(snapshot, "_d"), columns, from) + where);
+			}
+		}
+		LOGGER.info("No Delta files in the package: {} delta tables derived ({}{})", snapshots.size(),
+				executionConfig.isFirstTimeRelease() ? "first-time release" : "from the full tables",
+				editionOfExtension ? ", with each dependency's changes" : "");
+	}
+
+	/**
+	 * A package with no Full files: each full table is its snapshot, as
+	 * {@code ReleaseDataManager.insertIntoProspectiveFullTables} derives it.
+	 */
+	private static void insertIntoProspectiveFullTables(Connection connection, DuckStore store) throws SQLException {
+		Map<String, String> tableColumns = store.tableColumns();
+		List<String> snapshots = snapshotTables(tableColumns, "_f");
+		try (Statement st = connection.createStatement()) {
+			for (String snapshot : snapshots) {
+				st.execute(insertInto(PROSPECTIVE_SCHEMA, counterpart(snapshot, "_f"), tableColumns.get(snapshot),
+						PROSPECTIVE_SCHEMA + "." + snapshot));
+			}
+		}
+		LOGGER.info("No Full files in the package: {} full tables derived from the snapshot", snapshots.size());
+	}
+
+	/** {@code INSERT INTO schema.table (columns) SELECT a.columns FROM source a}. */
+	private static String insertInto(String schema, String table, String columnSpec, String source) {
+		List<String> columns = columnNames(columnSpec);
+		return "INSERT INTO " + schema + "." + table + " (" + String.join(", ", columns) + ") SELECT "
+				+ columns.stream().map(c -> "a." + c).collect(Collectors.joining(", ")) + " FROM " + source + " a";
+	}
+
+	/** An effective time as a SQL literal, in the stored {@code YYYYMMDD} form. */
+	private static String effectiveTime(String value) {
+		return "'" + value.replace("-", "").replace("'", "") + "'";
+	}
+
+	/** The declared snapshot tables whose counterparts with these suffixes are declared too, sorted. */
+	private static List<String> snapshotTables(Map<String, String> tableColumns, String... counterparts) {
+		List<String> out = new ArrayList<>();
+		for (String table : new TreeMap<>(tableColumns).keySet()) {
+			if (table.endsWith("_s")
+					&& Stream.of(counterparts).allMatch(s -> tableColumns.containsKey(counterpart(table, s)))) {
+				out.add(table);
+			}
+		}
+		return out;
+	}
+
+	private static String counterpart(String snapshot, String suffix) {
+		return snapshot.substring(0, snapshot.length() - 2) + suffix;
 	}
 
 	/**
@@ -899,11 +1080,10 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 	}
 
 	private DuckDbAssertionExecutionService executionService(Connection connection, DuckStore store,
-			MysqlExecutionConfig executionConfig, ReleaseDirectories releases, String schema,
-			String version) {
+			MysqlExecutionConfig executionConfig, ReleaseDirectories releases, String previousSchema,
+			String schema, String version) {
 		DuckBinder binder = new DuckBinder(store.sentinels(), new DuckBinder.Config(
-				executionConfig.getExecutionId(), schema,
-				releases.previous() == null ? null : PREVIOUS_SCHEMA,
+				executionConfig.getExecutionId(), schema, previousSchema,
 				releases.dependencies().isEmpty() ? null : DEPENDENCY_SCHEMA,
 				qaResultTable, executionConfig.getDefaultModuleId(),
 				executionConfig.getIncludedModules(), version,

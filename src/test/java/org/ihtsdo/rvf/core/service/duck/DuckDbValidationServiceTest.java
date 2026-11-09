@@ -68,7 +68,13 @@ class DuckDbValidationServiceTest {
 	private static final String UUID_NOT_IN_DEPENDENCY = "55555555-5555-5555-5555-555555555555";
 	private static final String UUID_COMPARES_DEPENDENCY = "66666666-6666-6666-6666-666666666666";
 
+	private static final String UUID_DELTA_ROWS = "77777777-7777-7777-7777-777777777777";
+	private static final String UUID_FULL_ROWS = "88888888-8888-8888-8888-888888888888";
+
 	private static final String MODULE = "32506021000036107";
+
+	/** {@code rvf.empty-release-file}'s default. */
+	private static final String EMPTY_RELEASE = "empty-rf2-snapshot.zip";
 
 	private static final String GOOD_PREREQUISITE =
 			"CREATE OR REPLACE VIEW concept_active AS SELECT * FROM concept_s WHERE active = '1'";
@@ -92,6 +98,8 @@ class DuckDbValidationServiceTest {
 			 ],
 			 "tableColumns": {
 			  "concept_s": "id BIGINT, effectivetime VARCHAR, active VARCHAR, moduleid BIGINT, definitionstatusid BIGINT",
+			  "concept_d": "id BIGINT, effectivetime VARCHAR, active VARCHAR, moduleid BIGINT, definitionstatusid BIGINT",
+			  "concept_f": "id BIGINT, effectivetime VARCHAR, active VARCHAR, moduleid BIGINT, definitionstatusid BIGINT",
 			  "description_s": "id BIGINT, effectivetime VARCHAR, active VARCHAR, moduleid BIGINT, conceptid BIGINT, languagecode VARCHAR, typeid BIGINT, term VARCHAR, casesignificanceid BIGINT"
 			 },
 			 "prerequisites": [
@@ -136,7 +144,17 @@ class DuckDbValidationServiceTest {
 			   "file": "compares-dependency.sql", "text": "Concepts whose status differs from the dependency",
 			   "keywords": "dependency-comparison", "severity": "",
 			   "statements": [
-			    "insert into qa_result (run_id, assertion_id, concept_id, details) select 424242424242424242, 'rvfph_assertionuuid_', p.id, 'status differs' from rvfph_prospective_.concept_s AS p JOIN rvfph_dependency_.concept_s AS d ON d.id = p.id WHERE d.active <> p.active"]}
+			    "insert into qa_result (run_id, assertion_id, concept_id, details) select 424242424242424242, 'rvfph_assertionuuid_', p.id, 'status differs' from rvfph_prospective_.concept_s AS p JOIN rvfph_dependency_.concept_s AS d ON d.id = p.id WHERE d.active <> p.active"]},
+			  "77777777-7777-7777-7777-777777777777": {
+			   "file": "delta-rows.sql", "text": "Every concept delta row",
+			   "keywords": "release-types", "severity": "",
+			   "statements": [
+			    "insert into qa_result (run_id, assertion_id, concept_id, details) select 424242424242424242, 'rvfph_assertionuuid_', id, 'delta row' from rvfph_prospective_.concept_d"]},
+			  "88888888-8888-8888-8888-888888888888": {
+			   "file": "full-rows.sql", "text": "Every concept full row",
+			   "keywords": "release-types", "severity": "",
+			   "statements": [
+			    "insert into qa_result (run_id, assertion_id, concept_id, details) select 424242424242424242, 'rvfph_assertionuuid_', id, 'full row' from rvfph_prospective_.concept_f"]}
 			 }
 			}
 			""";
@@ -145,6 +163,7 @@ class DuckDbValidationServiceTest {
 			<assertionGroupingStrategy>
 			 <group name="component-centric-validation" includeStandaloneCategories="component-centric-validation" />
 			 <group name="dependency-comparison" includeStandaloneCategories="dependency-comparison" />
+			 <group name="release-types" includeStandaloneCategories="release-types" />
 			</assertionGroupingStrategy>
 			""";
 
@@ -355,18 +374,124 @@ class DuckDbValidationServiceTest {
 		assertEquals(2L, item(report, UUID_COMPARES_DEPENDENCY).getFailureCount());
 	}
 
+	@Test
+	void aDeltaOnlyRunWithNoPreviousReleaseValidatesTheDeltaAsTheSnapshot() throws Exception {
+		Path delta = root.resolve("delta");
+		writeRf2(delta, "Delta/Terminology/sct2_Concept_Delta_INT_20260831.txt",
+				"""
+				id	effectiveTime	active	moduleId	definitionStatusId
+				2	20260831	0	%1$s	900000000000074008
+				3	20260831	1	%1$s	900000000000074008
+				5	20260831	0	%1$s	900000000000074008
+				""".formatted(MODULE));
+		MysqlExecutionConfig config = executionConfig(19L);
+		config.setRf2DeltaOnly(true);
+		ValidationStatusReport statusReport = statusReport(new ValidationRunConfig());
+
+		service().runValidations(config, DuckDbValidationService.ReleaseDirectories.of(delta), null, statusReport);
+
+		assertEquals(List.of(), statusReport.getFailureMessages());
+		// MySQL copies the snapshot from an empty schema and applies the delta: 2 and 5.
+		// An empty snapshot would report 0, a clean pass.
+		assertEquals(2L, item(statusReport.getResultReport(), UUID_INACTIVE).getFailureCount());
+	}
+
+	@Test
+	void aSnapshotOnlyFirstTimeReleaseDerivesItsDeltaAndFullTables() throws Exception {
+		MysqlExecutionConfig config = executionConfig(20L);
+		config.setGroupNames(List.of("release-types"));
+		config.setFirstTimeRelease(true);
+		config.setEffectiveTime("2026-08-31");
+		ValidationStatusReport statusReport = statusReport(new ValidationRunConfig());
+
+		service().runValidations(config, DuckDbValidationService.ReleaseDirectories.of(prospective), null, statusReport);
+
+		ValidationReport report = statusReport.getResultReport();
+		assertEquals(List.of(), statusReport.getFailureMessages());
+		// The snapshot rows at this release's effective time: 1, 2 and 3, not 4 (20250131).
+		assertEquals(3L, item(report, UUID_DELTA_ROWS).getFailureCount());
+		assertEquals(4L, item(report, UUID_FULL_ROWS).getFailureCount(), "the full table is the snapshot");
+	}
+
+	@Test
+	void aSnapshotOnlySubsequentReleaseDerivesItsTablesInMysqlsOrder() throws Exception {
+		MysqlExecutionConfig config = executionConfig(21L);
+		config.setGroupNames(List.of("release-types"));
+		config.setPreviousEffectiveTime("20250131");
+		ValidationStatusReport statusReport = statusReport(new ValidationRunConfig());
+
+		service().runValidations(config, DuckDbValidationService.ReleaseDirectories.of(prospective), null, statusReport);
+
+		ValidationReport report = statusReport.getResultReport();
+		assertEquals(List.of(), statusReport.getFailureMessages());
+		// ReleaseDataManager derives the delta from the full table before it derives the full
+		// table from the snapshot, so a package with neither has an empty delta.
+		assertEquals(0L, item(report, UUID_DELTA_ROWS).getFailureCount());
+		assertEquals(4L, item(report, UUID_FULL_ROWS).getFailureCount());
+	}
+
+	@Test
+	void aPackageWithoutFullFilesDerivesItsFullTablesAndKeepsItsDelta() throws Exception {
+		writeRf2(prospective, "Delta/Terminology/sct2_Concept_Delta_INT_20260831.txt",
+				"""
+				id	effectiveTime	active	moduleId	definitionStatusId
+				1	20260831	1	%1$s	900000000000074008
+				2	20260831	0	%1$s	900000000000074008
+				""".formatted(MODULE));
+		MysqlExecutionConfig config = executionConfig(22L);
+		config.setGroupNames(List.of("release-types"));
+		config.setPreviousEffectiveTime("20250131");
+		ValidationStatusReport statusReport = statusReport(new ValidationRunConfig());
+
+		service().runValidations(config, DuckDbValidationService.ReleaseDirectories.of(prospective), null, statusReport);
+
+		ValidationReport report = statusReport.getResultReport();
+		assertEquals(List.of(), statusReport.getFailureMessages());
+		assertEquals(2L, item(report, UUID_DELTA_ROWS).getFailureCount(), "the package's own delta, untouched");
+		assertEquals(4L, item(report, UUID_FULL_ROWS).getFailureCount());
+	}
+
+	@Test
+	void aFirstTimeReleaseComparesWithAnEmptyPreviousReleaseAsMysqlDoes() throws Exception {
+		MysqlExecutionConfig config = executionConfig(23L);
+		config.setFirstTimeRelease(true);
+		ValidationStatusReport statusReport = statusReport(new ValidationRunConfig());
+
+		service().runValidations(config, DuckDbValidationService.ReleaseDirectories.of(prospective), null, statusReport);
+
+		TestRunItem compared = item(statusReport.getResultReport(), UUID_NEEDS_PREVIOUS);
+		assertNull(compared.getFailureMessage(), "a first-time release has nothing before it, which is an answer");
+		assertEquals(4L, compared.getFailureCount(), "every concept is new");
+	}
+
+	@Test
+	void aPreviousReleaseNamedAsTheEmptyReleaseIsAnEmptyPreviousRelease() throws Exception {
+		ValidationRunConfig runConfig = new ValidationRunConfig();
+		runConfig.setRunId(24L);
+		runConfig.setGroupsList(List.of("component-centric-validation"));
+		runConfig.setPreviousRelease(EMPTY_RELEASE);
+		runConfig.setLocalProspectiveFile(zip(prospective, root.resolve("prospective.zip")).toFile());
+		ValidationStatusReport statusReport = statusReport(runConfig);
+
+		service().runRF2Validations(runConfig, statusReport);
+
+		TestRunItem compared = item(statusReport.getResultReport(), UUID_NEEDS_PREVIOUS);
+		assertNull(compared.getFailureMessage());
+		assertEquals(4L, compared.getFailureCount());
+	}
+
 	private DuckDbValidationService service() {
 		return new DuckDbValidationService(reportService, archiveCollector(), whitelistService,
 				new ReleaseAcquisitionService(),
 				new DuckStoreLocator(storeFile.toString(), corpus.toString()),
-				corpus.toString(), work.toString(), "qa_result", 0, "", false, "", 0, noAssertionService());
+				corpus.toString(), work.toString(), EMPTY_RELEASE, "qa_result", 0, "", false, "", 0, noAssertionService());
 	}
 
 	private DuckDbValidationService service(String memoryLimit) {
 		return new DuckDbValidationService(reportService, archiveCollector(), whitelistService,
 				new ReleaseAcquisitionService(),
 				new DuckStoreLocator(storeFile.toString(), corpus.toString()),
-				corpus.toString(), work.toString(), "qa_result", 0, memoryLimit, false, "", 0, noAssertionService());
+				corpus.toString(), work.toString(), EMPTY_RELEASE, "qa_result", 0, memoryLimit, false, "", 0, noAssertionService());
 	}
 
 	private static MysqlExecutionConfig executionConfig(long runId) {
