@@ -70,6 +70,7 @@ class DuckDbValidationServiceTest {
 
 	private static final String UUID_DELTA_ROWS = "77777777-7777-7777-7777-777777777777";
 	private static final String UUID_FULL_ROWS = "88888888-8888-8888-8888-888888888888";
+	private static final String UUID_PARTLY_NEEDS_PREVIOUS = "99999999-9999-9999-9999-999999999999";
 
 	private static final String MODULE = "32506021000036107";
 
@@ -154,7 +155,13 @@ class DuckDbValidationServiceTest {
 			   "file": "full-rows.sql", "text": "Every concept full row",
 			   "keywords": "release-types", "severity": "",
 			   "statements": [
-			    "insert into qa_result (run_id, assertion_id, concept_id, details) select 424242424242424242, 'rvfph_assertionuuid_', id, 'full row' from rvfph_prospective_.concept_f"]}
+			    "insert into qa_result (run_id, assertion_id, concept_id, details) select 424242424242424242, 'rvfph_assertionuuid_', id, 'full row' from rvfph_prospective_.concept_f"]},
+			  "99999999-9999-9999-9999-999999999999": {
+			   "file": "partly-needs-previous.sql", "text": "Inactive concepts, and concepts new since the previous release",
+			   "keywords": "partial", "severity": "",
+			   "statements": [
+			    "insert into qa_result (run_id, assertion_id, concept_id, details) select 424242424242424242, 'rvfph_assertionuuid_', id, 'inactive' from rvfph_prospective_.concept_s where active = '0'",
+			    "insert into qa_result (run_id, assertion_id, concept_id, details) select 424242424242424242, 'rvfph_assertionuuid_', p.id, 'new' from rvfph_prospective_.concept_s p where not exists (select 1 from rvfph_previous_.concept_s v where v.id = p.id)"]}
 			 }
 			}
 			""";
@@ -164,6 +171,7 @@ class DuckDbValidationServiceTest {
 			 <group name="component-centric-validation" includeStandaloneCategories="component-centric-validation" />
 			 <group name="dependency-comparison" includeStandaloneCategories="dependency-comparison" />
 			 <group name="release-types" includeStandaloneCategories="release-types" />
+			 <group name="partial" includeStandaloneCategories="partial" />
 			</assertionGroupingStrategy>
 			""";
 
@@ -478,6 +486,23 @@ class DuckDbValidationServiceTest {
 		TestRunItem compared = item(statusReport.getResultReport(), UUID_NEEDS_PREVIOUS);
 		assertNull(compared.getFailureMessage());
 		assertEquals(4L, compared.getFailureCount());
+	}
+
+	@Test
+	void anAssertionWithSomeStatementsSkippedCountsTheRestAndSaysSo() throws Exception {
+		MysqlExecutionConfig config = executionConfig(25L);
+		config.setGroupNames(List.of("partial"));
+		ValidationStatusReport statusReport = statusReport(new ValidationRunConfig());
+
+		service().runValidations(config, DuckDbValidationService.ReleaseDirectories.of(prospective), null, statusReport);
+
+		TestRunItem partly = item(statusReport.getResultReport(), UUID_PARTLY_NEEDS_PREVIOUS);
+		assertNull(partly.getFailureMessage(), "what ran is a result, not a failure to run");
+		assertEquals(2L, partly.getFailureCount(), "the two inactive concepts");
+		assertNotNull(partly.getNote());
+		assertTrue(partly.getNote().startsWith("Partly run: 1 of 2 statement(s) skipped"), partly.getNote());
+		assertTrue(partly.getNote().contains("<PREVIOUS>"), partly.getNote());
+		assertEquals(0, statusReport.getResultReport().getTotalTestsIncomplete());
 	}
 
 	private DuckDbValidationService service() {
