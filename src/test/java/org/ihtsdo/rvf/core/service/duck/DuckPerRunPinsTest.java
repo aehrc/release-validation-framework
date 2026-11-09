@@ -1,6 +1,8 @@
 package org.ihtsdo.rvf.core.service.duck;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -51,12 +53,21 @@ import java.util.concurrent.atomic.AtomicInteger;
  * <p>Each run is a full validation against the same release, so the check is
  * the one that matters: the reports name different packs AND report different
  * findings, rather than the pins being accepted and ignored.
+ *
+ * <p>A run pins {@code name@version} only, resolved through a configured
+ * channel: anything a caller could use to point the server at a location of its
+ * own - a full spec, {@code file:}, a credential - is refused.
  */
 class DuckPerRunPinsTest {
 
 	private static final String UUID_BASE = "11111111-1111-1111-1111-111111111111";
 	private static final String UUID_PACK_ONE = "22222222-2222-2222-2222-222222222222";
 	private static final String UUID_PACK_TWO = "33333333-3333-3333-3333-333333333333";
+
+	/** Pack name and version, each served from {@code /<file>}. */
+	private static final List<String[]> OFFERED = List.of(
+			new String[] {"packOne", "2026.09.1", "pack-one.sql"},
+			new String[] {"packTwo", "2026.09.2", "pack-two.sql"});
 
 	/** One assertion per store, counting rows in the prospective release. */
 	private static String store(String uuid, String file) {
@@ -115,6 +126,8 @@ class DuckPerRunPinsTest {
 	private Path work;
 	private Path prospective;
 	private HttpServer server;
+	/** What the channel's index lists, replaced by a test to serve another index. */
+	private String index;
 	private final AtomicInteger fetches = new AtomicInteger();
 	private ValidationReportService reportService;
 	private WhitelistService whitelistService;
@@ -145,17 +158,26 @@ class DuckPerRunPinsTest {
 				3	20260831	1	900000000000207008	900000000000074008
 				""");
 
-		server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+		// Every address, so 127.0.0.2 reaches it too: a second host for the
+		// channel host check.
+		server = HttpServer.create(new InetSocketAddress(0), 0);
 		server.createContext("/", exchange -> {
-			fetches.incrementAndGet();
 			String file = exchange.getRequestURI().getPath().substring(1);
-			byte[] body = packBody(file).getBytes(StandardCharsets.UTF_8);
+			String text;
+			if (file.equals("index.json")) {
+				text = index;
+			} else {
+				fetches.incrementAndGet();
+				text = packBody(file);
+			}
+			byte[] body = text.getBytes(StandardCharsets.UTF_8);
 			exchange.sendResponseHeaders(200, body.length);
 			try (OutputStream out = exchange.getResponseBody()) {
 				out.write(body);
 			}
 		});
 		server.start();
+		index = index(base());
 
 		reportService = mock(ValidationReportService.class);
 		whitelistService = mock(WhitelistService.class);
@@ -171,17 +193,28 @@ class DuckPerRunPinsTest {
 		return store(file.equals("pack-one.sql") ? UUID_PACK_ONE : UUID_PACK_TWO, file);
 	}
 
-	private String pin(String name, String version, String file) {
-		String body = packBody(file);
-		return "name=" + name + ";version=" + version
-				+ ";uri=http://127.0.0.1:" + server.getAddress().getPort() + "/" + file
-				+ ";sha256=" + sha256(body);
+	private String base() {
+		return "http://127.0.0.1:" + server.getAddress().getPort();
+	}
+
+	/** The channel's index: every offered version, at {@code location}. */
+	private static String index(String location) {
+		List<String> versions = new ArrayList<>();
+		for (String[] offered : OFFERED) {
+			versions.add("{\"version\": \"" + offered[1] + "\", \"uri\": \"" + location + "/" + offered[2]
+					+ "\", \"sha256\": \"" + sha256(packBody(offered[2])) + "\"}");
+		}
+		return "{\"channel\": \"example\", \"versions\": [" + String.join(", ", versions) + "]}";
+	}
+
+	private String channel() {
+		return "name=example;index=" + base() + "/index.json;packs=packOne|packTwo";
 	}
 
 	@Test
 	void twoRunsOfOneReleaseWithDifferentPinsReportDifferentPacksAndFindings() {
-		ValidationReport first = runWith(List.of(pin("packOne", "2026.09.1", "pack-one.sql")));
-		ValidationReport second = runWith(List.of(pin("packTwo", "2026.09.2", "pack-two.sql")));
+		ValidationReport first = runWith(List.of("packOne@2026.09.1"));
+		ValidationReport second = runWith(List.of("packTwo@2026.09.2"));
 
 		// The reports name what produced them, base included.
 		assertEquals(List.of("international-fixture", "packOne"), packNames(first));
@@ -202,7 +235,7 @@ class DuckPerRunPinsTest {
 	@Test
 	void thePinnedCorpusIsCachedByPinSetAndNotRebuiltPerRun() throws Exception {
 		DuckAssertionService service = service();
-		List<String> pins = List.of(pin("packOne", "2026.09.1", "pack-one.sql"));
+		List<String> pins = List.of("packOne@2026.09.1");
 
 		DuckAssertionService.Corpus once = service.corpusFor(pins);
 		DuckAssertionService.Corpus twice = service.corpusFor(pins);
@@ -210,7 +243,7 @@ class DuckPerRunPinsTest {
 		assertEquals(1, fetches.get(), "one HTTP fetch for two resolutions");
 
 		DuckAssertionService.Corpus other =
-				service.corpusFor(List.of(pin("packTwo", "2026.09.2", "pack-two.sql")));
+				service.corpusFor(List.of("packTwo@2026.09.2"));
 		assertNotSame(once, other);
 		assertEquals(2, fetches.get());
 	}
@@ -224,18 +257,80 @@ class DuckPerRunPinsTest {
 	}
 
 	@Test
-	void aPinWhoseDigestIsWrongIsRefusedRatherThanRunWithFewerAssertions() throws Exception {
+	void aChannelVersionWhoseBytesAreNotItsDigestIsRefusedRatherThanRunWithFewerAssertions() throws Exception {
+		index = index(base()).replace(sha256(packBody("pack-one.sql")), "0".repeat(64));
 		DuckAssertionService service = service();
-		String tampered = pin("packOne", "2026.09.1", "pack-one.sql")
-				.replaceAll("sha256=.*", "sha256=" + "0".repeat(64));
 		IOException e = assertThrows(IOException.class,
-				() -> service.corpusFor(List.of(tampered)));
+				() -> service.corpusFor(List.of("packOne@2026.09.1")));
 		assertTrue(e.getMessage().toLowerCase().contains("sha256")
 						|| e.getMessage().toLowerCase().contains("digest"),
 				e.getMessage());
 		// And the deployment's corpus is untouched: a pinned run is not a
 		// deployment change, and a failed one must not leave the engine altered.
 		assertEquals(1, service.currentCorpus().store().assertions().size());
+	}
+
+	@Test
+	void aRunMayNotPinALocationADigestOrACredential() throws Exception {
+		DuckAssertionService service = service();
+		String body = packBody("pack-two.sql");
+		Path packFile = Files.writeString(root.resolve("pack-two.json"), body);
+		List<String> refused = List.of(
+				"name=packTwo;version=1;uri=" + packFile.toUri() + ";sha256=" + sha256(body),
+				"name=packOne;version=1;uri=" + base() + "/pack-one.sql;sha256=" + sha256(packBody("pack-one.sql")),
+				"packOne@2026.09.1;authHeader=Bearer secret",
+				packFile.toUri().toString(),
+				"uri=" + base() + "/pack-one.sql");
+		for (String pin : refused) {
+			IOException e = assertThrows(IOException.class, () -> service.corpusFor(List.of(pin)), pin);
+			assertTrue(e.getMessage().contains("accepts only name@version"), e.getMessage());
+			assertFalse(e.getMessage().contains("secret"), "a credential must not be echoed: " + e.getMessage());
+		}
+		assertEquals(0, fetches.get(), "nothing a refused pin names is fetched");
+
+		// The check the endpoints apply before a run is queued, which they answer with 400.
+		assertEquals(refused.size(), AssertionPackChannels.invalidRunPins(refused).size());
+		assertEquals(List.of(), AssertionPackChannels.invalidRunPins(List.of("packOne@2026.09.1", " ")));
+		assertTrue(AssertionPackChannels.runPinMessage(AssertionPackChannels.invalidRunPins(refused))
+				.contains("authHeader=<redacted>"));
+	}
+
+	@Test
+	void aVersionNoChannelOffersIsRefused() {
+		DuckAssertionService service = service();
+		IOException unknownVersion = assertThrows(IOException.class,
+				() -> service.corpusFor(List.of("packOne@2099.01.01")));
+		assertTrue(unknownVersion.getMessage().contains("offers no version"), unknownVersion.getMessage());
+		IOException unknownPack = assertThrows(IOException.class,
+				() -> service.corpusFor(List.of("someoneElsesPack@1")));
+		assertTrue(unknownPack.getMessage().contains("no configured channel serves"), unknownPack.getMessage());
+		assertEquals(0, fetches.get());
+	}
+
+	@Test
+	void anIndexPointingAtAnotherHostIsRefused() {
+		// 127.0.0.2 reaches the same server, so only the host check can refuse it.
+		index = index("http://127.0.0.2:" + server.getAddress().getPort());
+		IOException e = assertThrows(IOException.class, () -> service().corpusFor(List.of("packOne@2026.09.1")));
+		assertTrue(e.getMessage().contains("not at its index's scheme and host"), e.getMessage());
+		assertEquals(0, fetches.get());
+
+		// Unless the channel configuration lists that host.
+		DuckAssertionService allowing = new DuckAssertionService(
+				new DuckStoreLocator(storeFile.toString(), corpus.toString()),
+				corpus.toString(), List.of(), List.of(channel() + ";allowedHosts=127.0.0.2"));
+		assertEquals(2, assertDoesNotThrow(() -> allowing.corpusFor(List.of("packOne@2026.09.1")))
+				.store().assertions().size(), "the base's assertion and the pinned pack's");
+	}
+
+	@Test
+	void aCredentialNeverReachesALogLine() {
+		AssertionPackChannels.Channel channel = AssertionPackChannels.parse(
+				List.of(channel() + ";authHeader=Bearer secret")).get(0);
+		assertFalse(channel.toString().contains("secret"), channel.toString());
+		AssertionPackFetcher.Source source = new AssertionPackFetcher.Source("p", "1",
+				java.net.URI.create(base()), "0".repeat(64), "Bearer secret");
+		assertFalse(source.toString().contains("secret"), source.toString());
 	}
 
 	private List<String> packNames(ValidationReport report) {
@@ -288,7 +383,7 @@ class DuckPerRunPinsTest {
 	private DuckAssertionService service() {
 		return new DuckAssertionService(
 				new DuckStoreLocator(storeFile.toString(), corpus.toString()),
-				corpus.toString(), List.of(), List.of());
+				corpus.toString(), List.of(), List.of(channel()));
 	}
 
 	private static ObjectProvider<DuckAssertionService> provider(DuckAssertionService service) {

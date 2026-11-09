@@ -184,4 +184,34 @@ class TestUploadFileControllerIntegrationTest extends IntegrationTest {
 				.param("runId", "1"))
 				.andDo(print());
 	}
+
+	/**
+	 * A run may pin only name@version of a pack a configured channel serves. A
+	 * full spec, a file: location or a credential would let any caller make the
+	 * server fetch a URL or read a file of its choosing, and run SQL it chose
+	 * the digest for; both endpoints refuse them before anything is queued.
+	 */
+	@Test
+	public void aRunMayNotPinALocationADigestOrACredential() throws Exception {
+		String fullSpec = "name=p;version=1;uri=file:/etc/hostname;sha256=00;authHeader=Bearer secret";
+		MvcResult upload = mockMvc.perform(multipart("/run-post")
+						.file(new MockMultipartFile("file", "SnomedCT_test2_INT_20140131.zip", "application/zip",
+								getClass().getResourceAsStream("/SnomedCT_test2_INT_20140131.zip")))
+						.param("runId", "2")
+						.param("storageLocation", "pins-refused")
+						.param("assertionPacks", fullSpec))
+				.andExpect(status().isBadRequest()).andReturn();
+		String body = upload.getResponse().getContentAsString();
+		assertTrue(body.contains("accepts only name@version"), body);
+		assertTrue(!body.contains("secret"), "a credential must not be echoed: " + body);
+
+		MvcResult viaS3 = mockMvc.perform(post("/run-post-via-s3")
+						.param("bucketName", "unused")
+						.param("releaseFileS3Path", "unused.zip")
+						.param("runId", "3")
+						.param("storageLocation", "pins-refused")
+						.param("assertionPacks", "file:/etc/hostname"))
+				.andExpect(status().isBadRequest()).andReturn();
+		assertTrue(viaS3.getResponse().getContentAsString().contains("accepts only name@version"));
+	}
 }

@@ -252,14 +252,20 @@ public class DuckAssertionService implements AssertionService {
 	 * source, prove it executes - because a per-run corpus that skipped any of
 	 * those would report a release as clean for assertions it could not run. It
 	 * does NOT touch what is serving: a pinned run is not a deployment change.
+	 *
+	 * <p>A run may pin only {@code name@version} of a pack a configured channel
+	 * offers ({@link AssertionPackChannels#resolveRunPins}): the endpoints refuse
+	 * anything else with 400, and this refuses it again for a run that arrives
+	 * by another route, such as the queue.
+	 *
+	 * @throws IOException if a pin is not {@code name@version} of a pack a
+	 *                     channel offers, or the corpus cannot be built
 	 */
 	public Corpus corpusFor(List<String> pinSpecs) throws IOException {
-		if (pinSpecs == null || pinSpecs.isEmpty()) {
+		if (pinSpecs == null || pinSpecs.stream().allMatch(p -> p == null || p.isBlank())) {
 			return currentCorpus();
 		}
-		// Resolved BEFORE the cache key, so amtv4@2026.09.2 and the full spec it
-		// expands to are one entry rather than two copies of the same corpus.
-		List<String> specs = channels.resolveAll(pinSpecs);
+		List<String> specs = channels.resolveRunPins(pinSpecs);
 		String key = String.join("\n", new java.util.TreeSet<>(specs));
 		Corpus cached = pinnedCorpora.get(key);
 		if (cached != null) {

@@ -45,6 +45,7 @@ class AssertionPackReloadTest {
 
 	private HttpServer server;
 	private byte[] served = new byte[0];
+	private byte[] servedIndex = new byte[0];
 	private int status = 200;
 
 	@BeforeEach
@@ -59,7 +60,25 @@ class AssertionPackReloadTest {
 			}
 			exchange.close();
 		});
+		// The channel index, on the pack's own host: an index may only list
+		// URLs at its own scheme and host.
+		server.createContext("/index.json", exchange -> {
+			exchange.sendResponseHeaders(200, servedIndex.length);
+			try (OutputStream out = exchange.getResponseBody()) {
+				out.write(servedIndex);
+			}
+			exchange.close();
+		});
 		server.start();
+	}
+
+	private void serveIndex(String body) {
+		servedIndex = body.getBytes(StandardCharsets.UTF_8);
+	}
+
+	/** The channel that serves amtv4, with its index on the test server. */
+	private String channel() {
+		return "name=amtv4;index=http://127.0.0.1:" + server.getAddress().getPort() + "/index.json;packs=amtv4";
 	}
 
 	@AfterEach
@@ -423,10 +442,8 @@ class AssertionPackReloadTest {
 	void aPinMayNameAVersionAndTheDigestComesFromTheIndex(@TempDir Path dir) throws Exception {
 		String pack = store(UUID_PACK, "pack.sql", MACRO);
 		serve(pack);
-		Path indexFile = dir.resolve("amtv4-index.json");
-		Files.writeString(indexFile, index("amtv4", "2026.09.2", "sha256:" + sha256(pack)));
-		DuckAssertionService service = serviceWith(dir, null,
-				"name=amtv4;index=" + indexFile.toUri() + ";packs=amtv4");
+		serveIndex(index("amtv4", "2026.09.2", "sha256:" + sha256(pack)));
+		DuckAssertionService service = serviceWith(dir, null, channel());
 
 		DuckAssertionService.Corpus corpus = service.corpusFor(List.of("amtv4@2026.09.2"));
 
@@ -447,11 +464,9 @@ class AssertionPackReloadTest {
 	@Test
 	void anIndexDigestThatDoesNotMatchIsStillRefused(@TempDir Path dir) throws Exception {
 		serve(store(UUID_PACK, "pack.sql", MACRO));
-		Path indexFile = dir.resolve("amtv4-index.json");
-		Files.writeString(indexFile, index("amtv4", "2026.09.2",
+		serveIndex(index("amtv4", "2026.09.2",
 				"sha256:" + sha256(store(UUID_PACK, "something-else.sql", MACRO))));
-		DuckAssertionService service = serviceWith(dir, null,
-				"name=amtv4;index=" + indexFile.toUri() + ";packs=amtv4");
+		DuckAssertionService service = serviceWith(dir, null, channel());
 
 		IOException e = assertThrows(IOException.class,
 				() -> service.corpusFor(List.of("amtv4@2026.09.2")));
@@ -462,10 +477,8 @@ class AssertionPackReloadTest {
 	@Test
 	void anUnknownVersionSaysWhichExist(@TempDir Path dir) throws Exception {
 		serve(store(UUID_PACK, "pack.sql", MACRO));
-		Path indexFile = dir.resolve("amtv4-index.json");
-		Files.writeString(indexFile, index("amtv4", "2026.09.2", "sha256:whatever"));
-		DuckAssertionService service = serviceWith(dir, null,
-				"name=amtv4;index=" + indexFile.toUri() + ";packs=amtv4");
+		serveIndex(index("amtv4", "2026.09.2", "sha256:whatever"));
+		DuckAssertionService service = serviceWith(dir, null, channel());
 
 		IOException e = assertThrows(IOException.class,
 				() -> service.corpusFor(List.of("amtv4@2026.09.9")));
@@ -483,10 +496,8 @@ class AssertionPackReloadTest {
 	@Test
 	void aPackNoChannelServesIsRefused(@TempDir Path dir) throws Exception {
 		serve(store(UUID_PACK, "pack.sql", MACRO));
-		Path indexFile = dir.resolve("amtv4-index.json");
-		Files.writeString(indexFile, index("amtv4", "2026.09.2", "sha256:whatever"));
-		DuckAssertionService service = serviceWith(dir, null,
-				"name=amtv4;index=" + indexFile.toUri() + ";packs=amtv4");
+		serveIndex(index("amtv4", "2026.09.2", "sha256:whatever"));
+		DuckAssertionService service = serviceWith(dir, null, channel());
 
 		IOException e = assertThrows(IOException.class,
 				() -> service.corpusFor(List.of("somebody-elses-pack@1.0.0")));
@@ -502,27 +513,29 @@ class AssertionPackReloadTest {
 	@Test
 	void anIndexNamingAnotherChannelIsRefused(@TempDir Path dir) throws Exception {
 		serve(store(UUID_PACK, "pack.sql", MACRO));
-		Path indexFile = dir.resolve("amtv4-index.json");
-		Files.writeString(indexFile, index("somebody-else", "2026.09.2", "sha256:x"));
-		DuckAssertionService service = serviceWith(dir, null,
-				"name=amtv4;index=" + indexFile.toUri() + ";packs=amtv4");
+		serveIndex(index("somebody-else", "2026.09.2", "sha256:x"));
+		DuckAssertionService service = serviceWith(dir, null, channel());
 
 		IOException e = assertThrows(IOException.class,
 				() -> service.corpusFor(List.of("amtv4@2026.09.2")));
 		assertTrue(e.getMessage().contains("declares itself"), e.getMessage());
 	}
 
-	/** A full spec still works, with or without channels configured. */
+	/**
+	 * A configured full spec still works, with or without channels configured.
+	 * Only the deployment's own rvf.assertion.packs may carry one; a run may not
+	 * (DuckPerRunPinsTest).
+	 */
 	@Test
-	void aFullSpecIsLeftAlone(@TempDir Path dir) throws Exception {
+	void aConfiguredFullSpecNeverTouchesTheIndex(@TempDir Path dir) throws Exception {
 		String pack = store(UUID_PACK, "pack.sql", MACRO);
 		serve(pack);
-		DuckAssertionService service = serviceWith(dir, null,
+		DuckAssertionService service = serviceWith(dir, spec(sha256(pack)),
 				"name=amtv4;index=file:///nonexistent-index.json;packs=amtv4");
 
-		DuckAssertionService.Corpus corpus = service.corpusFor(List.of(spec(sha256(pack))));
+		service.refreshConfiguredPacks();
 
-		assertEquals(2, corpus.source().findAll().size(),
+		assertEquals(2, service.findAll().size(),
 				"a pin carrying its own uri and digest never touches the index");
 	}
 }
