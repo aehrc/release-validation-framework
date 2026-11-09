@@ -449,11 +449,11 @@ create table extendedassociation_f(
 
 drop table if exists identifier_f;
 create table identifier_f(
-  identifierschemeid    bigint(20) not null,
   alternateidentifier varchar(36) not null,
   effectivetime char(8) not null,
   active char(1) not null,
   moduleid bigint(20) not null,
+  identifierschemeid bigint(20) not null,
   referencedcomponentid bigint(20) not null,
   key idx_identifierschemeid(identifierschemeid),
   key idx_alternateidentifier(alternateidentifier),
@@ -995,11 +995,11 @@ create table extendedassociation_s(
 
 drop table if exists identifier_s;
 create table identifier_s(
-                             identifierschemeid    bigint(20) not null,
                              alternateidentifier varchar(36) not null,
                              effectivetime char(8) not null,
                              active char(1) not null,
                              moduleid bigint(20) not null,
+                             identifierschemeid bigint(20) not null,
                              referencedcomponentid bigint(20) not null,
                              key idx_identifierschemeid(identifierschemeid),
                              key idx_alternateidentifier(alternateidentifier),
@@ -1751,11 +1751,11 @@ create table extendedassociation_d(
 
 drop table if exists identifier_d;
 create table identifier_d(
-                             identifierschemeid    bigint(20) not null,
                              alternateidentifier varchar(36) not null,
                              effectivetime char(8) not null,
                              active char(1) not null,
                              moduleid bigint(20) not null,
+                             identifierschemeid bigint(20) not null,
                              referencedcomponentid bigint(20) not null,
                              key idx_identifierschemeid(identifierschemeid),
                              key idx_alternateidentifier(alternateidentifier),

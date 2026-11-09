@@ -56,7 +56,7 @@
         "",
         "identifier_d has no id column. RF2 identifies those rows by",
         "alternateidentifier, and the DDL declares",
-        "(identifierschemeid, alternateidentifier, effectivetime, active, moduleid,",
+        "(alternateidentifier, effectivetime, active, moduleid, identifierschemeid,",
         "referencedcomponentid). So MySQL raises",
         "'Unknown column t1.id in field list' and the whole assertion is abandoned.",
         "",

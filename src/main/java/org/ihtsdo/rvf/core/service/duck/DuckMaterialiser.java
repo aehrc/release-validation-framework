@@ -183,13 +183,12 @@ public final class DuckMaterialiser {
 		// to be the order of the FILE, not the order of create-tables-mysql.sql,
 		// and those differ for ten of the sixty-eight tables a release ships.
 		//
-		// MySQL has the same hazard and does not handle it: `load data local
-		// infile ... ignore 1 lines` with no column list is positional too, so
-		// RVF has always loaded the Identifier file's alternateIdentifier into
-		// identifierschemeid and vice versa. See UPSTREAM-SQL-DEFECTS.md
-		// defect 8. This is the one place the port deliberately does NOT
-		// reproduce MySQL, because a validator reading a column's data out of a
-		// different column cannot be defended on parity grounds.
+		// MySQL's `load data local infile ... ignore 1 lines` with no column
+		// list is positional too, so create-tables-mysql.sql declares the
+		// identifier_* columns in the Identifier file's order (until it did, RVF
+		// loaded alternateIdentifier into identifierschemeid and vice versa; see
+		// UPSTREAM-SQL-DEFECTS.md defect 8). Reading the header here keeps the
+		// store's tableColumns free to declare any order.
 		List<String> order = fileOrder(files, ddlNames, table);
 		String spec = columnSpec(columns, order);
 		String sort = sortKey(table, columns);

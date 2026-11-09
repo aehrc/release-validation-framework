@@ -712,12 +712,9 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 	 * <p>With no previous release the snapshot stays empty, as on MySQL - the
 	 * delta alone IS the release for a first-time load.
 	 *
-	 * <p>Keyed on {@link #keyColumns} rather than on {@code id}. MySQL hardcodes
-	 * {@code id} here too, so on {@code identifier_s} its DELETE raises Unknown
-	 * column - and unlike the extension combine that failure is caught and
-	 * logged per table, so the identifier snapshot silently keeps the previous
-	 * release's rows and never sees this delta. Third instance of the same root
-	 * cause; see UPSTREAM-SQL-DEFECTS.md defects 1 and 7.
+	 * <p>Keyed on {@link #keyColumns} rather than on {@code id}, which
+	 * {@code identifier_s} does not have - as MySQL's
+	 * {@code ReleaseDataManager.keyMatch} keys the same delete.
 	 */
 	private void rebuildSnapshotFromPreviousAndDelta(Connection connection, DuckStore store,
 			ReleaseDirectories releases) throws SQLException {
@@ -768,17 +765,12 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 	 * so together they mean: one row per key, highest effectiveTime, dependency
 	 * wins a tie. That is what the window function below says in one statement.
 	 *
-	 * <p>Two deliberate deviations from the MySQL text:
-	 * <ul>
-	 * <li>effectiveTime is compared AS STORED rather than through
-	 *     {@code cast(... as datetime)}. The column is {@code char(8)} holding
-	 *     zero-padded {@code YYYYMMDD}, whose lexicographic order is its
-	 *     chronological order, so the cast changes no answer - and DuckDB will
-	 *     not perform it.
-	 * <li>the partition key is the table's ACTUAL key. MySQL hardcodes
-	 *     {@code id}, which {@code identifier_s} does not have - see
-	 *     {@link #keyColumns}.
-	 * </ul>
+	 * <p>One deliberate deviation from the MySQL text: effectiveTime is
+	 * compared AS STORED rather than through {@code cast(... as datetime)}. The
+	 * column is {@code char(8)} holding zero-padded {@code YYYYMMDD}, whose
+	 * lexicographic order is its chronological order, so the cast changes no
+	 * answer - and DuckDB will not perform it. The partition key is the
+	 * table's key, {@link #keyColumns}, as MySQL's {@code keyMatch} is.
 	 */
 	private void combineExtensionWithDependency(Connection connection, DuckStore store)
 			throws SQLException {
@@ -826,9 +818,7 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 	 * <p>{@code id} for all but one. {@code identifier_s} carries the RF2
 	 * Identifier file, which is keyed on
 	 * {@code (identifierSchemeId, alternateIdentifier)} and has no {@code id}
-	 * column at all - and MySQL's merge names {@code id} unconditionally, so on
-	 * that one table it raises "Unknown column" and takes the rest of the combine
-	 * down with it.
+	 * column at all; {@code ReleaseDataManager.keyMatch} makes the same choice.
 	 */
 	private static List<String> keyColumns(String table, List<String> columns) {
 		if (columns.contains("id")) {
