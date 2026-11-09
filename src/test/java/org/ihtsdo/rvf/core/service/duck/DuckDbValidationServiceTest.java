@@ -71,6 +71,8 @@ class DuckDbValidationServiceTest {
 	private static final String UUID_DELTA_ROWS = "77777777-7777-7777-7777-777777777777";
 	private static final String UUID_FULL_ROWS = "88888888-8888-8888-8888-888888888888";
 	private static final String UUID_PARTLY_NEEDS_PREVIOUS = "99999999-9999-9999-9999-999999999999";
+	private static final String UUID_READS_A_FILE = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
+	private static final String UUID_WRITES_A_FILE = "cccccccc-cccc-cccc-cccc-cccccccccccc";
 
 	private static final String MODULE = "32506021000036107";
 
@@ -161,7 +163,17 @@ class DuckDbValidationServiceTest {
 			   "keywords": "partial", "severity": "",
 			   "statements": [
 			    "insert into qa_result (run_id, assertion_id, concept_id, details) select 424242424242424242, 'rvfph_assertionuuid_', id, 'inactive' from rvfph_prospective_.concept_s where active = '0'",
-			    "insert into qa_result (run_id, assertion_id, concept_id, details) select 424242424242424242, 'rvfph_assertionuuid_', p.id, 'new' from rvfph_prospective_.concept_s p where not exists (select 1 from rvfph_previous_.concept_s v where v.id = p.id)"]}
+			    "insert into qa_result (run_id, assertion_id, concept_id, details) select 424242424242424242, 'rvfph_assertionuuid_', p.id, 'new' from rvfph_prospective_.concept_s p where not exists (select 1 from rvfph_previous_.concept_s v where v.id = p.id)"]},
+			  "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb": {
+			   "file": "reads-a-file.sql", "text": "Reads a file outside the run",
+			   "keywords": "escape", "severity": "",
+			   "statements": [
+			    "insert into qa_result (run_id, assertion_id, concept_id, details) select 424242424242424242, 'rvfph_assertionuuid_', 0, content from read_text('READ_FILE')"]},
+			  "cccccccc-cccc-cccc-cccc-cccccccccccc": {
+			   "file": "writes-a-file.sql", "text": "Writes a file outside the run",
+			   "keywords": "escape", "severity": "",
+			   "statements": [
+			    "COPY (SELECT id FROM rvfph_prospective_.concept_s) TO 'OUTSIDE_FILE'"]}
 			 }
 			}
 			""";
@@ -172,6 +184,7 @@ class DuckDbValidationServiceTest {
 			 <group name="dependency-comparison" includeStandaloneCategories="dependency-comparison" />
 			 <group name="release-types" includeStandaloneCategories="release-types" />
 			 <group name="partial" includeStandaloneCategories="partial" />
+			 <group name="escape" includeStandaloneCategories="escape" />
 			</assertionGroupingStrategy>
 			""";
 
@@ -505,11 +518,77 @@ class DuckDbValidationServiceTest {
 		assertEquals(0, statusReport.getResultReport().getTotalTestsIncomplete());
 	}
 
+	@Test
+	void anAssertionCannotReadOrWriteFilesOutsideTheRun() throws Exception {
+		Path outside = root.resolve("outside").resolve("leak.csv");
+		Files.createDirectories(outside.getParent());
+		Files.writeString(storeFile, STORE.replace("READ_FILE", "/etc/hostname").replace("OUTSIDE_FILE", outside.toString()));
+		MysqlExecutionConfig config = executionConfig(26L);
+		config.setGroupNames(List.of("escape"));
+		ValidationStatusReport statusReport = statusReport(new ValidationRunConfig());
+
+		service().runValidations(config, DuckDbValidationService.ReleaseDirectories.of(prospective), null, statusReport);
+
+		ValidationReport report = statusReport.getResultReport();
+		for (String uuid : List.of(UUID_READS_A_FILE, UUID_WRITES_A_FILE)) {
+			TestRunItem refused = item(report, uuid);
+			assertEquals(-1L, refused.getFailureCount());
+			assertTrue(refused.getFailureMessage().contains("Permission Error"), refused.getFailureMessage());
+		}
+		assertFalse(Files.exists(outside), "nothing may be written outside the run's directory");
+	}
+
+	@Test
+	void anAssertionCannotReadAnotherRunsFilesOrWriteIntoTheReleaseCache() throws Exception {
+		// Both live in the work directory: another run's unpacked release, and the cache a
+		// later run would attach as its previous release.
+		Path otherRun = work.resolve("rvf-999");
+		Files.createDirectories(otherRun);
+		Path secret = otherRun.resolve("secret.txt");
+		Files.writeString(secret, "another run's release");
+		Path cache = work.resolve("release-cache");
+		Path planted = cache.resolve("0123456789abcdef.duckdb");
+		Files.writeString(storeFile, STORE.replace("READ_FILE", secret.toString()).replace("OUTSIDE_FILE", planted.toString()));
+		Path previous = root.resolve("previous");
+		writeRf2(previous, "Snapshot/Terminology/sct2_Concept_Snapshot_INT_20250131.txt",
+				"""
+				id	effectiveTime	active	moduleId	definitionStatusId
+				1	20250131	1	%1$s	900000000000074008
+				2	20250131	1	%1$s	900000000000074008
+				""".formatted(MODULE));
+		MysqlExecutionConfig config = executionConfig(28L);
+		config.setGroupNames(List.of("component-centric-validation", "escape"));
+		ValidationStatusReport statusReport = statusReport(new ValidationRunConfig());
+
+		service("", cache, 1).runValidations(config,
+				new DuckDbValidationService.ReleaseDirectories(prospective, previous, (Path) null), null, statusReport);
+
+		ValidationReport report = statusReport.getResultReport();
+		for (String uuid : List.of(UUID_READS_A_FILE, UUID_WRITES_A_FILE)) {
+			TestRunItem refused = item(report, uuid);
+			assertEquals(-1L, refused.getFailureCount());
+			assertTrue(refused.getFailureMessage().contains("Permission Error"), refused.getFailureMessage());
+		}
+		assertFalse(Files.exists(planted), "nothing may be written into the release cache");
+		// The previous release came from the cache, attached before the lockdown.
+		try (Stream<Path> files = Files.list(cache)) {
+			assertEquals(1, files.filter(p -> p.toString().endsWith(".duckdb")).count());
+		}
+		TestRunItem ran = item(report, UUID_NEEDS_PREVIOUS);
+		assertNull(ran.getFailureMessage(), ran.getFailureMessage());
+		assertEquals(2L, ran.getFailureCount(), "the cached previous release is still readable");
+	}
+
 	private DuckDbValidationService service() {
+		return service("", null, 0);
+	}
+
+	private DuckDbValidationService service(String memoryLimit, Path cacheDirectory, double cacheMaxGb) {
 		return new DuckDbValidationService(reportService, archiveCollector(), whitelistService,
 				new ReleaseAcquisitionService(),
 				new DuckStoreLocator(storeFile.toString(), corpus.toString()),
-				corpus.toString(), work.toString(), EMPTY_RELEASE, "qa_result", 0, "", false, "", 0, noAssertionService());
+				corpus.toString(), work.toString(), EMPTY_RELEASE, "qa_result", 0, memoryLimit, false,
+				cacheDirectory == null ? "" : cacheDirectory.toString(), cacheMaxGb, noAssertionService());
 	}
 
 	private DuckDbValidationService service(String memoryLimit) {

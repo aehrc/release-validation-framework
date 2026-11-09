@@ -174,8 +174,7 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 	/** {@code rvf.empty-release-file}: a previous release so named declares there is none. */
 	private final String emptyReleaseFile;
 	private final String qaResultTable;
-	private final int duckThreads;
-	private final String duckMemoryLimit;
+	private final DuckConnections.Limits limits;
 	private final boolean archiveFailures;
 	private final DuckReleaseCache releaseCache;
 	/**
@@ -220,82 +219,16 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 		this.workDirectory = workDirectory;
 		this.emptyReleaseFile = emptyReleaseFile;
 		this.qaResultTable = QA_RESULT_SCHEMA + "." + qaResultTableName;
-		this.duckThreads = duckThreads;
-		this.duckMemoryLimit = requireUnit(duckMemoryLimit);
+		this.limits = new DuckConnections.Limits(duckThreads, duckMemoryLimit);
 		this.archiveFailures = archiveFailures;
 		// Default off. A cache that appeared without being asked for would change
 		// the disk footprint of an existing deployment by gigabytes.
 		Path cacheDir = Path.of(cacheDirectory == null || cacheDirectory.isBlank()
 				? workDirectory + "/release-cache" : cacheDirectory);
-		this.releaseCache = new DuckReleaseCache(cacheDir, (long) (cacheMaxGb * 1073741824L));
+		this.releaseCache = new DuckReleaseCache(cacheDir, (long) (cacheMaxGb * 1073741824L), limits);
 		if (this.releaseCache.isEnabled()) {
 			LOGGER.info("Release cache enabled: {} with a {} GB budget", cacheDir, cacheMaxGb);
 		}
-	}
-
-	/**
-	 * A memory limit without a unit fails the run, not the startup, so reject it
-	 * here.
-	 *
-	 * <p>{@code rvf.duck.memory.limit} is passed to DuckDB verbatim as
-	 * {@code SET memory_limit}, and DuckDB requires a unit. Given {@code 4} it
-	 * raises "Unknown unit for memory" - but only when the connection is opened,
-	 * which is after acquisition and materialisation. On a real edition that is
-	 * twenty-five minutes before the operator learns the flag was wrong, and the
-	 * whole SQL phase is lost while Drools and MRCM carry on, so the run reports
-	 * partial results rather than a configuration error.
-	 *
-	 * <p>Cost me exactly that. Failing at startup is worth five lines.
-	 */
-	private static String requireUnit(String memoryLimit) {
-		if (memoryLimit == null || memoryLimit.isBlank()) {
-			return memoryLimit;
-		}
-		String trimmed = memoryLimit.trim();
-		if (!trimmed.matches("(?i)\\d+(\\.\\d+)?\\s*(k|m|g|t)(i?b)?")) {
-			throw new IllegalArgumentException(
-					"rvf.duck.memory.limit must carry a unit, e.g. 4GB or 4GiB - got '"
-					+ memoryLimit + "'. DuckDB accepts KB/MB/GB/TB (1000^i) and "
-					+ "KiB/MiB/GiB/TiB (1024^i), and rejects a bare number only "
-					+ "once the connection is opened, long after the release has "
-					+ "been materialised.");
-		}
-		return trimmed;
-	}
-
-	/**
-	 * Bound DuckDB to the CPU and memory this process was actually given.
-	 *
-	 * <p>DuckDB sizes its thread pool from the machine, and it does NOT observe
-	 * the restrictions a container or a scheduler imposes. Measured on this
-	 * codebase: under {@code taskset -c 0-1}, {@code nproc} reports 2 and the
-	 * JVM's {@code availableProcessors()} reports 2, while DuckDB still reports
-	 * {@code threads=10} - the host's core count.
-	 *
-	 * <p>Why that matters in production rather than in theory: a Kubernetes pod
-	 * with {@code limits.cpu: 2} on a 64-core node gets a CFS quota, not two
-	 * cores. DuckDB would start 64 worker threads inside a two-core budget, and
-	 * every one of them contends for the same quota - so the pod is throttled
-	 * hard and runs SLOWER than it would with two threads. The same applies to
-	 * an HPC allocation of a few cores on a many-core node.
-	 *
-	 * <p>{@code availableProcessors()} is the right source because the JVM does
-	 * observe both affinity and cgroup quotas, so it reports what this process
-	 * may actually use. {@code rvf.duck.threads} overrides it for benchmarking
-	 * or for deliberately oversubscribing; {@code rvf.duck.memory.limit} is left
-	 * unset by default, which keeps DuckDB's own heuristic.
-	 */
-	private void applyResourceLimits(Connection connection) throws SQLException {
-		int threads = duckThreads > 0 ? duckThreads : Runtime.getRuntime().availableProcessors();
-		try (Statement statement = connection.createStatement()) {
-			statement.execute("SET threads = " + threads);
-			if (duckMemoryLimit != null && !duckMemoryLimit.isBlank()) {
-				statement.execute("SET memory_limit = '" + duckMemoryLimit.replace("'", "") + "'");
-			}
-		}
-		LOGGER.info("DuckDB resource limits: threads={}{}", threads,
-				duckMemoryLimit == null || duckMemoryLimit.isBlank()
-						? "" : ", memory_limit=" + duckMemoryLimit);
 	}
 
 	/**
@@ -522,8 +455,14 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 			report.setExecutionId(executionConfig.getExecutionId());
 			statusReport.setResultReport(report);
 		}
-		Path database = databaseFile(executionConfig.getExecutionId());
+		// The run's own directory, which also holds what runRF2Validations
+		// unpacked: the one directory its assertions may read or write once the
+		// releases are loaded (see run).
+		Path runDirectory = Path.of(workDirectory, "rvf-" + executionConfig.getExecutionId());
+		boolean ownsRunDirectory = !Files.isDirectory(runDirectory);
+		Path database = runDirectory.resolve("rvf_duck.duckdb");
 		try {
+			Files.createDirectories(runDirectory);
 			// A file database, not jdbc:duckdb: in memory. A full release is
 			// tens of millions of rows and DuckDB only spills to disk when it
 			// has a file to spill beside; an in-memory run of the real corpus
@@ -533,12 +472,12 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 			// previous crashed attempt at the same run would otherwise be
 			// REOPENED, and its stale `prospective` schema is last week's
 			// release validated under this week's run id.
-			FileUtils.deleteQuietly(database.toFile());
+			deleteDatabase(database);
 			Class.forName("org.duckdb.DuckDBDriver");
 			try (Connection connection = DriverManager.getConnection("jdbc:duckdb:" + database)) {
-				applyResourceLimits(connection);
-				return run(connection, executionConfig, releases, reportStorage, statusReport,
-						timeStart);
+				configure(connection);
+				return run(connection, executionConfig, releases, runDirectory, reportStorage,
+						statusReport, timeStart);
 			}
 		} catch (Exception e) {
 			// The outermost net: a missing store, a driver that will not load,
@@ -551,12 +490,39 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 			return statusReport;
 		} finally {
 			deleteDatabase(database);
+			if (ownsRunDirectory) {
+				FileUtils.deleteQuietly(runDirectory.toFile());
+			}
 		}
 	}
 
+	/**
+	 * Resource limits, and MySQL's free conversion between types, which the
+	 * corpus relies on (amtv4's isValidComponentId_cr calls length() on a
+	 * BIGINT column). Applied before loading: once the releases are in, the
+	 * connection is locked down and its configuration frozen.
+	 */
+	private void configure(Connection connection) throws SQLException {
+		limits.apply(connection);
+		try (Statement st = connection.createStatement()) {
+			st.execute("SET old_implicit_casting=true");
+		}
+	}
+
+	/**
+	 * Loads the releases, then runs the assertions.
+	 *
+	 * <p>Loading reads the release directories and the release cache, and runs
+	 * only the engine's own SQL: table shapes from the store, which
+	 * {@link DuckStore#parse} has checked are plain declarations. Cached
+	 * releases are attached read-only. Only then is the connection locked down
+	 * to {@code runDirectory}, its database and spill included, before any of
+	 * the store's statements run: they cannot read other runs' files or the
+	 * release cache, nor write anywhere else.
+	 */
 	private ValidationStatusReport run(Connection connection, MysqlExecutionConfig executionConfig,
-			ReleaseDirectories releases, String reportStorage, ValidationStatusReport statusReport,
-			long timeStart) throws IOException {
+			ReleaseDirectories releases, Path runDirectory, String reportStorage,
+			ValidationStatusReport statusReport, long timeStart) throws IOException {
 		// Captured ONCE, at the start of the run, from whoever owns the corpus.
 		// Once: a refresh partway through a validation must not change which
 		// assertions it is running, or the report describes neither corpus.
@@ -612,7 +578,7 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 			// reads. Which statements may use it is DuckBinder's decision;
 			// materialising it runs nothing extra by itself.
 			lastItemLoadAttempted = "Empty schema";
-			Path none = Files.createTempDirectory("rvf-empty");
+			Path none = Files.createTempDirectory(runDirectory, "rvf-empty-");
 			try {
 				materialise(connection, none, EMPTY_SCHEMA, store, false);
 			} finally {
@@ -638,6 +604,8 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 				}
 			}
 			createResultTable(connection);
+			lastItemLoadAttempted = "Confining the connection to " + runDirectory;
+			DuckConnections.lockDown(connection, List.of(runDirectory));
 		} catch (Exception e) {
 			String message = ExceptionUtils.getExceptionCause(
 					String.format("Failed to load data (%s) into DuckDB", lastItemLoadAttempted), e);
@@ -695,7 +663,7 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 				new DuckFailuresExtractor(connection, qaResultTable, whitelistService,
 						source::findAll),
 				store);
-		archiveFailures(connection, reportStorage);
+		archiveFailures(connection, reportStorage, runDirectory);
 		return statusReport;
 	}
 
@@ -1286,8 +1254,8 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 	}
 
 	/**
-	 * Session settings, neither of them optional, both established against the
-	 * real corpus by DuckStoreProbe. They do not carry to another connection.
+	 * The search path, so unqualified table names resolve to the phase's
+	 * schema - the one setting a locked-down connection may still change.
 	 */
 	private void session(Connection connection, String schema) throws SQLException {
 		try (Statement st = connection.createStatement()) {
@@ -1297,9 +1265,6 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 			// combined phase re-runs the same statements with the search path
 			// moved, and they build over the merged tables instead.
 			st.execute("SET search_path='" + schema + "'");
-			// MySQL casts freely between types and DuckDB does not; amtv4's
-			// isValidComponentId_cr calls length() on a BIGINT column.
-			st.execute("SET old_implicit_casting=true");
 		}
 	}
 
@@ -1337,19 +1302,25 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 	 * by an archive that could not be written; the report is the deliverable and
 	 * this is a convenience beside it.
 	 */
-	private void archiveFailures(Connection connection, String reportStorage) {
+	private void archiveFailures(Connection connection, String reportStorage, Path runDirectory) {
 		if (!archiveFailures) {
 			return;
 		}
-		Path parquet = Path.of(workDirectory, "rvf_failures_" + System.nanoTime() + ".parquet");
+		String name = "rvf_failures_" + System.nanoTime() + ".parquet";
+		// Written inside the run directory - the only place the locked-down
+		// connection may write - and moved out of it before that directory is
+		// deleted.
+		Path written = runDirectory.resolve(name);
+		Path parquet = Path.of(workDirectory, name);
 		try {
 			try (Statement st = connection.createStatement()) {
 				// COPY writes to the server's filesystem, which for an embedded
 				// engine is ours, so this lands locally and is then handed to the
 				// job store - the same route the structure report takes.
-				st.execute("COPY (SELECT * FROM " + qaResultTable + ") TO '" + parquet
+				st.execute("COPY (SELECT * FROM " + qaResultTable + ") TO '" + written
 						+ "' (FORMAT PARQUET, COMPRESSION ZSTD)");
 			}
+			Files.move(written, parquet, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
 			// Registered rather than uploaded. This used to write
 			// failures.parquet straight to the job store from here, which put the
 			// whole archive in the hands of the one validator that runs SQL
@@ -1366,12 +1337,9 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 			LOGGER.info("Staged {} KB of SQL failure detail for {}", Files.size(parquet) / 1024, reportStorage);
 		} catch (Exception e) {
 			LOGGER.warn("Could not archive failure detail for {}: {}", reportStorage, e.toString());
+			FileUtils.deleteQuietly(written.toFile());
 			FileUtils.deleteQuietly(parquet.toFile());
 		}
-	}
-
-	private Path databaseFile(Long runId) {
-		return Path.of(workDirectory, "rvf_duck_" + runId + ".duckdb");
 	}
 
 	/**

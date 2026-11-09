@@ -86,10 +86,18 @@ public final class DuckReleaseCache {
 
 	private final Path cacheDir;
 	private final long maxBytes;
+	private final DuckConnections.Limits limits;
 
-	public DuckReleaseCache(Path cacheDir, long maxBytes) {
+	/**
+	 * @param limits the CPUs and memory a build may use: the same as a run's,
+	 *               since a build happens inside one. Without them, building a
+	 *               full edition in a container uses every host core and 80% of
+	 *               host RAM.
+	 */
+	public DuckReleaseCache(Path cacheDir, long maxBytes, DuckConnections.Limits limits) {
 		this.cacheDir = cacheDir;
 		this.maxBytes = maxBytes;
+		this.limits = limits;
 	}
 
 	public boolean isEnabled() {
@@ -145,6 +153,10 @@ public final class DuckReleaseCache {
 		try {
 			Class.forName("org.duckdb.DuckDBDriver");
 			try (Connection con = DriverManager.getConnection("jdbc:duckdb:" + temp)) {
+				limits.apply(con);
+				// The release's files to read, and the cache to build into and
+				// spill beside: the table shapes reach DDL and read_csv here.
+				DuckConnections.lockDown(con, List.of(releaseDir, cacheDir));
 				DuckMaterialiser.Result result =
 						DuckMaterialiser.materialise(con, releaseDir, MAIN, tableColumns);
 				try (Statement st = con.createStatement()) {

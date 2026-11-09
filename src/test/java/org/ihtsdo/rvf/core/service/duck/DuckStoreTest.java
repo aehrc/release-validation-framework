@@ -94,4 +94,38 @@ class DuckStoreTest {
 	void aStoreWithNoVersionAtAllIsRefused() {
 		assertThrows(IOException.class, () -> DuckStore.parse("{\"assertions\": {}}"));
 	}
+
+	@Test
+	void aColumnListCarryingSqlIsRefused() {
+		// tableColumns reaches DDL and read_csv before a run's connection is locked down.
+		IOException e = assertThrows(IOException.class, () -> DuckStore.parse(STORE.replace(
+				"\"id BIGINT, active VARCHAR\"",
+				"\"id BIGINT); COPY (SELECT 1) TO '/tmp/x.csv'; CREATE TABLE z (a INT\"")));
+		assertTrue(e.getMessage().contains("tableColumns declares concept_s"), e.getMessage());
+	}
+
+	@Test
+	void aTableNameThatIsNotAPlainIdentifierIsRefused() {
+		IOException e = assertThrows(IOException.class, () -> DuckStore.parse(STORE.replace(
+				"\"concept_s\": \"id", "\"concept_s (a INT); COPY x TO 'y'; CREATE TABLE t\": \"id")));
+		assertTrue(e.getMessage().contains("not a plain identifier"), e.getMessage());
+	}
+
+	@Test
+	void anUnknownColumnTypeIsRefusedAndASizedOneAccepted() throws IOException {
+		assertThrows(IOException.class, () -> DuckStore.parse(STORE.replace("active VARCHAR", "active BLOB")));
+		assertThrows(IOException.class, () -> DuckStore.parse(STORE.replace("active VARCHAR", "active DECIMAL(10,2)")));
+		assertEquals("id BIGINT, active VARCHAR(1)",
+				DuckStore.parse(STORE.replace("active VARCHAR", "active VARCHAR(1)")).tableColumns().get("concept_s"));
+	}
+
+	@Test
+	void theBundledStoreDeclaresOnlyPlainTables() throws IOException {
+		// The checked-in store must still load: every table shape it carries is a
+		// plain declaration of an accepted type.
+		try (java.io.InputStream in = DuckStore.class.getResourceAsStream("/duck/store.json")) {
+			assertTrue(DuckStore.parse(new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8))
+					.tableColumns().size() > 0);
+		}
+	}
 }

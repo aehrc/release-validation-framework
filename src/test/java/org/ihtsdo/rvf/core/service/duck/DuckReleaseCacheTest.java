@@ -45,6 +45,9 @@ class DuckReleaseCacheTest {
 
 	private static final Map<String, String> COLUMNS = columns("id BIGINT, active INTEGER");
 
+	/** The JVM's CPUs and DuckDB's default memory limit, as with nothing configured. */
+	private static final DuckConnections.Limits LIMITS = new DuckConnections.Limits(0, "");
+
 	private static Map<String, String> columns(String spec) {
 		Map<String, String> m = new LinkedHashMap<>();
 		m.put("concept_s", spec);
@@ -66,7 +69,7 @@ class DuckReleaseCacheTest {
 	@Test
 	void aCachedReleaseResolvesUnderTheStoresBareLiteral(@TempDir Path root) throws Exception {
 		Path releaseDir = release(root.resolve("release"), "sct2_Concept_Snapshot_INT_20260101.txt", 5);
-		DuckReleaseCache cache = new DuckReleaseCache(root.resolve("cache"), 1073741824L);
+		DuckReleaseCache cache = new DuckReleaseCache(root.resolve("cache"), 1073741824L, LIMITS);
 
 		Path cached = cache.get(releaseDir, COLUMNS);
 		assertNotNull(cached, "a miss must build rather than give up");
@@ -86,7 +89,7 @@ class DuckReleaseCacheTest {
 	@Test
 	void aSecondRequestHitsRatherThanRebuilding(@TempDir Path root) throws Exception {
 		Path releaseDir = release(root.resolve("release"), "sct2_Concept_Snapshot_INT_20260101.txt", 3);
-		DuckReleaseCache cache = new DuckReleaseCache(root.resolve("cache"), 1073741824L);
+		DuckReleaseCache cache = new DuckReleaseCache(root.resolve("cache"), 1073741824L, LIMITS);
 
 		Path first = cache.get(releaseDir, COLUMNS);
 		long builtAt = Files.getLastModifiedTime(first).toMillis();
@@ -102,7 +105,7 @@ class DuckReleaseCacheTest {
 	@Test
 	void aDifferentColumnMapMissesRatherThanServingWronglyLoadedData(@TempDir Path root) throws Exception {
 		Path releaseDir = release(root.resolve("release"), "sct2_Concept_Snapshot_INT_20260101.txt", 3);
-		DuckReleaseCache cache = new DuckReleaseCache(root.resolve("cache"), 1073741824L);
+		DuckReleaseCache cache = new DuckReleaseCache(root.resolve("cache"), 1073741824L, LIMITS);
 
 		Path a = cache.get(releaseDir, COLUMNS);
 		Path b = cache.get(releaseDir, columns("id BIGINT, moduleid BIGINT"));
@@ -114,7 +117,7 @@ class DuckReleaseCacheTest {
 	@Test
 	void aChangedReleaseMissesEvenUnderTheSameName(@TempDir Path root) throws Exception {
 		Path releaseDir = release(root.resolve("release"), "sct2_Concept_Snapshot_INT_20260101.txt", 3);
-		DuckReleaseCache cache = new DuckReleaseCache(root.resolve("cache"), 1073741824L);
+		DuckReleaseCache cache = new DuckReleaseCache(root.resolve("cache"), 1073741824L, LIMITS);
 		Path before = cache.get(releaseDir, COLUMNS);
 
 		// Republished with more content under exactly the same filename.
@@ -143,7 +146,7 @@ class DuckReleaseCacheTest {
 	@Test
 	void aDisabledCacheSuppliesNothingAtAll(@TempDir Path root) throws Exception {
 		Path releaseDir = release(root.resolve("release"), "sct2_Concept_Snapshot_INT_20260101.txt", 2);
-		DuckReleaseCache cache = new DuckReleaseCache(root.resolve("cache"), 0);
+		DuckReleaseCache cache = new DuckReleaseCache(root.resolve("cache"), 0, LIMITS);
 
 		assertFalse(cache.isEnabled());
 		assertNull(cache.get(releaseDir, COLUMNS), "off by default means no file and no directory");
@@ -152,7 +155,7 @@ class DuckReleaseCacheTest {
 
 	@Test
 	void anUnreadableReleaseFallsBackInsteadOfFailingTheValidation(@TempDir Path root) {
-		DuckReleaseCache cache = new DuckReleaseCache(root.resolve("cache"), 1073741824L);
+		DuckReleaseCache cache = new DuckReleaseCache(root.resolve("cache"), 1073741824L, LIMITS);
 
 		assertNull(cache.get(root.resolve("no-such-release"), COLUMNS),
 				"a cache is an optimisation; null tells the caller to materialise as before");
@@ -170,7 +173,7 @@ class DuckReleaseCacheTest {
 			Files.setLastModifiedTime(f, FileTime.fromMillis(old + i * 1000));
 		}
 
-		new DuckReleaseCache(cacheDir, 900).evict();
+		new DuckReleaseCache(cacheDir, 900, LIMITS).evict();
 
 		assertFalse(Files.exists(cacheDir.resolve("release-0.duckdb")), "least recently used goes first");
 		assertTrue(Files.exists(cacheDir.resolve("release-2.duckdb")), "most recently used survives");
@@ -184,7 +187,7 @@ class DuckReleaseCacheTest {
 			Files.write(cacheDir.resolve("release-" + i + ".duckdb"), new byte[400]);
 		}
 
-		new DuckReleaseCache(cacheDir, 100).evict();
+		new DuckReleaseCache(cacheDir, 100, LIMITS).evict();
 
 		assertEquals(3, Files.list(cacheDir).count(),
 				"a file being built by another worker right now must not be deleted under it");

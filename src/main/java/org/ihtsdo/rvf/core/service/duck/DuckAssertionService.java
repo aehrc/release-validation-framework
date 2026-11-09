@@ -435,6 +435,14 @@ public class DuckAssertionService implements AssertionService {
 		}
 		try (java.sql.Connection con = java.sql.DriverManager.getConnection("jdbc:duckdb:")) {
 			try (java.sql.Statement st = con.createStatement()) {
+				// Settings first: the lock below freezes every one but the
+				// search path - see DuckDbValidationService.
+				st.execute("SET old_implicit_casting=true");
+			}
+			// Before anything a pack supplied reaches the connection, the table
+			// shapes included: none of it gets any file access.
+			DuckConnections.lockDown(con, List.of());
+			try (java.sql.Statement st = con.createStatement()) {
 				// All THREE release schemas, each with the declared table
 				// shapes and no rows. Prospective alone is not enough: an
 				// assertion may mix statements that read the previous release
@@ -455,10 +463,7 @@ public class DuckAssertionService implements AssertionService {
 								+ " (" + table.getValue() + ")");
 					}
 				}
-				// Both settings the engine needs, and neither carries to a new
-				// connection - see DuckDbValidationService.
 				st.execute("SET search_path='prospective'");
-				st.execute("SET old_implicit_casting=true");
 				st.execute("CREATE SCHEMA IF NOT EXISTS rvf_results");
 				st.execute("CREATE TABLE rvf_results.qa_result ("
 						+ "id BIGINT, run_id BIGINT, assertion_id VARCHAR, concept_id BIGINT, "
