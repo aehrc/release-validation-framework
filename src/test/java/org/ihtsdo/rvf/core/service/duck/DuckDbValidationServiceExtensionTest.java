@@ -281,7 +281,7 @@ class DuckDbValidationServiceExtensionTest {
 	@Test
 	void anExtensionRunWithNoDependencyReportsAFailureRatherThanResults() {
 		ValidationStatusReport status = run(new DuckDbValidationService.ReleaseDirectories(
-				prospective, previous, null));
+				prospective, previous, (Path) null));
 
 		assertTrue(status.getFailureMessages().stream()
 						.anyMatch(m -> m.contains("dependency")),

@@ -14,10 +14,15 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.File;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -60,6 +65,10 @@ class DuckDbValidationServiceTest {
 	private static final String UUID_CLEAN = "22222222-2222-2222-2222-222222222222";
 	private static final String UUID_NEEDS_PREVIOUS = "33333333-3333-3333-3333-333333333333";
 	private static final String UUID_VERSION_BOUND = "44444444-4444-4444-4444-444444444444";
+	private static final String UUID_NOT_IN_DEPENDENCY = "55555555-5555-5555-5555-555555555555";
+	private static final String UUID_COMPARES_DEPENDENCY = "66666666-6666-6666-6666-666666666666";
+
+	private static final String MODULE = "32506021000036107";
 
 	private static final String GOOD_PREREQUISITE =
 			"CREATE OR REPLACE VIEW concept_active AS SELECT * FROM concept_s WHERE active = '1'";
@@ -78,6 +87,7 @@ class DuckDbValidationServiceTest {
 			  {"placeholder": "<ASSERTIONUUID>", "sentinel": "rvfph_assertionuuid_"},
 			  {"placeholder": "<PROSPECTIVE>", "sentinel": "rvfph_prospective_"},
 			  {"placeholder": "<PREVIOUS>", "sentinel": "rvfph_previous_"},
+			  {"placeholder": "<DEPENDENCY>", "sentinel": "rvfph_dependency_"},
 			  {"placeholder": "<VERSION>", "sentinel": "rvfph_version_"}
 			 ],
 			 "tableColumns": {
@@ -116,7 +126,17 @@ class DuckDbValidationServiceTest {
 			   "file": "version-bound.sql", "text": "Active concepts at this release version",
 			   "keywords": "component-centric-validation", "severity": "",
 			   "statements": [
-			    "insert into qa_result (run_id, assertion_id, concept_id, details, component_id, table_name) select 424242424242424242, 'rvfph_assertionuuid_', id, 'active at version', id, 'prospective.concept_s' from rvfph_prospective_.res_edited_concepts where effectivetime = 'rvfph_version_'"]}
+			    "insert into qa_result (run_id, assertion_id, concept_id, details, component_id, table_name) select 424242424242424242, 'rvfph_assertionuuid_', id, 'active at version', id, 'prospective.concept_s' from rvfph_prospective_.res_edited_concepts where effectivetime = 'rvfph_version_'"]},
+			  "55555555-5555-5555-5555-555555555555": {
+			   "file": "not-in-dependency.sql", "text": "Concepts the dependency does not have",
+			   "keywords": "dependency-comparison", "severity": "",
+			   "statements": [
+			    "insert into qa_result (run_id, assertion_id, concept_id, details) select 424242424242424242, 'rvfph_assertionuuid_', p.id, 'not in dependency' from rvfph_prospective_.concept_s AS p LEFT JOIN rvfph_dependency_.concept_s AS d ON d.id = p.id WHERE d.id IS NULL"]},
+			  "66666666-6666-6666-6666-666666666666": {
+			   "file": "compares-dependency.sql", "text": "Concepts whose status differs from the dependency",
+			   "keywords": "dependency-comparison", "severity": "",
+			   "statements": [
+			    "insert into qa_result (run_id, assertion_id, concept_id, details) select 424242424242424242, 'rvfph_assertionuuid_', p.id, 'status differs' from rvfph_prospective_.concept_s AS p JOIN rvfph_dependency_.concept_s AS d ON d.id = p.id WHERE d.active <> p.active"]}
 			 }
 			}
 			""";
@@ -124,6 +144,7 @@ class DuckDbValidationServiceTest {
 	private static final String GROUPS_XML = """
 			<assertionGroupingStrategy>
 			 <group name="component-centric-validation" includeStandaloneCategories="component-centric-validation" />
+			 <group name="dependency-comparison" includeStandaloneCategories="dependency-comparison" />
 			</assertionGroupingStrategy>
 			""";
 
@@ -241,7 +262,7 @@ class DuckDbValidationServiceTest {
 		ValidationStatusReport statusReport = statusReport(new ValidationRunConfig());
 
 		service().runValidations(executionConfig(12L),
-				new DuckDbValidationService.ReleaseDirectories(prospective, previous, null),
+				new DuckDbValidationService.ReleaseDirectories(prospective, previous, (Path) null),
 				null, statusReport);
 
 		TestRunItem ran = item(statusReport.getResultReport(), UUID_NEEDS_PREVIOUS);
@@ -296,6 +317,44 @@ class DuckDbValidationServiceTest {
 		assertEquals(0, statusReport.getResultReport().getTotalTestsRun());
 	}
 
+	@Test
+	void severalDependenciesAreValidatedAgainstTheirUnion() throws Exception {
+		// Concepts 1 and 2 are in one dependency, 3 in the other; 4 is in neither.
+		Path first = root.resolve("dependency-a");
+		writeRf2(first, "Snapshot/Terminology/sct2_Concept_Snapshot_INT_20260801.txt", """
+				id	effectiveTime	active	moduleId	definitionStatusId
+				1	20260801	1	%1$s	900000000000074008
+				2	20260801	1	%1$s	900000000000074008
+				""".formatted(MODULE));
+		Path second = root.resolve("dependency-b");
+		writeRf2(second, "Snapshot/Terminology/sct2_Concept_Snapshot_XX_20260801.txt", """
+				id	effectiveTime	active	moduleId	definitionStatusId
+				3	20260801	1	%1$s	900000000000074008
+				""".formatted(MODULE));
+		File firstZip = zip(first, root.resolve("dependency-a.zip")).toFile();
+		File secondZip = zip(second, root.resolve("dependency-b.zip")).toFile();
+
+		ValidationRunConfig runConfig = new ValidationRunConfig();
+		runConfig.setRunId(18L);
+		runConfig.setGroupsList(List.of("dependency-comparison"));
+		runConfig.setReleaseAsAnEdition(true);
+		runConfig.setLocalProspectiveFile(zip(prospective, root.resolve("prospective.zip")).toFile());
+		runConfig.addExtensionDependency(firstZip.getName()).addExtensionDependency(secondZip.getName());
+		runConfig.addLocalReleaseFile(firstZip);
+		runConfig.addLocalReleaseFile(secondZip);
+		ValidationStatusReport statusReport = statusReport(runConfig);
+
+		service().runRF2Validations(runConfig, statusReport);
+
+		assertEquals(List.of(), statusReport.getFailureMessages());
+		ValidationReport report = statusReport.getResultReport();
+		// 1 with the union; 3 with the second dependency alone, 2 with the first alone.
+		assertEquals(1L, item(report, UUID_NOT_IN_DEPENDENCY).getFailureCount(),
+				"only concept 4 is in neither dependency");
+		// 2 and 3 are inactive here and active in a dependency, one in each.
+		assertEquals(2L, item(report, UUID_COMPARES_DEPENDENCY).getFailureCount());
+	}
+
 	private DuckDbValidationService service() {
 		return new DuckDbValidationService(reportService, archiveCollector(), whitelistService,
 				new ReleaseAcquisitionService(),
@@ -339,6 +398,18 @@ class DuckDbValidationServiceTest {
 		Path file = releaseDir.resolve(relative);
 		Files.createDirectories(file.getParent());
 		Files.writeString(file, content);
+	}
+
+	private static Path zip(Path dir, Path zipFile) throws Exception {
+		try (OutputStream out = Files.newOutputStream(zipFile); ZipOutputStream zip = new ZipOutputStream(out);
+				Stream<Path> files = Files.walk(dir)) {
+			for (Path file : files.filter(Files::isRegularFile).toList()) {
+				zip.putNextEntry(new ZipEntry(dir.relativize(file).toString()));
+				Files.copy(file, zip);
+				zip.closeEntry();
+			}
+		}
+		return zipFile;
 	}
 
 	/**

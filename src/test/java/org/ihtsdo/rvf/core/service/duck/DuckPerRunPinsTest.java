@@ -270,7 +270,7 @@ class DuckPerRunPinsTest {
 		runConfig.setRunId(config.getExecutionId());
 		ValidationStatusReport status = new ValidationStatusReport(runConfig);
 		validationService().runValidations(config,
-				new DuckDbValidationService.ReleaseDirectories(prospective, null, null),
+				new DuckDbValidationService.ReleaseDirectories(prospective, null, (Path) null),
 				"storage/", status);
 		assertEquals(List.of(), status.getFailureMessages());
 		return status.getResultReport();

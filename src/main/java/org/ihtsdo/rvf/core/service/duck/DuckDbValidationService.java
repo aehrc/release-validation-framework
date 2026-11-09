@@ -293,20 +293,37 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 	 * The RF2 release directories a run validates - already downloaded and
 	 * unzipped by whoever acquired them.
 	 *
-	 * <p>{@code previous} and {@code dependency} are null when the run does not
-	 * hold them, and null is a MEANINGFUL value: it makes {@link DuckBinder}
-	 * leave {@code <PREVIOUS>} / {@code <DEPENDENCY>} unbound, which is what
-	 * turns an assertion over a release we do not have into "not run" rather
-	 * than a pass. Pointing them at an empty directory instead would create
-	 * empty placeholder tables, every such assertion would run against zero
-	 * rows, and "nothing differs from the previous release" would be reported as
-	 * a clean pass for a comparison nothing performed.
+	 * <p>{@code previous} is null, and {@code dependencies} empty, when the run
+	 * does not hold them, and that is a MEANINGFUL value: it makes
+	 * {@link DuckBinder} leave {@code <PREVIOUS>} / {@code <DEPENDENCY>}
+	 * unbound, which is what turns an assertion over a release we do not have
+	 * into "not run" rather than a pass. Pointing them at an empty directory
+	 * instead would create empty placeholder tables, every such assertion would
+	 * run against zero rows, and "nothing differs from the previous release"
+	 * would be reported as a clean pass for a comparison nothing performed.
+	 *
+	 * @param dependencies the unpacked dependency releases, in the order the run
+	 *                     names them; their union is what an extension sits on
 	 */
-	public record ReleaseDirectories(Path prospective, Path previous, Path dependency) {
+	public record ReleaseDirectories(Path prospective, Path previous, List<Dependency> dependencies) {
+
+		public ReleaseDirectories {
+			dependencies = dependencies == null ? List.of() : List.copyOf(dependencies);
+		}
+
+		/** A run with at most one dependency. */
+		public ReleaseDirectories(Path prospective, Path previous, Path dependency) {
+			this(prospective, previous, dependency == null ? List.of()
+					: List.of(new Dependency(dependency.getFileName().toString(), dependency)));
+		}
 
 		public static ReleaseDirectories of(Path prospective) {
-			return new ReleaseDirectories(prospective, null, null);
+			return new ReleaseDirectories(prospective, null, (Path) null);
 		}
+	}
+
+	/** One unpacked dependency release, by the release file name the run names it with. */
+	public record Dependency(String release, Path directory) {
 	}
 
 	/**
@@ -386,21 +403,24 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 			previous = DuckReleaseUnpacker.unpack(previousZip, work, "previous", excluded);
 		}
 
-		Path dependency = null;
-		List<String> dependencies = validationConfig.getExtensionDependencies();
-		if (!CollectionUtils.isEmpty(dependencies)) {
-			// One directory for all of them, which is what an extension with
-			// several dependencies means: the union is the content the extension
-			// sits on top of, and DuckMaterialiser already loads every file that
-			// maps to a table as one relation.
-			for (String name : dependencies) {
+		// Each dependency in a directory of its own, and a schema of its own:
+		// the extension sits on their union. One shared directory does not give
+		// a union - DuckReleaseUnpacker.unpack clears its target first, so only
+		// the last dependency would survive.
+		List<Dependency> dependencies = new ArrayList<>();
+		List<String> names = validationConfig.getExtensionDependencies();
+		if (!CollectionUtils.isEmpty(names)) {
+			Path dependencyRoot = work.resolve(DEPENDENCY_SCHEMA);
+			for (String name : names) {
 				File zip = localFileNamed(validationConfig, name);
-				if (zip != null) {
-					dependency = DuckReleaseUnpacker.unpack(zip, work, "dependency", excluded);
+				if (zip == null) {
+					throw new IOException("The dependency release " + name + " was not acquired for this run");
 				}
+				dependencies.add(new Dependency(name, DuckReleaseUnpacker.unpack(zip, dependencyRoot,
+						String.valueOf(dependencies.size()), excluded)));
 			}
 		}
-		return new ReleaseDirectories(prospective, previous, dependency);
+		return new ReleaseDirectories(prospective, previous, dependencies);
 	}
 
 	/**
@@ -503,7 +523,7 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 		String lastItemLoadAttempted = "Item Unknown";
 		try {
 			lastItemLoadAttempted = "Prospective Release - " + releases.prospective();
-			materialise(connection, releases.prospective(), PROSPECTIVE_SCHEMA, store);
+			materialise(connection, releases.prospective(), PROSPECTIVE_SCHEMA, store, false);
 			// Only now: pre-requisites.sql names its inputs unqualified, so the
 			// search path has to point at a schema that already exists.
 			session(connection, PROSPECTIVE_SCHEMA);
@@ -511,15 +531,28 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 
 			if (releases.previous() != null) {
 				lastItemLoadAttempted = "Previous Release - " + releases.previous();
-				materialise(connection, releases.previous(), PREVIOUS_SCHEMA, store);
+				materialise(connection, releases.previous(), PREVIOUS_SCHEMA, store, true);
 			}
 			if (executionConfig.isRf2DeltaOnly()) {
 				lastItemLoadAttempted = "Delta-only rebuild of the prospective snapshot";
 				rebuildSnapshotFromPreviousAndDelta(connection, store, releases);
 			}
-			if (releases.dependency() != null) {
-				lastItemLoadAttempted = "Dependency Release - " + releases.dependency();
-				materialise(connection, releases.dependency(), DEPENDENCY_SCHEMA, store);
+			if (!releases.dependencies().isEmpty()) {
+				// One schema per dependency, and DEPENDENCY_SCHEMA their union,
+				// as ReleaseDataManager.combineKnownVersions puts every
+				// dependency's rows into one schema on MySQL.
+				List<String> schemas = new ArrayList<>();
+				for (Dependency dependency : releases.dependencies()) {
+					lastItemLoadAttempted = "Dependency Release - " + dependency.release();
+					String schema = releases.dependencies().size() == 1
+							? DEPENDENCY_SCHEMA : DEPENDENCY_SCHEMA + "_" + schemas.size();
+					materialise(connection, dependency.directory(), schema, store, true);
+					schemas.add(schema);
+				}
+				if (schemas.size() > 1) {
+					lastItemLoadAttempted = "Union of the dependency releases";
+					unionDependencies(connection, store, schemas);
+				}
 			} else {
 				// A run with no dependency has no dependency CONTENT - which is
 				// a fact, not a gap: isExtensionValidation() IS "the dependency
@@ -536,7 +569,7 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 				lastItemLoadAttempted = "Empty dependency schema";
 				Path none = Files.createTempDirectory("rvf-no-dependency");
 				try {
-					materialise(connection, none, EMPTY_SCHEMA, store);
+					materialise(connection, none, EMPTY_SCHEMA, store, false);
 				} finally {
 					Files.deleteIfExists(none);
 				}
@@ -679,7 +712,7 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 			items.addAll(executeAssertions(extensionPhase, rest, reportStorage));
 			return items;
 		}
-		if (releases.dependency() == null) {
+		if (releases.dependencies().isEmpty()) {
 			throw new SQLException("Extension validation needs a dependency release, none supplied");
 		}
 
@@ -694,6 +727,26 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 		items.addAll(executeAssertions(combinedPhase, selection.resources(), reportStorage));
 		items.addAll(executeAssertions(combinedPhase, rest, reportStorage));
 		return items;
+	}
+
+	/**
+	 * Several dependencies: {@link #DEPENDENCY_SCHEMA} holds a view per table
+	 * over the union of their schemas, as
+	 * {@code ReleaseDataManager.combineKnownVersions} inserts every
+	 * dependency's rows into one schema. Each dependency keeps its own schema
+	 * (and its own release-cache entry).
+	 */
+	private static void unionDependencies(Connection connection, DuckStore store,
+			Collection<String> schemas) throws SQLException {
+		try (Statement st = connection.createStatement()) {
+			st.execute("CREATE SCHEMA IF NOT EXISTS " + DEPENDENCY_SCHEMA);
+			for (String table : new TreeMap<>(store.tableColumns()).keySet()) {
+				st.execute("CREATE OR REPLACE VIEW " + DEPENDENCY_SCHEMA + "." + table + " AS "
+						+ schemas.stream().map(schema -> "SELECT * FROM " + schema + "." + table)
+								.collect(Collectors.joining(" UNION ALL ")));
+			}
+		}
+		LOGGER.info("Dependency schema is the union of {}", schemas);
 	}
 
 	/**
@@ -851,12 +904,12 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 		DuckBinder binder = new DuckBinder(store.sentinels(), new DuckBinder.Config(
 				executionConfig.getExecutionId(), schema,
 				releases.previous() == null ? null : PREVIOUS_SCHEMA,
-				releases.dependency() == null ? null : DEPENDENCY_SCHEMA,
+				releases.dependencies().isEmpty() ? null : DEPENDENCY_SCHEMA,
 				qaResultTable, executionConfig.getDefaultModuleId(),
 				executionConfig.getIncludedModules(), version,
 				// Offered only when there is no dependency; with one loaded
 				// there is nothing to stand in for.
-				releases.dependency() == null ? EMPTY_SCHEMA : null));
+				releases.dependencies().isEmpty() ? EMPTY_SCHEMA : null));
 		try {
 			session(connection, schema);
 		} catch (SQLException e) {
@@ -1023,9 +1076,10 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 	}
 
 	/**
-	 * Puts a release into the run database, from the cache where that is allowed.
+	 * Puts a release into the run database, from the cache where
+	 * {@code cacheable}.
 	 *
-	 * <p>Only {@code previous} and {@code dependency} are cacheable, and the
+	 * <p>Only the previous and dependency releases are cacheable, and the
 	 * restriction is not conservatism: they are the only schemas nothing writes
 	 * to. Every assertion phase runs against {@code prospective} or
 	 * {@code combined} - see the resource-assertion note on {@link Selection} for
@@ -1034,9 +1088,9 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 	 * The prospective release is also different every run, so there would be
 	 * nothing to hit.
 	 */
-	private void materialise(Connection connection, Path releaseDir, String schema, DuckStore store)
-			throws SQLException, IOException {
-		if (releaseCache != null && releaseCache.isEnabled() && isCacheable(schema)) {
+	private void materialise(Connection connection, Path releaseDir, String schema, DuckStore store,
+			boolean cacheable) throws SQLException, IOException {
+		if (cacheable && releaseCache != null && releaseCache.isEnabled()) {
 			Path cached = releaseCache.get(releaseDir, store.tableColumns());
 			if (cached != null) {
 				DuckReleaseCache.attach(connection, cached, schema);
@@ -1134,11 +1188,6 @@ public class DuckDbValidationService implements SqlAssertionValidationService {
 			LOGGER.warn("Could not archive failure detail for {}: {}", reportStorage, e.toString());
 			FileUtils.deleteQuietly(parquet.toFile());
 		}
-	}
-
-	/** See {@link #materialise}: only the schemas nothing writes to. */
-	private static boolean isCacheable(String schema) {
-		return PREVIOUS_SCHEMA.equals(schema) || DEPENDENCY_SCHEMA.equals(schema);
 	}
 
 	private Path databaseFile(Long runId) {
