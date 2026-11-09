@@ -59,10 +59,16 @@ import java.util.regex.Pattern;
  *     report rather than an error.
  * <li><b>{@code prerequisites} union by file, and the same file with a
  *     different hash is refused</b>, for the same reason.
+ * <li><b>Pack names are unique within a merge.</b> A requirement, a report and
+ *     a refresh name a pack by its name alone, so two inputs sharing one could
+ *     not be told apart - and a {@code requires} check would run against
+ *     whichever was recorded last.
  * </ul>
  *
  * <p>Every refusal names the packs and the key, because a merge conflict is
  * something a person has to resolve in a publishing pipeline they may not own.
+ * The pack named as the earlier definition is the one that made it, not
+ * always the base: with three or more packs it is often another pack.
  */
 public final class DuckStorePacks {
 
@@ -128,6 +134,16 @@ public final class DuckStorePacks {
 		ObjectNode out = (ObjectNode) mapper.readTree(base.store().toJson());
 		List<String> conflicts = new ArrayList<>();
 
+		// A requirement, a report and a refresh all name a pack by its name alone.
+		Map<String, String> byName = new LinkedHashMap<>();
+		for (Pack pack : packs) {
+			String earlier = byName.putIfAbsent(pack.name(), pack.label());
+			if (earlier != null) {
+				conflicts.add("two packs in this merge are named " + pack.name() + " (" + earlier + " and "
+						+ pack.label() + ") - a requirement or a report naming it could not tell them apart");
+			}
+		}
+
 		// Provenance first, so even a refused merge has told the caller what it
 		// was trying to combine.
 		ArrayNode provenance = out.putArray("packs");
@@ -139,11 +155,17 @@ public final class DuckStorePacks {
 			entry.put("assertions", pack.store().assertions().size());
 		}
 
+		// Each definition with the label of the pack that made it, so a conflict
+		// names its owner rather than always the base.
 		Map<String, String> ports = portsByName(base, conflicts);
+		Map<String, String> portOwners = owners(ports.keySet(), base);
 		Map<String, JsonNode> prerequisites = prerequisitesByFile(base);
+		Map<String, String> prerequisiteOwners = owners(prerequisites.keySet(), base);
 		Set<String> knownTables = new LinkedHashSet<>(base.store().knownTables());
 		Map<String, String> tableColumns = new LinkedHashMap<>(base.store().tableColumns());
+		Map<String, String> tableOwners = owners(tableColumns.keySet(), base);
 		ObjectNode assertions = (ObjectNode) out.path("assertions");
+		Map<String, String> assertionOwners = owners(base.store().assertions().keySet(), base);
 
 		for (Pack pack : packs.subList(1, packs.size())) {
 			DuckStore store = pack.store();
@@ -161,26 +183,29 @@ public final class DuckStorePacks {
 			knownTables.addAll(store.knownTables());
 			store.tableColumns().forEach((table, columns) -> {
 				String existing = tableColumns.putIfAbsent(table, columns);
+				tableOwners.putIfAbsent(table, pack.label());
 				if (existing != null && !existing.equals(columns)) {
 					conflicts.add("table " + table + " is declared differently by "
-							+ base.label() + " and " + pack.label()
+							+ tableOwners.get(table) + " and " + pack.label()
 							+ " - one pack's SQL reads a shape the other does not have");
 				}
 			});
 
 			portsByName(pack, conflicts).forEach((name, statement) -> {
 				String existing = ports.putIfAbsent(name, statement);
+				portOwners.putIfAbsent(name, pack.label());
 				if (existing != null && !existing.equals(statement)) {
 					conflicts.add(pack.label() + " redefines " + name + ", already defined by "
-							+ base.label() + " - a redefinition silently changes the meaning "
+							+ portOwners.get(name) + " - a redefinition silently changes the meaning "
 							+ "of the other pack's SQL");
 				}
 			});
 
 			prerequisitesByFile(pack).forEach((file, node) -> {
 				JsonNode existing = prerequisites.putIfAbsent(file, node);
+				prerequisiteOwners.putIfAbsent(file, pack.label());
 				if (existing != null && !hashOf(existing).equals(hashOf(node))) {
-					conflicts.add("prerequisite " + file + " differs between " + base.label()
+					conflicts.add("prerequisite " + file + " differs between " + prerequisiteOwners.get(file)
 							+ " and " + pack.label());
 				}
 			});
@@ -191,13 +216,14 @@ public final class DuckStorePacks {
 				JsonNode existing = assertions.get(uuid);
 				if (existing == null) {
 					assertions.set(uuid, entry);
+					assertionOwners.put(uuid, pack.label());
 				} else if (!existing.equals(entry)) {
 					// Identical repetition is fine and normal - a national pack
 					// built from a combined corpus contains the international
 					// assertions too. Two DIFFERENT assertions under one uuid
 					// would have the report attribute one's findings to the
 					// other.
-					conflicts.add("assertion " + uuid + " is different in " + base.label()
+					conflicts.add("assertion " + uuid + " is different in " + assertionOwners.get(uuid)
 							+ " (" + existing.path("file").asText() + ") and " + pack.label()
 							+ " (" + entry.path("file").asText() + ")");
 				}
@@ -237,6 +263,13 @@ public final class DuckStorePacks {
 		}
 
 		return DuckStore.parse(out.toString());
+	}
+
+	/** {@code key -> label} for every key, all owned by {@code pack}. */
+	private static Map<String, String> owners(Set<String> keys, Pack pack) {
+		Map<String, String> owners = new LinkedHashMap<>();
+		keys.forEach(key -> owners.put(key, pack.label()));
+		return owners;
 	}
 
 	private static JsonNode toObject(DuckStore store) throws IOException {
