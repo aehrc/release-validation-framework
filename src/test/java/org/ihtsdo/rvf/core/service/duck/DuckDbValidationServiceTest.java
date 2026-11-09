@@ -539,6 +539,37 @@ class DuckDbValidationServiceTest {
 	}
 
 	@Test
+	void theFailureArchiveIsStillWrittenAfterTheRunConnectionIsLockedDown() throws Exception {
+		// The COPY to parquet runs on the locked connection, which may write only
+		// inside the run directory; the file is then moved out to the work
+		// directory. A refused COPY only logs a WARN, so this is the check.
+		FailureArchiveCollector collector = archiveCollector();
+		DuckDbValidationService service = new DuckDbValidationService(reportService, collector, whitelistService,
+				new ReleaseAcquisitionService(),
+				new DuckStoreLocator(storeFile.toString(), corpus.toString()),
+				corpus.toString(), work.toString(), EMPTY_RELEASE, "qa_result", 0, "", true, "", 0,
+				noAssertionService());
+		ValidationStatusReport statusReport = statusReport(new ValidationRunConfig());
+
+		service.runValidations(executionConfig(29L),
+				DuckDbValidationService.ReleaseDirectories.of(prospective), "archive/", statusReport);
+
+		assertEquals(2L, item(statusReport.getResultReport(), UUID_INACTIVE).getFailureCount());
+		assertEquals(1, collector.stagedCount("archive/"), "the run's failure archive was staged");
+		List<Path> archives;
+		try (Stream<Path> files = Files.list(work)) {
+			archives = files.filter(p -> p.getFileName().toString().endsWith(".parquet")).toList();
+		}
+		assertEquals(1, archives.size(), "the archive was moved out of the run directory");
+		try (java.sql.Connection con = java.sql.DriverManager.getConnection("jdbc:duckdb:");
+				java.sql.Statement st = con.createStatement();
+				java.sql.ResultSet rs = st.executeQuery("SELECT count(*) FROM read_parquet('" + archives.get(0) + "')")) {
+			assertTrue(rs.next());
+			assertTrue(rs.getLong(1) >= 2, "the archive holds the run's findings");
+		}
+	}
+
+	@Test
 	void anAssertionCannotReadAnotherRunsFilesOrWriteIntoTheReleaseCache() throws Exception {
 		// Both live in the work directory: another run's unpacked release, and the cache a
 		// later run would attach as its previous release.

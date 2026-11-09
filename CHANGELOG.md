@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 ### Breaking
-- MySQL schema change: the `identifier_*` tables declare their columns in the RF2 Identifier file's order (alternateIdentifier first), because releases are loaded by position. MySQL binary archives (`rvf.release.mysql.binary.storage`) written before this hold the old order; remove them and let RVF repopulate them.
+- MySQL schema change: the `identifier_*` tables declare their columns in the RF2 Identifier file's order (alternateIdentifier first), because releases are loaded by position. MySQL binary archives (`rvf.release.mysql.binary.storage`) written before this hold the old order; remove them and let RVF repopulate them. Also drop any `rvf_*` MySQL schemas loaded before this version: a release held by schema name is reused as it is, and the merges copy its `identifier_*` rows by position.
 
 ## 9.0.0
 
