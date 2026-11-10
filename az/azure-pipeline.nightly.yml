@@ -238,7 +238,18 @@ parameters:
   # deployment reload: each digest is checked before the bytes are parsed, the
   # merge must not conflict, and the merged corpus must execute.
   #
-  #   name=amtv4;version=2026.09.1;uri=<asset api url>;sha256=<digest>
+  #   amtv4@2026.09.2
+  #
+  # name@version ONLY, for a pack a channel the deployment configures
+  # (assertionChannels in the chart values) serves; the digest comes from the
+  # channel's index. The server answers anything else - a full
+  # name=..;uri=..;sha256=.. spec, a file: location, an authHeader - with 400:
+  # a request that could name its own location could make the server fetch any
+  # URL or read any file and run SQL it chose the digest for. Full specs belong
+  # in the deployment's own assertionPacks. The server checks only a pin's
+  # shape at submit: a name@version no configured channel serves is accepted,
+  # and the run then fails on the worker. Production configures the amtv4
+  # channel.
   #
   # Two versions of the same pack cannot be pinned together: they share
   # assertion uuids, so any assertion that changed between them collides and
@@ -248,7 +259,7 @@ parameters:
   # assertions than the deployment serves is exactly the case a floor exists to
   # notice.
   - name: assertionPacks
-    displayName: 'Assertion packs to pin for this run (spec grammar), or empty for the deployed set'
+    displayName: 'Assertion packs to pin for this run (name@version, comma separated), or empty for the deployed set'
     type: string
     default: ''
 
@@ -489,7 +500,7 @@ stages:
                     exit 1; }
                 PREV="$(sed -n 's/^previousRelease=//p' previous.log | tail -1)"
                 if [ -z "$PREV" ]; then
-                  echo "##vso[task.logissue type=warning]first release of this module: release-type assertions will not run"
+                  echo "##vso[task.logissue type=warning]first release of this module: release-type assertions run against an empty previous release, as MySQL does, and may report many failures"
                 fi
                 echo "##vso[task.setvariable variable=previousRelease]$PREV"
 
@@ -566,11 +577,11 @@ stages:
                   ARGS+=( -F "previousRelease=$PREV" )
                   echo "previous release: $PREV"
                 else
-                  # Without one, every release-type assertion needing <PREVIOUS>
-                  # is dropped as not-executed: 49 of 87 on the AU edition. The
-                  # run is still green, which is why the step before this one
-                  # warns rather than staying quiet about it.
-                  echo "no previous release - release-type assertions will not execute"
+                  # Without one, the run is a first-time release: every
+                  # release-type assertion needing <PREVIOUS> runs against an
+                  # empty previous release, as MySQL does, and can report many
+                  # failures. The step before this one warns about it.
+                  echo "no previous release - release-type assertions run against an empty previous release"
                 fi
 
                 # Only when non-empty. RVF splits an empty string into one empty
@@ -592,15 +603,12 @@ stages:
                 # only way that report can be reproduced once the deployment's
                 # pins have moved on.
                 #
-                # Same spec grammar as the deployment's: semicolons inside one
-                # pack, commas between packs.
+                # name@version only, commas between packs; a channel resolves
+                # each to its digest, which the report records.
                 PINS='${{ parameters.assertionPacks }}'
                 if [ -n "$PINS" ]; then
                   ARGS+=( -F "assertionPacks=$PINS" )
-                  # The digest, not the version, is what makes this reproducible,
-                  # so log the whole spec - minus anything after authHeader,
-                  # which is a token.
-                  echo "pinned packs: ${PINS%%;authHeader=*}"
+                  echo "pinned packs: $PINS"
                 fi
 
                 HTTP="$(curl -sS -m 300 -o submit.json -w '%{http_code}' "${ARGS[@]}")"
@@ -611,7 +619,8 @@ stages:
 
                 # 412 means an assertion group name does not exist; 400 with an
                 # empty body means the prospective file was not found under the
-                # job store root - both are configuration, not flakiness.
+                # job store root, and 400 naming assertionPacks a pin that is not
+                # name@version - all configuration, not flakiness.
                 if [ "$HTTP" != "201" ]; then
                   echo "##vso[task.logissue type=error]submit returned HTTP $HTTP - 412 is an unknown assertion group, 400 an unresolvable release path"
                   exit 1

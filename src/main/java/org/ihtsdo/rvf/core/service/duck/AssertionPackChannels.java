@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 /**
  * The locations a pack may be fetched from, and the versions each one offers.
@@ -55,14 +56,32 @@ import java.util.Optional;
  * pack names this channel may serve; a version resolved from it is refused if
  * the index offers a pack the channel was not configured to carry, which is what
  * stops a compromised or mistaken index from substituting a different corpus.
+ * For the same reason an index may only point at its own scheme and host, or at
+ * a host the channel lists in {@code allowedHosts} ({@code |}-separated): the
+ * channel configuration decides where packs come from, not the index.
+ *
+ * <h2>Per-run pins</h2>
+ *
+ * <p>A validation request may pin only {@code name@version} of a pack a
+ * configured channel serves ({@link #resolveRunPins}). A full spec, a
+ * {@code file:} location or a credential in a request would let any
+ * authenticated caller make the server fetch any URL or read any local file,
+ * and run SQL of its own choosing with a digest it also chose. Those stay in the
+ * deployment's {@code rvf.assertion.packs}.
  */
 public class AssertionPackChannels {
 
 	private static final Logger LOGGER = LoggerFactory.getLogger(AssertionPackChannels.class);
 	private static final ObjectMapper MAPPER = new ObjectMapper();
 
+	/** {@code name@version}: the only form a validation request may pin a pack with. */
+	private static final Pattern SHORTHAND = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9._-]*");
+
+	private static final String REDACTED = "<redacted>";
+
 	/** One configured location, and the pack names it is allowed to serve. */
-	public record Channel(String name, URI index, List<String> packs, String authHeader) {
+	public record Channel(String name, URI index, List<String> packs, String authHeader,
+			List<String> allowedHosts) {
 
 		public Channel {
 			if (name == null || name.isBlank()) {
@@ -77,11 +96,35 @@ public class AssertionPackChannels {
 								+ "supplying a digest by hand");
 			}
 			packs = packs == null || packs.isEmpty() ? List.of(name) : List.copyOf(packs);
+			allowedHosts = allowedHosts == null ? List.of() : List.copyOf(allowedHosts);
 		}
 
 		/** Whether this channel is allowed to serve a pack of that name. */
 		public boolean serves(String pack) {
 			return packs.contains(pack);
+		}
+
+		/**
+		 * Whether a URL its index lists may be fetched: the index's own scheme,
+		 * and its host or one of {@link #allowedHosts}.
+		 */
+		boolean mayFetch(URI uri) {
+			if (uri.getScheme() == null || !uri.getScheme().equalsIgnoreCase(index.getScheme())) {
+				return false;
+			}
+			String host = uri.getHost();
+			if (host == null || index.getHost() == null) {
+				return host == null && index.getHost() == null;
+			}
+			return host.equalsIgnoreCase(index.getHost())
+					|| allowedHosts.stream().anyMatch(host::equalsIgnoreCase);
+		}
+
+		/** Without the credential, which must not reach a log. */
+		@Override
+		public String toString() {
+			return "Channel[name=" + name + ", index=" + index + ", packs=" + packs
+					+ ", authHeader=" + (authHeader == null ? null : REDACTED) + ", allowedHosts=" + allowedHosts + "]";
 		}
 	}
 
@@ -117,6 +160,9 @@ public class AssertionPackChannels {
 	 * <p>Fetched every time rather than cached. An index is small, the answer
 	 * changes whenever someone publishes, and a cached list that says a version
 	 * does not exist when it does is a worse failure than an extra request.
+	 *
+	 * @throws IOException if the index cannot be read, names another channel, or
+	 *                     lists a URL the channel may not fetch
 	 */
 	public List<Version> versions(Channel channel) throws IOException {
 		byte[] body = fetcher.read(channel.index(), channel.authHeader());
@@ -140,12 +186,20 @@ public class AssertionPackChannels {
 						channel.name());
 				continue;
 			}
+			URI location = URI.create(uri);
+			if (!channel.mayFetch(location)) {
+				throw new IOException("channel " + channel.name() + " lists version " + version + " at " + location
+						+ ", which is not at its index's scheme and host (" + channel.index().getScheme() + "://"
+						+ channel.index().getHost() + ") or a host in its allowedHosts " + channel.allowedHosts()
+						+ ". Refusing the index: the channel configuration decides where packs come from, "
+						+ "not the index.");
+			}
 			List<String> requires = new ArrayList<>();
 			for (JsonNode need : entry.path("requires")) {
 				requires.add(need.path("pack").asText("") + " atLeast "
 						+ need.path("atLeast").asText(""));
 			}
-			out.add(new Version(version, URI.create(uri), sha256,
+			out.add(new Version(version, location, sha256,
 					entry.path("assertions").asInt(0), requires,
 					entry.path("published").asText(""), entry.path("draft").asBoolean(false)));
 		}
@@ -153,22 +207,90 @@ public class AssertionPackChannels {
 	}
 
 	/**
-	 * Turns {@code name@version} into a full pin.
+	 * A configured pin ({@code rvf.assertion.packs}) as a full spec:
+	 * {@code name@version} resolved through a channel, and a full spec returned
+	 * untouched.
 	 *
 	 * <p>The shorthand exists so a pipeline variable can be a version and
-	 * nothing else. Anything more - a uri, a digest - is what a caller had to
-	 * write before, and still may: a spec that already carries them is returned
-	 * untouched, so a pin that names a location no channel serves keeps working
-	 * for a one-off.
+	 * nothing else. A full spec, with its own uri and digest, is the deployment
+	 * owner's to write, so a pin that names a location no channel serves keeps
+	 * working for a one-off.
 	 */
 	public String resolve(String spec) throws IOException {
 		String trimmed = spec == null ? "" : spec.trim();
 		if (trimmed.isEmpty() || trimmed.contains(";") || trimmed.contains("=")) {
 			return trimmed;
 		}
+		return resolveShorthand(trimmed);
+	}
+
+	/** Every configured pin resolved, in order, leaving full specs alone. */
+	public List<String> resolveAll(List<String> specs) throws IOException {
+		if (specs == null || specs.isEmpty()) {
+			return List.of();
+		}
+		List<String> out = new ArrayList<>(specs.size());
+		for (String spec : specs) {
+			String resolved = resolve(spec);
+			if (!resolved.isBlank()) {
+				out.add(resolved);
+			}
+		}
+		return out;
+	}
+
+	/**
+	 * A validation request's pins, resolved through the configured channels.
+	 *
+	 * <p>A request may only name a version a channel offers. A full spec, a
+	 * {@code file:} location or a credential in a request would let any caller
+	 * make the server fetch any URL or read any file, and run SQL of the
+	 * caller's choosing; those stay in configuration.
+	 *
+	 * @throws IOException if a pin is not {@code name@version}, or no channel offers it
+	 */
+	public List<String> resolveRunPins(List<String> pins) throws IOException {
+		List<String> invalid = invalidRunPins(pins);
+		if (!invalid.isEmpty()) {
+			throw new IOException(runPinMessage(invalid));
+		}
+		List<String> out = new ArrayList<>();
+		for (String pin : pins == null ? List.<String>of() : pins) {
+			if (pin != null && !pin.isBlank()) {
+				out.add(resolveShorthand(pin.trim()));
+			}
+		}
+		return out;
+	}
+
+	/** The pins a validation request may not use: anything but {@code name@version}. */
+	public static List<String> invalidRunPins(List<String> pins) {
+		List<String> invalid = new ArrayList<>();
+		for (String pin : pins == null ? List.<String>of() : pins) {
+			if (pin != null && !pin.isBlank() && !SHORTHAND.matcher(pin.trim()).matches()) {
+				invalid.add(redact(pin.trim()));
+			}
+		}
+		return invalid;
+	}
+
+	/** Why {@code invalid} pins are refused, for the caller who sent them. */
+	public static String runPinMessage(List<String> invalid) {
+		return "assertionPacks accepts only name@version for a pack a configured channel "
+				+ "(rvf.assertion.channels) serves, e.g. amtv4@2026.09.2. Full pack specs, uri=, "
+				+ "file: locations and authHeader are accepted only in the deployment's rvf.assertion.packs. "
+				+ "Refused: " + invalid;
+	}
+
+	/** A spec with any {@code authHeader} value replaced, for logs and messages. */
+	public static String redact(String spec) {
+		return spec == null ? null : spec.replaceAll("(?i)(authHeader=)[^;]*", "$1" + REDACTED);
+	}
+
+	private String resolveShorthand(String trimmed) throws IOException {
 		int at = trimmed.lastIndexOf('@');
 		if (at <= 0 || at == trimmed.length() - 1) {
-			throw new IOException("'" + trimmed + "' is not a pack spec and not "
+			throw new IOException("'" + redact(trimmed) + "' is not a pack spec and not "
 					+ "name@version. A shorthand pin is exactly name@version, for example "
 					+ "amtv4@2026.09.2.");
 		}
@@ -197,21 +319,6 @@ public class AssertionPackChannels {
 						? "" : ";authHeader=" + channel.authHeader());
 	}
 
-	/** Every spec resolved, in order, leaving full specs alone. */
-	public List<String> resolveAll(List<String> specs) throws IOException {
-		if (specs == null || specs.isEmpty()) {
-			return List.of();
-		}
-		List<String> out = new ArrayList<>(specs.size());
-		for (String spec : specs) {
-			String resolved = resolve(spec);
-			if (!resolved.isBlank()) {
-				out.add(resolved);
-			}
-		}
-		return out;
-	}
-
 	/** Channels parsed from configuration, in the pin grammar. */
 	public static List<Channel> parse(List<String> specs) {
 		List<Channel> out = new ArrayList<>();
@@ -227,11 +334,13 @@ public class AssertionPackChannels {
 				}
 			}
 			String packs = fields.getOrDefault("packs", "");
+			String hosts = fields.getOrDefault("allowedhosts", "");
 			out.add(new Channel(
 					fields.getOrDefault("name", ""),
 					URI.create(fields.getOrDefault("index", "")),
 					packs.isBlank() ? null : List.of(packs.split("\\s*\\|\\s*")),
-					fields.get("authheader")));
+					fields.get("authheader"),
+					hosts.isBlank() ? null : List.of(hosts.split("\\s*\\|\\s*"))));
 		}
 		return out;
 	}

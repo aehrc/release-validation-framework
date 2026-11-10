@@ -14,10 +14,15 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.File;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -60,6 +65,19 @@ class DuckDbValidationServiceTest {
 	private static final String UUID_CLEAN = "22222222-2222-2222-2222-222222222222";
 	private static final String UUID_NEEDS_PREVIOUS = "33333333-3333-3333-3333-333333333333";
 	private static final String UUID_VERSION_BOUND = "44444444-4444-4444-4444-444444444444";
+	private static final String UUID_NOT_IN_DEPENDENCY = "55555555-5555-5555-5555-555555555555";
+	private static final String UUID_COMPARES_DEPENDENCY = "66666666-6666-6666-6666-666666666666";
+
+	private static final String UUID_DELTA_ROWS = "77777777-7777-7777-7777-777777777777";
+	private static final String UUID_FULL_ROWS = "88888888-8888-8888-8888-888888888888";
+	private static final String UUID_PARTLY_NEEDS_PREVIOUS = "99999999-9999-9999-9999-999999999999";
+	private static final String UUID_READS_A_FILE = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
+	private static final String UUID_WRITES_A_FILE = "cccccccc-cccc-cccc-cccc-cccccccccccc";
+
+	private static final String MODULE = "32506021000036107";
+
+	/** {@code rvf.empty-release-file}'s default. */
+	private static final String EMPTY_RELEASE = "empty-rf2-snapshot.zip";
 
 	private static final String GOOD_PREREQUISITE =
 			"CREATE OR REPLACE VIEW concept_active AS SELECT * FROM concept_s WHERE active = '1'";
@@ -78,10 +96,13 @@ class DuckDbValidationServiceTest {
 			  {"placeholder": "<ASSERTIONUUID>", "sentinel": "rvfph_assertionuuid_"},
 			  {"placeholder": "<PROSPECTIVE>", "sentinel": "rvfph_prospective_"},
 			  {"placeholder": "<PREVIOUS>", "sentinel": "rvfph_previous_"},
+			  {"placeholder": "<DEPENDENCY>", "sentinel": "rvfph_dependency_"},
 			  {"placeholder": "<VERSION>", "sentinel": "rvfph_version_"}
 			 ],
 			 "tableColumns": {
 			  "concept_s": "id BIGINT, effectivetime VARCHAR, active VARCHAR, moduleid BIGINT, definitionstatusid BIGINT",
+			  "concept_d": "id BIGINT, effectivetime VARCHAR, active VARCHAR, moduleid BIGINT, definitionstatusid BIGINT",
+			  "concept_f": "id BIGINT, effectivetime VARCHAR, active VARCHAR, moduleid BIGINT, definitionstatusid BIGINT",
 			  "description_s": "id BIGINT, effectivetime VARCHAR, active VARCHAR, moduleid BIGINT, conceptid BIGINT, languagecode VARCHAR, typeid BIGINT, term VARCHAR, casesignificanceid BIGINT"
 			 },
 			 "prerequisites": [
@@ -116,7 +137,43 @@ class DuckDbValidationServiceTest {
 			   "file": "version-bound.sql", "text": "Active concepts at this release version",
 			   "keywords": "component-centric-validation", "severity": "",
 			   "statements": [
-			    "insert into qa_result (run_id, assertion_id, concept_id, details, component_id, table_name) select 424242424242424242, 'rvfph_assertionuuid_', id, 'active at version', id, 'prospective.concept_s' from rvfph_prospective_.res_edited_concepts where effectivetime = 'rvfph_version_'"]}
+			    "insert into qa_result (run_id, assertion_id, concept_id, details, component_id, table_name) select 424242424242424242, 'rvfph_assertionuuid_', id, 'active at version', id, 'prospective.concept_s' from rvfph_prospective_.res_edited_concepts where effectivetime = 'rvfph_version_'"]},
+			  "55555555-5555-5555-5555-555555555555": {
+			   "file": "not-in-dependency.sql", "text": "Concepts the dependency does not have",
+			   "keywords": "dependency-comparison", "severity": "",
+			   "statements": [
+			    "insert into qa_result (run_id, assertion_id, concept_id, details) select 424242424242424242, 'rvfph_assertionuuid_', p.id, 'not in dependency' from rvfph_prospective_.concept_s AS p LEFT JOIN rvfph_dependency_.concept_s AS d ON d.id = p.id WHERE d.id IS NULL"]},
+			  "66666666-6666-6666-6666-666666666666": {
+			   "file": "compares-dependency.sql", "text": "Concepts whose status differs from the dependency",
+			   "keywords": "dependency-comparison", "severity": "",
+			   "statements": [
+			    "insert into qa_result (run_id, assertion_id, concept_id, details) select 424242424242424242, 'rvfph_assertionuuid_', p.id, 'status differs' from rvfph_prospective_.concept_s AS p JOIN rvfph_dependency_.concept_s AS d ON d.id = p.id WHERE d.active <> p.active"]},
+			  "77777777-7777-7777-7777-777777777777": {
+			   "file": "delta-rows.sql", "text": "Every concept delta row",
+			   "keywords": "release-types", "severity": "",
+			   "statements": [
+			    "insert into qa_result (run_id, assertion_id, concept_id, details) select 424242424242424242, 'rvfph_assertionuuid_', id, 'delta row' from rvfph_prospective_.concept_d"]},
+			  "88888888-8888-8888-8888-888888888888": {
+			   "file": "full-rows.sql", "text": "Every concept full row",
+			   "keywords": "release-types", "severity": "",
+			   "statements": [
+			    "insert into qa_result (run_id, assertion_id, concept_id, details) select 424242424242424242, 'rvfph_assertionuuid_', id, 'full row' from rvfph_prospective_.concept_f"]},
+			  "99999999-9999-9999-9999-999999999999": {
+			   "file": "partly-needs-previous.sql", "text": "Inactive concepts, and concepts new since the previous release",
+			   "keywords": "partial", "severity": "",
+			   "statements": [
+			    "insert into qa_result (run_id, assertion_id, concept_id, details) select 424242424242424242, 'rvfph_assertionuuid_', id, 'inactive' from rvfph_prospective_.concept_s where active = '0'",
+			    "insert into qa_result (run_id, assertion_id, concept_id, details) select 424242424242424242, 'rvfph_assertionuuid_', p.id, 'new' from rvfph_prospective_.concept_s p where not exists (select 1 from rvfph_previous_.concept_s v where v.id = p.id)"]},
+			  "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb": {
+			   "file": "reads-a-file.sql", "text": "Reads a file outside the run",
+			   "keywords": "escape", "severity": "",
+			   "statements": [
+			    "insert into qa_result (run_id, assertion_id, concept_id, details) select 424242424242424242, 'rvfph_assertionuuid_', 0, content from read_text('READ_FILE')"]},
+			  "cccccccc-cccc-cccc-cccc-cccccccccccc": {
+			   "file": "writes-a-file.sql", "text": "Writes a file outside the run",
+			   "keywords": "escape", "severity": "",
+			   "statements": [
+			    "COPY (SELECT id FROM rvfph_prospective_.concept_s) TO 'OUTSIDE_FILE'"]}
 			 }
 			}
 			""";
@@ -124,6 +181,10 @@ class DuckDbValidationServiceTest {
 	private static final String GROUPS_XML = """
 			<assertionGroupingStrategy>
 			 <group name="component-centric-validation" includeStandaloneCategories="component-centric-validation" />
+			 <group name="dependency-comparison" includeStandaloneCategories="dependency-comparison" />
+			 <group name="release-types" includeStandaloneCategories="release-types" />
+			 <group name="partial" includeStandaloneCategories="partial" />
+			 <group name="escape" includeStandaloneCategories="escape" />
 			</assertionGroupingStrategy>
 			""";
 
@@ -241,7 +302,7 @@ class DuckDbValidationServiceTest {
 		ValidationStatusReport statusReport = statusReport(new ValidationRunConfig());
 
 		service().runValidations(executionConfig(12L),
-				new DuckDbValidationService.ReleaseDirectories(prospective, previous, null),
+				new DuckDbValidationService.ReleaseDirectories(prospective, previous, (Path) null),
 				null, statusReport);
 
 		TestRunItem ran = item(statusReport.getResultReport(), UUID_NEEDS_PREVIOUS);
@@ -296,18 +357,276 @@ class DuckDbValidationServiceTest {
 		assertEquals(0, statusReport.getResultReport().getTotalTestsRun());
 	}
 
+	@Test
+	void severalDependenciesAreValidatedAgainstTheirUnion() throws Exception {
+		// Concepts 1 and 2 are in one dependency, 3 in the other; 4 is in neither.
+		Path first = root.resolve("dependency-a");
+		writeRf2(first, "Snapshot/Terminology/sct2_Concept_Snapshot_INT_20260801.txt", """
+				id	effectiveTime	active	moduleId	definitionStatusId
+				1	20260801	1	%1$s	900000000000074008
+				2	20260801	1	%1$s	900000000000074008
+				""".formatted(MODULE));
+		Path second = root.resolve("dependency-b");
+		writeRf2(second, "Snapshot/Terminology/sct2_Concept_Snapshot_XX_20260801.txt", """
+				id	effectiveTime	active	moduleId	definitionStatusId
+				3	20260801	1	%1$s	900000000000074008
+				""".formatted(MODULE));
+		File firstZip = zip(first, root.resolve("dependency-a.zip")).toFile();
+		File secondZip = zip(second, root.resolve("dependency-b.zip")).toFile();
+
+		ValidationRunConfig runConfig = new ValidationRunConfig();
+		runConfig.setRunId(18L);
+		runConfig.setGroupsList(List.of("dependency-comparison"));
+		runConfig.setReleaseAsAnEdition(true);
+		runConfig.setLocalProspectiveFile(zip(prospective, root.resolve("prospective.zip")).toFile());
+		runConfig.addExtensionDependency(firstZip.getName()).addExtensionDependency(secondZip.getName());
+		runConfig.addLocalReleaseFile(firstZip);
+		runConfig.addLocalReleaseFile(secondZip);
+		ValidationStatusReport statusReport = statusReport(runConfig);
+
+		service().runRF2Validations(runConfig, statusReport);
+
+		assertEquals(List.of(), statusReport.getFailureMessages());
+		ValidationReport report = statusReport.getResultReport();
+		// 1 with the union; 3 with the second dependency alone, 2 with the first alone.
+		assertEquals(1L, item(report, UUID_NOT_IN_DEPENDENCY).getFailureCount(),
+				"only concept 4 is in neither dependency");
+		// 2 and 3 are inactive here and active in a dependency, one in each.
+		assertEquals(2L, item(report, UUID_COMPARES_DEPENDENCY).getFailureCount());
+	}
+
+	@Test
+	void aDeltaOnlyRunWithNoPreviousReleaseValidatesTheDeltaAsTheSnapshot() throws Exception {
+		Path delta = root.resolve("delta");
+		writeRf2(delta, "Delta/Terminology/sct2_Concept_Delta_INT_20260831.txt",
+				"""
+				id	effectiveTime	active	moduleId	definitionStatusId
+				2	20260831	0	%1$s	900000000000074008
+				3	20260831	1	%1$s	900000000000074008
+				5	20260831	0	%1$s	900000000000074008
+				""".formatted(MODULE));
+		MysqlExecutionConfig config = executionConfig(19L);
+		config.setRf2DeltaOnly(true);
+		ValidationStatusReport statusReport = statusReport(new ValidationRunConfig());
+
+		service().runValidations(config, DuckDbValidationService.ReleaseDirectories.of(delta), null, statusReport);
+
+		assertEquals(List.of(), statusReport.getFailureMessages());
+		// MySQL copies the snapshot from an empty schema and applies the delta: 2 and 5.
+		// An empty snapshot would report 0, a clean pass.
+		assertEquals(2L, item(statusReport.getResultReport(), UUID_INACTIVE).getFailureCount());
+	}
+
+	@Test
+	void aSnapshotOnlyFirstTimeReleaseDerivesItsDeltaAndFullTables() throws Exception {
+		MysqlExecutionConfig config = executionConfig(20L);
+		config.setGroupNames(List.of("release-types"));
+		config.setFirstTimeRelease(true);
+		config.setEffectiveTime("2026-08-31");
+		ValidationStatusReport statusReport = statusReport(new ValidationRunConfig());
+
+		service().runValidations(config, DuckDbValidationService.ReleaseDirectories.of(prospective), null, statusReport);
+
+		ValidationReport report = statusReport.getResultReport();
+		assertEquals(List.of(), statusReport.getFailureMessages());
+		// The snapshot rows at this release's effective time: 1, 2 and 3, not 4 (20250131).
+		assertEquals(3L, item(report, UUID_DELTA_ROWS).getFailureCount());
+		assertEquals(4L, item(report, UUID_FULL_ROWS).getFailureCount(), "the full table is the snapshot");
+	}
+
+	@Test
+	void aSnapshotOnlySubsequentReleaseDerivesItsTablesInMysqlsOrder() throws Exception {
+		MysqlExecutionConfig config = executionConfig(21L);
+		config.setGroupNames(List.of("release-types"));
+		config.setPreviousEffectiveTime("20250131");
+		ValidationStatusReport statusReport = statusReport(new ValidationRunConfig());
+
+		service().runValidations(config, DuckDbValidationService.ReleaseDirectories.of(prospective), null, statusReport);
+
+		ValidationReport report = statusReport.getResultReport();
+		assertEquals(List.of(), statusReport.getFailureMessages());
+		// ReleaseDataManager derives the delta from the full table before it derives the full
+		// table from the snapshot, so a package with neither has an empty delta.
+		assertEquals(0L, item(report, UUID_DELTA_ROWS).getFailureCount());
+		assertEquals(4L, item(report, UUID_FULL_ROWS).getFailureCount());
+	}
+
+	@Test
+	void aPackageWithoutFullFilesDerivesItsFullTablesAndKeepsItsDelta() throws Exception {
+		writeRf2(prospective, "Delta/Terminology/sct2_Concept_Delta_INT_20260831.txt",
+				"""
+				id	effectiveTime	active	moduleId	definitionStatusId
+				1	20260831	1	%1$s	900000000000074008
+				2	20260831	0	%1$s	900000000000074008
+				""".formatted(MODULE));
+		MysqlExecutionConfig config = executionConfig(22L);
+		config.setGroupNames(List.of("release-types"));
+		config.setPreviousEffectiveTime("20250131");
+		ValidationStatusReport statusReport = statusReport(new ValidationRunConfig());
+
+		service().runValidations(config, DuckDbValidationService.ReleaseDirectories.of(prospective), null, statusReport);
+
+		ValidationReport report = statusReport.getResultReport();
+		assertEquals(List.of(), statusReport.getFailureMessages());
+		assertEquals(2L, item(report, UUID_DELTA_ROWS).getFailureCount(), "the package's own delta, untouched");
+		assertEquals(4L, item(report, UUID_FULL_ROWS).getFailureCount());
+	}
+
+	@Test
+	void aFirstTimeReleaseComparesWithAnEmptyPreviousReleaseAsMysqlDoes() throws Exception {
+		MysqlExecutionConfig config = executionConfig(23L);
+		config.setFirstTimeRelease(true);
+		ValidationStatusReport statusReport = statusReport(new ValidationRunConfig());
+
+		service().runValidations(config, DuckDbValidationService.ReleaseDirectories.of(prospective), null, statusReport);
+
+		TestRunItem compared = item(statusReport.getResultReport(), UUID_NEEDS_PREVIOUS);
+		assertNull(compared.getFailureMessage(), "a first-time release has nothing before it, which is an answer");
+		assertEquals(4L, compared.getFailureCount(), "every concept is new");
+	}
+
+	@Test
+	void aPreviousReleaseNamedAsTheEmptyReleaseIsAnEmptyPreviousRelease() throws Exception {
+		ValidationRunConfig runConfig = new ValidationRunConfig();
+		runConfig.setRunId(24L);
+		runConfig.setGroupsList(List.of("component-centric-validation"));
+		runConfig.setPreviousRelease(EMPTY_RELEASE);
+		runConfig.setLocalProspectiveFile(zip(prospective, root.resolve("prospective.zip")).toFile());
+		ValidationStatusReport statusReport = statusReport(runConfig);
+
+		service().runRF2Validations(runConfig, statusReport);
+
+		TestRunItem compared = item(statusReport.getResultReport(), UUID_NEEDS_PREVIOUS);
+		assertNull(compared.getFailureMessage());
+		assertEquals(4L, compared.getFailureCount());
+	}
+
+	@Test
+	void anAssertionWithSomeStatementsSkippedCountsTheRestAndSaysSo() throws Exception {
+		MysqlExecutionConfig config = executionConfig(25L);
+		config.setGroupNames(List.of("partial"));
+		ValidationStatusReport statusReport = statusReport(new ValidationRunConfig());
+
+		service().runValidations(config, DuckDbValidationService.ReleaseDirectories.of(prospective), null, statusReport);
+
+		TestRunItem partly = item(statusReport.getResultReport(), UUID_PARTLY_NEEDS_PREVIOUS);
+		assertNull(partly.getFailureMessage(), "what ran is a result, not a failure to run");
+		assertEquals(2L, partly.getFailureCount(), "the two inactive concepts");
+		assertNotNull(partly.getNote());
+		assertTrue(partly.getNote().startsWith("Partly run: 1 of 2 statement(s) skipped"), partly.getNote());
+		assertTrue(partly.getNote().contains("<PREVIOUS>"), partly.getNote());
+		assertEquals(0, statusReport.getResultReport().getTotalTestsIncomplete());
+	}
+
+	@Test
+	void anAssertionCannotReadOrWriteFilesOutsideTheRun() throws Exception {
+		Path outside = root.resolve("outside").resolve("leak.csv");
+		Files.createDirectories(outside.getParent());
+		Files.writeString(storeFile, STORE.replace("READ_FILE", "/etc/hostname").replace("OUTSIDE_FILE", outside.toString()));
+		MysqlExecutionConfig config = executionConfig(26L);
+		config.setGroupNames(List.of("escape"));
+		ValidationStatusReport statusReport = statusReport(new ValidationRunConfig());
+
+		service().runValidations(config, DuckDbValidationService.ReleaseDirectories.of(prospective), null, statusReport);
+
+		ValidationReport report = statusReport.getResultReport();
+		for (String uuid : List.of(UUID_READS_A_FILE, UUID_WRITES_A_FILE)) {
+			TestRunItem refused = item(report, uuid);
+			assertEquals(-1L, refused.getFailureCount());
+			assertTrue(refused.getFailureMessage().contains("Permission Error"), refused.getFailureMessage());
+		}
+		assertFalse(Files.exists(outside), "nothing may be written outside the run's directory");
+	}
+
+	@Test
+	void theFailureArchiveIsStillWrittenAfterTheRunConnectionIsLockedDown() throws Exception {
+		// The COPY to parquet runs on the locked connection, which may write only
+		// inside the run directory; the file is then moved out to the work
+		// directory. A refused COPY only logs a WARN, so this is the check.
+		FailureArchiveCollector collector = archiveCollector();
+		DuckDbValidationService service = new DuckDbValidationService(reportService, collector, whitelistService,
+				new ReleaseAcquisitionService(),
+				new DuckStoreLocator(storeFile.toString(), corpus.toString()),
+				corpus.toString(), work.toString(), EMPTY_RELEASE, "qa_result", 0, "", true, "", 0,
+				noAssertionService());
+		ValidationStatusReport statusReport = statusReport(new ValidationRunConfig());
+
+		service.runValidations(executionConfig(29L),
+				DuckDbValidationService.ReleaseDirectories.of(prospective), "archive/", statusReport);
+
+		assertEquals(2L, item(statusReport.getResultReport(), UUID_INACTIVE).getFailureCount());
+		assertEquals(1, collector.stagedCount("archive/"), "the run's failure archive was staged");
+		List<Path> archives;
+		try (Stream<Path> files = Files.list(work)) {
+			archives = files.filter(p -> p.getFileName().toString().endsWith(".parquet")).toList();
+		}
+		assertEquals(1, archives.size(), "the archive was moved out of the run directory");
+		try (java.sql.Connection con = java.sql.DriverManager.getConnection("jdbc:duckdb:");
+				java.sql.Statement st = con.createStatement();
+				java.sql.ResultSet rs = st.executeQuery("SELECT count(*) FROM read_parquet('" + archives.get(0) + "')")) {
+			assertTrue(rs.next());
+			assertTrue(rs.getLong(1) >= 2, "the archive holds the run's findings");
+		}
+	}
+
+	@Test
+	void anAssertionCannotReadAnotherRunsFilesOrWriteIntoTheReleaseCache() throws Exception {
+		// Both live in the work directory: another run's unpacked release, and the cache a
+		// later run would attach as its previous release.
+		Path otherRun = work.resolve("rvf-999");
+		Files.createDirectories(otherRun);
+		Path secret = otherRun.resolve("secret.txt");
+		Files.writeString(secret, "another run's release");
+		Path cache = work.resolve("release-cache");
+		Path planted = cache.resolve("0123456789abcdef.duckdb");
+		Files.writeString(storeFile, STORE.replace("READ_FILE", secret.toString()).replace("OUTSIDE_FILE", planted.toString()));
+		Path previous = root.resolve("previous");
+		writeRf2(previous, "Snapshot/Terminology/sct2_Concept_Snapshot_INT_20250131.txt",
+				"""
+				id	effectiveTime	active	moduleId	definitionStatusId
+				1	20250131	1	%1$s	900000000000074008
+				2	20250131	1	%1$s	900000000000074008
+				""".formatted(MODULE));
+		MysqlExecutionConfig config = executionConfig(28L);
+		config.setGroupNames(List.of("component-centric-validation", "escape"));
+		ValidationStatusReport statusReport = statusReport(new ValidationRunConfig());
+
+		service("", cache, 1).runValidations(config,
+				new DuckDbValidationService.ReleaseDirectories(prospective, previous, (Path) null), null, statusReport);
+
+		ValidationReport report = statusReport.getResultReport();
+		for (String uuid : List.of(UUID_READS_A_FILE, UUID_WRITES_A_FILE)) {
+			TestRunItem refused = item(report, uuid);
+			assertEquals(-1L, refused.getFailureCount());
+			assertTrue(refused.getFailureMessage().contains("Permission Error"), refused.getFailureMessage());
+		}
+		assertFalse(Files.exists(planted), "nothing may be written into the release cache");
+		// The previous release came from the cache, attached before the lockdown.
+		try (Stream<Path> files = Files.list(cache)) {
+			assertEquals(1, files.filter(p -> p.toString().endsWith(".duckdb")).count());
+		}
+		TestRunItem ran = item(report, UUID_NEEDS_PREVIOUS);
+		assertNull(ran.getFailureMessage(), ran.getFailureMessage());
+		assertEquals(2L, ran.getFailureCount(), "the cached previous release is still readable");
+	}
+
 	private DuckDbValidationService service() {
+		return service("", null, 0);
+	}
+
+	private DuckDbValidationService service(String memoryLimit, Path cacheDirectory, double cacheMaxGb) {
 		return new DuckDbValidationService(reportService, archiveCollector(), whitelistService,
 				new ReleaseAcquisitionService(),
 				new DuckStoreLocator(storeFile.toString(), corpus.toString()),
-				corpus.toString(), work.toString(), "qa_result", 0, "", false, "", 0, noAssertionService());
+				corpus.toString(), work.toString(), EMPTY_RELEASE, "qa_result", 0, memoryLimit, false,
+				cacheDirectory == null ? "" : cacheDirectory.toString(), cacheMaxGb, noAssertionService());
 	}
 
 	private DuckDbValidationService service(String memoryLimit) {
 		return new DuckDbValidationService(reportService, archiveCollector(), whitelistService,
 				new ReleaseAcquisitionService(),
 				new DuckStoreLocator(storeFile.toString(), corpus.toString()),
-				corpus.toString(), work.toString(), "qa_result", 0, memoryLimit, false, "", 0, noAssertionService());
+				corpus.toString(), work.toString(), EMPTY_RELEASE, "qa_result", 0, memoryLimit, false, "", 0, noAssertionService());
 	}
 
 	private static MysqlExecutionConfig executionConfig(long runId) {
@@ -339,6 +658,18 @@ class DuckDbValidationServiceTest {
 		Path file = releaseDir.resolve(relative);
 		Files.createDirectories(file.getParent());
 		Files.writeString(file, content);
+	}
+
+	private static Path zip(Path dir, Path zipFile) throws Exception {
+		try (OutputStream out = Files.newOutputStream(zipFile); ZipOutputStream zip = new ZipOutputStream(out);
+				Stream<Path> files = Files.walk(dir)) {
+			for (Path file : files.filter(Files::isRegularFile).toList()) {
+				zip.putNextEntry(new ZipEntry(dir.relativize(file).toString()));
+				Files.copy(file, zip);
+				zip.closeEntry();
+			}
+		}
+		return zipFile;
 	}
 
 	/**

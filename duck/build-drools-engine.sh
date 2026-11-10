@@ -50,7 +50,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Defaulted FROM THE POM, not duplicated here - see build-mrcm-validator.sh.
 VERSION="${1:-$(grep -oP '(?<=<snomed.drools.version>)[^<]+' "$SCRIPT_DIR/../pom.xml")}"
 [ -n "$VERSION" ] || { echo "FATAL: cannot read snomed.drools.version from pom.xml" >&2; exit 1; }
-COMMIT="84d511b"
+# Full sha: IHTSDO rewrites develop, so this commit may be on no branch. GitHub
+# serves any reachable-by-sha commit to `git fetch origin <sha>`.
+COMMIT="84d511bb08a4ab72ebf388cb5ea823748a865f6c"
 WORKDIR="${DROOLS_BUILD_DIR:-/data/work/snomed-drools-build}"
 REPO="${MAVEN_REPO_LOCAL:-/data/m2}"
 
@@ -60,7 +62,7 @@ if [ ! -d "$WORKDIR/.git" ]; then
     git clone -q https://github.com/IHTSDO/snomed-drools.git "$WORKDIR"
 fi
 cd "$WORKDIR"
-git fetch -q --depth 60 origin develop
+git fetch -q origin "$COMMIT"
 git checkout -q "$COMMIT"
 git checkout -q .   # discard any previous version edits
 

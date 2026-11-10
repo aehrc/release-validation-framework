@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -489,5 +490,31 @@ class DuckStorePacksTest {
 		// An empty store reports every release as clean, which is the one
 		// outcome worse than an error.
 		assertThrows(IllegalArgumentException.class, () -> DuckStorePacks.merge(List.of()));
+	}
+
+	@Test
+	void aConflictNamesThePackThatOwnsTheEarlierDefinitionNotTheBase() {
+		// The second pack introduces substring_index; the third redefines it. The
+		// base never defined it, so naming the base would send someone to the
+		// wrong publishing pipeline.
+		var conflict = assertThrows(DuckStorePacks.ConflictException.class, () ->
+				DuckStorePacks.merge(List.of(
+						packOf("international", "1", pack(UUID_C, "c.sql", "SELECT 3", MACRO_B, "h1")),
+						packOf("first-pack", "1", pack(UUID_A, "a.sql", "SELECT 1", MACRO_A, "h1")),
+						packOf("second-pack", "1", pack(UUID_B, "b.sql", "SELECT 2", MACRO_A_DIFFERENT, "h1")))));
+		assertTrue(conflict.getMessage().contains("already defined by first-pack"), conflict.getMessage());
+		assertFalse(conflict.getMessage().contains("already defined by international"), conflict.getMessage());
+	}
+
+	@Test
+	void twoPacksWithOneNameAreRefused() {
+		// A requirement or a report naming the pack could not tell which was meant.
+		var conflict = assertThrows(DuckStorePacks.ConflictException.class, () ->
+				DuckStorePacks.merge(List.of(
+						packOf("international", "1", pack(UUID_A, "a.sql", "SELECT 1", MACRO_A, "h1")),
+						packOf("extension-pack", "1", pack(UUID_B, "b.sql", "SELECT 2", MACRO_B, "h1")),
+						packOf("extension-pack", "2", pack(UUID_C, "c.sql", "SELECT 3", MACRO_B, "h1")))));
+		assertTrue(conflict.getMessage().contains("two packs in this merge are named extension-pack"),
+				conflict.getMessage());
 	}
 }

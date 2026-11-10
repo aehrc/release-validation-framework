@@ -97,7 +97,7 @@ public final class DuckValidationProbe {
 				new DuckStoreLocator(store, System.getProperty("probe.corpus", "")),
 				System.getProperty("probe.corpus", ""),
 				System.getProperty("probe.work", System.getProperty("java.io.tmpdir")),
-				"qa_result",
+				"empty-rf2-snapshot.zip", "qa_result",
 				// Sizing knobs, so one JVM invocation is one benchmark point.
 				Integer.getInteger("probe.threads", 0),
 				System.getProperty("probe.memory", ""), false,

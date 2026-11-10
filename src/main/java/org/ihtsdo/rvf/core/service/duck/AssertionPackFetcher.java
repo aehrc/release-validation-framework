@@ -36,9 +36,11 @@ import java.util.List;
  *     header supplied by configuration, because a URL ends up in logs.
  * </ul>
  *
- * <p>{@code file:} URLs are accepted deliberately: it is how the shared-volume
- * layout works today, how a developer tests a pack before publishing it, and
- * how this class is tested without a network.
+ * <p>{@code file:} URLs are accepted from CONFIGURATION: it is how the
+ * shared-volume layout works today, how a developer tests a pack before
+ * publishing it, and how this class is tested without a network. A validation
+ * request cannot name a location at all; see
+ * {@link AssertionPackChannels#resolveRunPins}.
  *
  * <p>Two details are what a GitHub release asset needs, and both were wrong
  * until a private pack was actually fetched:
@@ -70,6 +72,13 @@ public class AssertionPackFetcher {
 						"pack " + name + " has no pinned sha256 - an unpinned pack cannot be "
 								+ "reproduced, so a report naming it would mean nothing");
 			}
+		}
+
+		/** Without the credential, which must not reach a log. */
+		@Override
+		public String toString() {
+			return "Source[name=" + name + ", version=" + version + ", uri=" + uri + ", sha256=" + sha256
+					+ ", authHeader=" + (authHeader == null ? null : "<redacted>") + "]";
 		}
 	}
 

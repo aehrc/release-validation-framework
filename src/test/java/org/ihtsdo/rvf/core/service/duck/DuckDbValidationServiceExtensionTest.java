@@ -281,7 +281,7 @@ class DuckDbValidationServiceExtensionTest {
 	@Test
 	void anExtensionRunWithNoDependencyReportsAFailureRatherThanResults() {
 		ValidationStatusReport status = run(new DuckDbValidationService.ReleaseDirectories(
-				prospective, previous, null));
+				prospective, previous, (Path) null));
 
 		assertTrue(status.getFailureMessages().stream()
 						.anyMatch(m -> m.contains("dependency")),
@@ -332,7 +332,7 @@ class DuckDbValidationServiceExtensionTest {
 		new DuckDbValidationService(reportService, archiveCollector(), whitelistService,
 				new ReleaseAcquisitionService(),
 				new DuckStoreLocator(storeFile.toString(), corpus.toString()),
-				corpus.toString(), work.toString(), "qa_result", 0, "", false, "", 0, noAssertionService())
+				corpus.toString(), work.toString(), "empty-rf2-snapshot.zip", "qa_result", 0, "", false, "", 0, noAssertionService())
 				.runValidations(config, releases, "storage/", status);
 		return status;
 	}

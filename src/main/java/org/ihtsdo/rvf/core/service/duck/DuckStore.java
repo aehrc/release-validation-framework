@@ -13,9 +13,14 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.HexFormat;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * The precompiled assertion store: RVF's SQL corpus already transpiled to DuckDB.
@@ -62,7 +67,57 @@ public final class DuckStore {
 			throw new IOException("store formatVersion " + version
 					+ " is not supported (expected " + SUPPORTED_FORMAT_VERSION + ")");
 		}
+		checkTableColumns(root.path("tableColumns"));
 		return new DuckStore(root);
+	}
+
+	private static final Pattern IDENTIFIER = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
+
+	private static final Pattern COLUMN = Pattern.compile("([A-Za-z_][A-Za-z0-9_]*)\\s+([A-Za-z]+)(?:\\(\\d+\\))?");
+
+	/** The column types a table declaration may use. */
+	private static final Set<String> COLUMN_TYPES = Set.of("BIGINT", "INTEGER", "SMALLINT", "TINYINT",
+			"HUGEINT", "BOOLEAN", "DOUBLE", "FLOAT", "DECIMAL", "VARCHAR", "TEXT", "DATE", "TIMESTAMP");
+
+	/**
+	 * Refuses a {@code tableColumns} section that is anything but plain table
+	 * names declaring {@code name TYPE} or {@code name TYPE(n)} columns.
+	 *
+	 * <p>The engine writes these strings into DDL and {@code read_csv} calls
+	 * before a run's connection is locked down (and a pack's reach the pack
+	 * check and the release-cache build), so a value like
+	 * {@code id BIGINT); COPY ...} would run as SQL with full file access.
+	 * {@code TYPE(n, m)} is refused too: the column lists are split on commas.
+	 * Covers every store - bundled, configured, fetched and merged - because
+	 * they all pass through here.
+	 */
+	private static void checkTableColumns(JsonNode tableColumns) throws IOException {
+		if (tableColumns.isMissingNode()) {
+			return;
+		}
+		if (!tableColumns.isObject()) {
+			throw new IOException("the store's tableColumns is not an object");
+		}
+		List<String> tables = new ArrayList<>();
+		tableColumns.fieldNames().forEachRemaining(tables::add);
+		for (String table : tables) {
+			if (!IDENTIFIER.matcher(table).matches()) {
+				throw new IOException("tableColumns declares a table named \"" + table
+						+ "\", which is not a plain identifier");
+			}
+			JsonNode columns = tableColumns.path(table);
+			if (!columns.isTextual()) {
+				throw new IOException("tableColumns declares " + table + " as " + columns + ", not a column list");
+			}
+			for (String column : columns.asText().split(",", -1)) {
+				Matcher m = COLUMN.matcher(column.strip());
+				if (!m.matches() || !COLUMN_TYPES.contains(m.group(2).toUpperCase(Locale.ROOT))) {
+					throw new IOException("tableColumns declares " + table + " as \"" + columns.asText()
+							+ "\"; each column must be `name TYPE` or `name TYPE(n)` with TYPE one of "
+							+ new TreeSet<>(COLUMN_TYPES));
+				}
+			}
+		}
 	}
 
 	/**

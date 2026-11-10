@@ -119,7 +119,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # version nothing consumes while the build keeps using a stale jar.
 VERSION="${1:-$(grep -oP '(?<=<mrcm.validator.version>)[^<]+' "$SCRIPT_DIR/../pom.xml")}"
 [ -n "$VERSION" ] || { echo "FATAL: cannot read mrcm.validator.version from pom.xml" >&2; exit 1; }
-COMMIT="${MRCM_COMMIT:-bfdf76f}"          # "Release 4.0.1"
+COMMIT="${MRCM_COMMIT:-bfdf76fe29f27453847dfd42d1eb0e17d894a238}"   # "Release 4.0.1"; full sha, see build-drools-engine.sh
 WORKDIR="${MRCM_BUILD_DIR:-/data/work/mrcm-src}"
 REPO="${MAVEN_REPO_LOCAL:-/data/m2}"
 PATCH="${PATCH_FILE:-$SCRIPT_DIR/mrcm-validator-parallel.patch}"
@@ -135,7 +135,7 @@ if [ ! -d "$WORKDIR/.git" ]; then
     git clone -q https://github.com/IHTSDO/release-mrcm-validator.git "$WORKDIR"
 fi
 cd "$WORKDIR"
-git fetch -q --depth 30 origin || true
+git fetch -q origin "$COMMIT"
 git checkout -q "$COMMIT"
 git checkout -q .
 # The stated-range patch adds files; left over from a previous build they

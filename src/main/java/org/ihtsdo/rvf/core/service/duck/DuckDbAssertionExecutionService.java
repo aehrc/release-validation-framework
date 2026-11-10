@@ -248,6 +248,17 @@ public class DuckDbAssertionExecutionService {
 			// exists to remove.
 			item.setFailureMessage("Not run: requires " + String.join(", ", skippedFor.stream().distinct().toList())
 					+ ", which was not supplied to this validation");
+		} else if (!skippedFor.isEmpty()) {
+			// Some findings were possible, so the count stands: it is a real
+			// result for the statements that ran, and not a failure. But it is
+			// not the whole check either - file-centric-snapshot-inactivated-
+			// component-module has 22 of 44 writers using <DEPENDENCY> beyond an
+			// anti-join - so the report says so rather than reading as complete.
+			item.setNote("Partly run: " + skippedFor.size() + " of " + stored.statements().size()
+					+ " statement(s) skipped because they require "
+					+ String.join(", ", skippedFor.stream().distinct().toList())
+					+ ", which was not supplied to this validation. The failure count covers "
+					+ "only the statements that ran.");
 		}
 		item.setRunTime(System.currentTimeMillis() - start);
 		return item;

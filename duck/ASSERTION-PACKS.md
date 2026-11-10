@@ -277,9 +277,21 @@ needs them back. The deployment's pins are a values file someone edits, so a run
 that recorded `amtv4 2026.09.1` can only be re-run if it can ASK for that pack
 rather than for whatever is loaded today:
 
-    POST /run-post ... --form 'assertionPacks=name=amtv4;version=2026.09.1;uri=...;sha256=...'
+    POST /run-post ... --form 'assertionPacks=amtv4@2026.09.1'
 
-Same spec grammar as `rvf.assertion.packs`, and the same pipeline as a reload —
+**`name@version` only, for a pack a configured channel serves** (changed
+2026-11-09). The first version accepted the full `rvf.assertion.packs` grammar
+per run, and that let any authenticated caller choose both the URI (`https:` to
+any host, or `file:` on the server) and the digest - so the server would fetch
+any URL, read any local file (and echo its SHA-256 on a mismatch), and run SQL
+of the caller's choosing. A full spec, `uri=`, `file:` or `authHeader` in a
+request is now refused with 400 by `/run-post` and `/run-post-via-s3`, and again
+by the engine for a run that arrives another way. The channel's index supplies
+the URI and digest, and may only point at its own scheme and host (or a host
+the channel lists in `allowedHosts`). Full specs remain for the deployment's own
+`rvf.assertion.packs`.
+
+The same pipeline as a reload —
 fetch, verify each digest, merge with the bundled base, prove the corpus
 executes — because a per-run corpus that skipped any of those would report a
 release as clean for assertions it could not run. It does **not** touch what is
@@ -623,8 +635,9 @@ count per pack. This is the question a report used to be unable to answer.
 only once a run has been observed, because they are measured, not guessed.
 
 To re-run an OLD report, pin per run instead of changing the deployment:
-`POST /run-post -F 'assertionPacks=name=amtv4;version=<old>;uri=...;sha256=...'`.
-Same grammar, same verification, and it does not touch what is serving.
+`POST /run-post -F 'assertionPacks=amtv4@<old>'`, through a configured channel
+(`assertionChannels`) that still lists that version. Same verification, and it
+does not touch what is serving.
 
 ### What this replaces
 
